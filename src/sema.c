@@ -412,8 +412,7 @@ sema_check_cast_expr(PSema* p_s, PAstCastExpr* p_node)
     return false;
   }
 
-  p_node->cast_kind = P_CAST_NOOP;
-
+  bool valid_cast = true;
   if (p_type_is_int(from_ty)) {
     if (p_type_is_float(target_ty)) {
       p_node->cast_kind = P_CAST_INT2FLOAT;
@@ -422,20 +421,26 @@ sema_check_cast_expr(PSema* p_s, PAstCastExpr* p_node)
         p_node->cast_kind = P_CAST_NOOP; /* just a signed <-> unsigned conversion */
       else
         p_node->cast_kind = P_CAST_INT2INT;
+    } else {
+      valid_cast = false;
     }
   } else if (p_type_is_float(from_ty)) {
     if (p_type_is_int(target_ty))
       p_node->cast_kind = P_CAST_FLOAT2INT;
     else if (p_type_is_float(target_ty))
       p_node->cast_kind = P_CAST_FLOAT2FLOAT;
+    else
+      valid_cast = false;
   } else if (p_type_is_bool(from_ty)) {
     if (p_type_is_int(target_ty))
       p_node->cast_kind = P_CAST_BOOL2INT;
     else if (p_type_is_float(target_ty))
       p_node->cast_kind = P_CAST_BOOL2FLOAT;
+    else
+      valid_cast = false;
   }
 
-  if (p_node->cast_kind == P_CAST_NOOP) {
+  if (!valid_cast) {
     error("invalid conversion from '%ty' to '%ty'", from_ty, target_ty);
     p_s->error_count++;
     return true;
