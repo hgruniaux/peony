@@ -16,8 +16,8 @@
 
 const char* CURRENT_FILENAME = NULL;
 unsigned int CURRENT_LINENO = 0;
-bool g_verify_mode_enabled = true;
 
+bool g_verify_mode_enabled = false;
 static PDiagSeverity g_verify_last_diag_severity = P_DIAG_UNSPECIFIED;
 static const char* g_verify_last_diag_message = NULL;
 static int g_verify_fail_count = 0;
@@ -183,8 +183,6 @@ format_msg(struct PMsgBuffer* p_buffer, const char* p_msg, va_list p_ap)
       assert(p_buffer->it < (p_buffer->buffer + sizeof(p_buffer->buffer)));
     }
   }
-
-  fputs("\n", stderr);
 }
 
 static void
@@ -200,6 +198,7 @@ print_msg(const char* p_msg, va_list p_ap)
     memcpy(g_verify_last_diag_message, buffer.buffer, sizeof(buffer.buffer));
   } else {
     fputs(buffer.buffer, stderr);
+    fputs("\n", stderr);
   }
 }
 

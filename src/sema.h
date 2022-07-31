@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ast.h"
+#include "scope.h"
 
 /*
  * This file contains the interface of the semantic analyzer.
@@ -28,7 +29,7 @@ typedef struct PSema
 } PSema;
 
 void
-sema_push_scope(PSema* p_s);
+sema_push_scope(PSema* p_s, PScopeFlags p_flags);
 
 void
 sema_pop_scope(PSema* p_s);

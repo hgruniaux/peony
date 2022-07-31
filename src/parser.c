@@ -106,8 +106,6 @@ p_parser_init(struct PParser* p_parser)
 {
   assert(p_parser != NULL);
 
-  p_parser->loop_depth = 0;
-
   p_parser->sema.warning_count = 0;
   p_parser->sema.error_count = 0;
   p_parser->sema.current_scope_cache_idx = 0;
@@ -221,7 +219,7 @@ parse_type(struct PParser* p_parser)
 static PAst*
 parse_compound_stmt(struct PParser* p_parser)
 {
-  sema_push_scope(&p_parser->sema);
+  sema_push_scope(&p_parser->sema, P_SF_NONE);
 
   expect_token(p_parser, P_TOK_LBRACE);
 
@@ -276,7 +274,7 @@ parse_func_decl(struct PParser* p_parser)
 
   expect_token(p_parser, P_TOK_LPAREN);
 
-  sema_push_scope(&p_parser->sema);
+  sema_push_scope(&p_parser->sema, P_SF_NONE);
   /* Parse parameters: */
   PDynamicArray params;
   p_dynamic_array_init(&params);
@@ -407,10 +405,6 @@ parse_break_stmt(struct PParser* p_parser)
 
   expect_token(p_parser, P_TOK_SEMI);
 
-  if (p_parser->loop_depth == 0) {
-    error("break must only be used inside a loop");
-  }
-
   PAstBreakStmt* node = CREATE_NODE(PAstBreakStmt, P_AST_NODE_BREAK_STMT);
   sema_check_break_stmt(&p_parser->sema, node);
   return (PAst*)node;
@@ -427,10 +421,6 @@ parse_continue_stmt(struct PParser* p_parser)
   consume_token(p_parser);
 
   expect_token(p_parser, P_TOK_SEMI);
-
-  if (p_parser->loop_depth == 0) {
-    error("continue must only be used inside a loop");
-  }
 
   PAstContinueStmt* node = CREATE_NODE(PAstContinueStmt, P_AST_NODE_CONTINUE_STMT);
   sema_check_continue_stmt(&p_parser->sema, node);
@@ -507,18 +497,21 @@ parse_while_stmt(struct PParser* p_parser)
   assert(LOOKAHEAD_IS(P_TOK_KEY_while));
   consume_token(p_parser);
 
+  sema_push_scope(&p_parser->sema, P_SF_BREAK | P_SF_CONTINUE);
+
+  PAstWhileStmt* node = CREATE_NODE(PAstWhileStmt, P_AST_NODE_WHILE_STMT);
+  p_parser->sema.current_scope->statement = (PAst*)node;
+
   expect_token(p_parser, P_TOK_LPAREN);
   PAst* cond_expr = parse_expr(p_parser);
   expect_token(p_parser, P_TOK_RPAREN);
 
-  ++p_parser->loop_depth;
   PAst* body_stmt = parse_compound_stmt(p_parser);
-  --p_parser->loop_depth;
 
-  PAstWhileStmt* node = CREATE_NODE(PAstWhileStmt, P_AST_NODE_WHILE_STMT);
   node->cond_expr = cond_expr;
   node->body_stmt = body_stmt;
   sema_check_while_stmt(&p_parser->sema, node);
+  sema_pop_scope(&p_parser->sema);
   return (PAst*)node;
 }
 
@@ -879,7 +872,7 @@ parse_expr(struct PParser* p_parser)
 static PAst*
 parse_translation_unit(struct PParser* p_parser)
 {
-  sema_push_scope(&p_parser->sema);
+  sema_push_scope(&p_parser->sema, P_SF_NONE);
 
   PDynamicArray decls;
   p_dynamic_array_init(&decls);

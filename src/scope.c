@@ -8,14 +8,16 @@
 #include <string.h>
 
 void
-p_scope_init(PScope* p_scope, PScope* p_parent_scope)
+p_scope_init(PScope* p_scope, PScope* p_parent_scope, PScopeFlags p_flags)
 {
   assert(p_scope != NULL);
 
   p_scope->parent_scope = p_parent_scope;
+  p_scope->statement = NULL;
   p_scope->bucket_count = p_get_new_hash_table_size(0);
   p_scope->symbols = P_ALLOC_BUCKETS(p_scope->bucket_count, PSymbol*);
   p_scope->item_count = 0;
+  p_scope->flags = p_flags;
 }
 
 void

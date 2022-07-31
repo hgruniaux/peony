@@ -1,6 +1,5 @@
 #include "sema.h"
 
-#include "scope.h"
 #include "utils/bump_allocator.h"
 #include "utils/diag.h"
 
@@ -8,20 +7,20 @@
 #include <stdlib.h>
 
 void
-sema_push_scope(PSema* p_s)
+sema_push_scope(PSema* p_s, PScopeFlags p_flags)
 {
   assert(p_s != NULL);
 
   PScope* new_scope;
   if (p_s->current_scope_cache_idx >= P_MAX_SCOPE_CACHE) {
     new_scope = P_BUMP_ALLOC(&p_global_bump_allocator, PScope);
-    p_scope_init(new_scope, p_s->current_scope);
+    p_scope_init(new_scope, p_s->current_scope, p_flags);
   } else {
     new_scope = p_s->scope_cache[p_s->current_scope_cache_idx];
     if (new_scope == NULL) {
       new_scope = P_BUMP_ALLOC(&p_global_bump_allocator, PScope);
       p_s->scope_cache[p_s->current_scope_cache_idx] = new_scope;
-      p_scope_init(new_scope, p_s->current_scope);
+      p_scope_init(new_scope, p_s->current_scope, p_flags);
     }
   }
 
@@ -217,10 +216,35 @@ sema_check_param_decl(PSema* p_s, PDeclParam* p_node)
   return has_error;
 }
 
+static PScope*
+find_nearest_scope_with_flag(PSema* p_s, PScopeFlags p_flag)
+{
+  PScope* scope = p_s->current_scope;
+  while (scope != NULL) {
+    if (scope->flags & p_flag)
+      return scope;
+
+    scope = scope->parent_scope;
+  }
+
+  return NULL;
+}
+
 bool
 sema_check_break_stmt(PSema* p_s, PAstBreakStmt* p_node)
 {
   assert(p_s != NULL && p_node != NULL && P_AST_GET_KIND(p_node) == P_AST_NODE_BREAK_STMT);
+
+  p_node->loop_target = NULL;
+
+  PScope* break_scope = find_nearest_scope_with_flag(p_s, P_SF_BREAK);
+  if (break_scope == NULL) {
+    error("'break' outside of a loop");
+    p_s->error_count++;
+    return true;
+  } else {
+    p_node->loop_target = break_scope->statement;
+  }
 
   return false;
 }
@@ -229,6 +253,17 @@ bool
 sema_check_continue_stmt(PSema* p_s, PAstContinueStmt* p_node)
 {
   assert(p_s != NULL && p_node != NULL && P_AST_GET_KIND(p_node) == P_AST_NODE_CONTINUE_STMT);
+
+  p_node->loop_target = NULL;
+
+  PScope* continue_scope = find_nearest_scope_with_flag(p_s, P_SF_CONTINUE);
+  if (continue_scope == NULL) {
+    error("'continue' outside of a loop");
+    p_s->error_count++;
+    return true;
+  } else {
+    p_node->loop_target = continue_scope->statement;
+  }
 
   return false;
 }
@@ -645,7 +680,7 @@ sema_check_cast_expr(PSema* p_s, PAstCastExpr* p_node)
 
   bool valid_cast = true;
   if (p_type_is_int(from_ty)) {
-    if (p_type_is_generic_int(p_node)) {
+    if (p_type_is_generic_int(P_AST_EXPR_GET_TYPE(p_node))) {
       /* Resolve generic integer with the biggest int type. */
       resolve_generic_type((PAst*)p_node, p_type_get_i64());
     }
@@ -661,7 +696,7 @@ sema_check_cast_expr(PSema* p_s, PAstCastExpr* p_node)
       valid_cast = false;
     }
   } else if (p_type_is_float(from_ty)) {
-    if (p_type_is_generic_float(p_node)) {
+    if (p_type_is_generic_float(P_AST_EXPR_GET_TYPE(p_node))) {
       /* Resolve generic float with the biggest float type. */
       resolve_generic_type((PAst*)p_node, p_type_get_f64());
     }

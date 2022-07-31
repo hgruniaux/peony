@@ -10,14 +10,6 @@ struct PParser
   PToken lookahead;
 
   PSema sema;
-
-  /*
-   * This is incremented each time we enter a loop body, and
-   * likewise, decremented each time we leave it.
-   * This is used to detect if we are in a context were continue
-   * or break statements are allowed.
-   */
-  unsigned int loop_depth;
 };
 
 void

@@ -26,7 +26,7 @@ parse(const char* p_input)
   if (parser.sema.error_count == 0) {
     struct PCodegenLLVM codegen;
     p_cg_init(&codegen);
-    codegen.opt_level = 1;
+    codegen.opt_level = 0;
 
     p_cg_compile(&codegen, ast);
 

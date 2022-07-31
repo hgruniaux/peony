@@ -79,12 +79,14 @@ typedef struct PAstLetStmt
 typedef struct PAstBreakStmt
 {
   PAstCommon common;
+  PAst* loop_target; /* an instance of PAstWhileStmt, etc. */
 } PAstBreakStmt;
 
 /** @brief A `continue;` statement. */
 typedef struct PAstContinueStmt
 {
   PAstCommon common;
+  PAst* loop_target; /* an instance of PAstWhileStmt, etc. */
 } PAstContinueStmt;
 
 /** @brief A `return ret_expr;` statement. */
@@ -103,10 +105,23 @@ typedef struct PAstIfStmt
   PAst* else_stmt;
 } PAstIfStmt;
 
+typedef struct PAstLoopCommon
+{
+  void* _llvm_break_label;
+  void* _llvm_continue_label;
+} PAstLoopCommon;
+
+typedef struct PAstLoopStmt
+{
+  PAstCommon common;
+  PAstLoopCommon loop_common;
+} PAstLoopStmt;
+
 /** @brief A `while (cond_expr) body_stmt`. */
 typedef struct PAstWhileStmt
 {
   PAstCommon common;
+  PAstLoopCommon loop_common;
   PAst* cond_expr;
   PAst* body_stmt;
 } PAstWhileStmt;

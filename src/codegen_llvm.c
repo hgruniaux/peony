@@ -15,6 +15,7 @@ cg_to_llvm_type(PType* p_type)
   assert(p_type != NULL);
 
   p_type = p_type_get_canonical(p_type);
+  assert(!p_type_is_generic(p_type));
 
   if (p_type->common._llvm_cached_type != NULL)
     return p_type->common._llvm_cached_type;
@@ -212,6 +213,28 @@ cg_let_stmt(struct PCodegenLLVM* p_cg, PAstLetStmt* p_node)
 }
 
 static LLVMValueRef
+cg_break_stmt(struct PCodegenLLVM* p_cg, PAstBreakStmt* p_node)
+{
+  assert(P_AST_GET_KIND(p_node) == P_AST_NODE_BREAK_STMT);
+
+  PAstLoopStmt* target_loop = (PAstLoopStmt*)p_node->loop_target;
+  LLVMBuildBr(p_cg->builder, target_loop->loop_common._llvm_break_label);
+  cg_insert_dummy_block(p_cg);
+  return NULL;
+}
+
+static LLVMValueRef
+cg_continue_stmt(struct PCodegenLLVM* p_cg, PAstContinueStmt* p_node)
+{
+  assert(P_AST_GET_KIND(p_node) == P_AST_NODE_CONTINUE_STMT);
+
+  PAstLoopStmt* target_loop = (PAstLoopStmt*)p_node->loop_target;
+  LLVMBuildBr(p_cg->builder, target_loop->loop_common._llvm_continue_label);
+  cg_insert_dummy_block(p_cg);
+  return NULL;
+}
+
+static LLVMValueRef
 cg_return_stmt(struct PCodegenLLVM* p_cg, PAstReturnStmt* p_node)
 {
   assert(P_AST_GET_KIND(p_node) == P_AST_NODE_RETURN_STMT);
@@ -236,6 +259,9 @@ cg_while_stmt(struct PCodegenLLVM* p_cg, PAstWhileStmt* p_node)
   LLVMBasicBlockRef entry_bb = LLVMAppendBasicBlock(p_cg->current_function, "");
   LLVMBasicBlockRef body_bb = LLVMAppendBasicBlock(p_cg->current_function, "");
   LLVMBasicBlockRef cont_bb = LLVMAppendBasicBlock(p_cg->current_function, "");
+
+  p_node->loop_common._llvm_break_label = cont_bb;
+  p_node->loop_common._llvm_continue_label = entry_bb;
 
   LLVMBuildBr(p_cg->builder, entry_bb);
 
@@ -307,9 +333,6 @@ cg_int_literal(struct PCodegenLLVM* p_cg, PAstIntLiteral* p_node)
 {
   assert(P_AST_GET_KIND(p_node) == P_AST_NODE_INT_LITERAL);
 
-  /* The semantic analyzer must have eliminated any use of the abstract type 'GENERIC_INT'. */
-  assert(!p_type_is_generic_int(P_AST_EXPR_GET_TYPE(p_node)));
-
   LLVMTypeRef type = cg_to_llvm_type(P_AST_EXPR_GET_TYPE(p_node));
   return LLVMConstInt(type, p_node->value, 0);
 }
@@ -318,9 +341,6 @@ static LLVMValueRef
 cg_float_literal(struct PCodegenLLVM* p_cg, PAstFloatLiteral* p_node)
 {
   assert(P_AST_GET_KIND(p_node) == P_AST_NODE_FLOAT_LITERAL);
-
-  /* The semantic analyzer must have eliminated any use of the abstract type 'GENERIC_FLOAT'. */
-  assert(!p_type_is_generic_float(P_AST_EXPR_GET_TYPE(p_node)));
 
   LLVMTypeRef type = cg_to_llvm_type(P_AST_EXPR_GET_TYPE(p_node));
   return LLVMConstReal(type, p_node->value);
@@ -658,6 +678,8 @@ cg_visit(struct PCodegenLLVM* p_cg, PAst* p_node)
     DISPATCH(P_AST_NODE_TRANSLATION_UNIT, PAstTranslationUnit, cg_translation_unit);
     DISPATCH(P_AST_NODE_COMPOUND_STMT, PAstCompoundStmt, cg_compound_stmt);
     DISPATCH(P_AST_NODE_LET_STMT, PAstLetStmt, cg_let_stmt);
+    DISPATCH(P_AST_NODE_BREAK_STMT, PAstBreakStmt, cg_break_stmt);
+    DISPATCH(P_AST_NODE_CONTINUE_STMT, PAstContinueStmt, cg_continue_stmt);
     DISPATCH(P_AST_NODE_RETURN_STMT, PAstReturnStmt, cg_return_stmt);
     DISPATCH(P_AST_NODE_WHILE_STMT, PAstWhileStmt, cg_while_stmt);
     DISPATCH(P_AST_NODE_IF_STMT, PAstIfStmt, cg_if_stmt);
