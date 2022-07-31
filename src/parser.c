@@ -673,7 +673,7 @@ parse_var_ref_or_call_expr(struct PParser* p_parser)
     expect_token(p_parser, P_TOK_RPAREN);
 
     PAstCallExpr* node = CREATE_NODE_EXTRA_SIZE(PAstCallExpr, sizeof(PAst*) * (args.size - 1), P_AST_NODE_CALL_EXPR);
-    P_AST_GET_TYPE(node) = ((PFunctionType*)P_DECL_GET_TYPE(decl))->ret;
+    P_AST_GET_TYPE(node) = ((PFunctionType*)P_DECL_GET_TYPE(decl))->ret_type;
     node->func = decl;
     node->arg_count = args.size;
     memcpy(node->args, args.buffer, sizeof(PAst*) * args.size);

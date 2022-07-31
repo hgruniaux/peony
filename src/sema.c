@@ -172,13 +172,13 @@ sema_check_return_stmt(PSema* p_s, PAstReturnStmt* p_node)
   bool has_error = false;
 
   if (p_node->ret_expr != NULL) {
-    if (p_s->curr_func_type->ret != P_AST_GET_TYPE(p_node->ret_expr)) {
-      error("expected '%ty', found '%ty'", p_s->curr_func_type->ret, P_AST_GET_TYPE(p_node->ret_expr));
+    if (p_s->curr_func_type->ret_type != P_AST_GET_TYPE(p_node->ret_expr)) {
+      error("expected '%ty', found '%ty'", p_s->curr_func_type->ret_type, P_AST_GET_TYPE(p_node->ret_expr));
       has_error = true;
       p_s->error_count++;
     }
   } else {
-    if (!p_type_is_void(p_s->curr_func_type->ret)) {
+    if (!p_type_is_void(p_s->curr_func_type->ret_type)) {
       error("expected '%ty', found '%ty'", p_type_get_void(), P_AST_GET_TYPE(p_node->ret_expr));
       has_error = true;
       p_s->error_count++;

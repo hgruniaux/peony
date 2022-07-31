@@ -17,7 +17,7 @@ typedef enum PTypeKind
   P_TYPE_F32,
   P_TYPE_F64,
   P_TYPE_BOOL,
-  P_TYPE_FUNC
+  P_TYPE_FUNCTION
 } PTypeKind;
 
 typedef struct PTypeCommon
@@ -34,7 +34,7 @@ typedef struct PType
 typedef struct PFunctionType
 {
   PTypeCommon common;
-  PType* ret;
+  PType* ret_type;
   int arg_count;
   PType* args[1]; /* tail-allocated */
 } PFunctionType;

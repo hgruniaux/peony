@@ -47,7 +47,7 @@ cg_to_llvm_type(PType* p_type)
     case P_TYPE_F64:
       type = LLVMDoubleType();
       break;
-    case P_TYPE_FUNC: {
+    case P_TYPE_FUNCTION: {
       PFunctionType* func_type = (PFunctionType*)p_type;
       LLVMTypeRef* args = malloc(sizeof(LLVMTypeRef) * func_type->arg_count);
       assert(args != NULL);
@@ -56,7 +56,7 @@ cg_to_llvm_type(PType* p_type)
         args[i] = cg_to_llvm_type(func_type->args[i]);
       }
 
-      type = LLVMFunctionType(cg_to_llvm_type(func_type->ret), args, func_type->arg_count, false);
+      type = LLVMFunctionType(cg_to_llvm_type(func_type->ret_type), args, func_type->arg_count, false);
       free(args);
       break;
     }

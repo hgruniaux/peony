@@ -198,15 +198,15 @@ p_type_get_function(PType* p_ret_ty, PType** p_args, int p_arg_count)
   /* If the type already exists returns it (each type is unique). */
   for (int i = 0; i < g_func_types.size; ++i) {
     PFunctionType* func_type = g_func_types.buffer[i];
-    if (func_type->ret == p_ret_ty && func_type->arg_count == p_arg_count &&
+    if (func_type->ret_type == p_ret_ty && func_type->arg_count == p_arg_count &&
         memcmp(func_type->args, p_args, sizeof(PType*) * p_arg_count) == 0)
       return (PType*)func_type;
   }
 
   PFunctionType* func_type =
     p_bump_alloc(&p_global_bump_allocator, sizeof(PFunctionType) + sizeof(PType*) * p_arg_count, P_ALIGNOF(PType));
-  init_type((PType*)func_type, P_TYPE_FUNC);
-  func_type->ret = p_ret_ty;
+  init_type((PType*)func_type, P_TYPE_FUNCTION);
+  func_type->ret_type = p_ret_ty;
   func_type->arg_count = p_arg_count;
   memcpy(func_type->args, p_args, sizeof(PType*) * p_arg_count);
 
