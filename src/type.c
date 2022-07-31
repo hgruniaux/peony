@@ -2,6 +2,7 @@
 
 #include "bump_allocator.h"
 #include "hedley.h"
+#include "utils/dynamic_array.h"
 
 #include <assert.h>
 #include <string.h>
@@ -20,14 +21,13 @@ PType g_type_f32;
 PType g_type_f64;
 PType g_type_bool;
 
-PType* g_func_types;
+PDynamicArray g_func_types;
 
 static void
 init_type(PType* p_type, PTypeKind p_kind)
 {
-  p_type->kind = p_kind;
-  p_type->_next = NULL;
-  p_type->_llvm_cached_type = NULL;
+  P_TYPE_GET_KIND(p_type) = p_kind;
+  p_type->common._llvm_cached_type = NULL;
 }
 
 void
@@ -47,7 +47,7 @@ p_init_types(void)
   init_type(&g_type_f64, P_TYPE_F64);
   init_type(&g_type_bool, P_TYPE_BOOL);
 
-  g_func_types = NULL;
+  p_dynamic_array_init(&g_func_types);
 }
 
 bool
@@ -60,7 +60,7 @@ bool
 p_type_is_signed(PType* p_type)
 {
   assert(p_type != NULL);
-  switch (p_type->kind) {
+  switch (P_TYPE_GET_KIND(p_type)) {
     case P_TYPE_I8:
     case P_TYPE_I16:
     case P_TYPE_I32:
@@ -75,7 +75,7 @@ bool
 p_type_is_unsigned(PType* p_type)
 {
   assert(p_type != NULL);
-  switch (p_type->kind) {
+  switch (P_TYPE_GET_KIND(p_type)) {
     case P_TYPE_U8:
     case P_TYPE_U16:
     case P_TYPE_U32:
@@ -90,7 +90,7 @@ bool
 p_type_is_float(PType* p_type)
 {
   assert(p_type != NULL);
-  switch (p_type->kind) {
+  switch (P_TYPE_GET_KIND(p_type)) {
     case P_TYPE_F32:
     case P_TYPE_F64:
       return true;
@@ -102,7 +102,7 @@ p_type_is_float(PType* p_type)
 int
 p_type_get_bitwidth(PType* p_type)
 {
-  switch (p_type->kind) {
+  switch (P_TYPE_GET_KIND(p_type)) {
     case P_TYPE_BOOL:
       return 1; /* not really stored as 1-bit */
     case P_TYPE_I8:
@@ -196,26 +196,20 @@ p_type_get_function(PType* p_ret_ty, PType** p_args, int p_arg_count)
   assert(p_ret_ty != NULL && (p_arg_count == 0 || p_args != NULL));
 
   /* If the type already exists returns it (each type is unique). */
-  PType* func_ty = g_func_types;
-  while (func_ty != NULL) {
-    if (func_ty->func_ty.ret == p_ret_ty && func_ty->func_ty.arg_count == p_arg_count &&
-        memcmp(func_ty->func_ty.args, p_args, sizeof(PType*) * p_arg_count) == 0)
-      return func_ty;
-
-    func_ty = func_ty->_next;
+  for (int i = 0; i < g_func_types.size; ++i) {
+    PFunctionType* func_type = g_func_types.buffer[i];
+    if (func_type->ret == p_ret_ty && func_type->arg_count == p_arg_count &&
+        memcmp(func_type->args, p_args, sizeof(PType*) * p_arg_count) == 0)
+      return (PType*)func_type;
   }
 
-  func_ty = p_bump_alloc(&p_global_bump_allocator, sizeof(PType) + sizeof(PType*) * p_arg_count, P_ALIGNOF(PType));
-  init_type(func_ty, P_TYPE_FUNC);
-  func_ty->func_ty.ret = p_ret_ty;
-  func_ty->func_ty.arg_count = p_arg_count;
-  memcpy(func_ty->func_ty.args, p_args, sizeof(PType*) * p_arg_count);
+  PFunctionType* func_type =
+    p_bump_alloc(&p_global_bump_allocator, sizeof(PFunctionType) + sizeof(PType*) * p_arg_count, P_ALIGNOF(PType));
+  init_type((PType*)func_type, P_TYPE_FUNC);
+  func_type->ret = p_ret_ty;
+  func_type->arg_count = p_arg_count;
+  memcpy(func_type->args, p_args, sizeof(PType*) * p_arg_count);
 
-  if (g_func_types != NULL) {
-    g_func_types->_next = func_ty;
-  } else {
-    g_func_types = func_ty;
-  }
-
-  return func_ty;
+  p_dynamic_array_append(&g_func_types, func_type);
+  return (PType*)func_type;
 }

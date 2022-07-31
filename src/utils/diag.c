@@ -69,17 +69,18 @@ print_type(PType* p_type)
   static const char* builtin_types[] = { "void", "undef", "i8",  "i16", "i32", "i64", "u8",
                                          "u16",  "u32",   "u64", "f32", "f64", "bool" };
 
-  if (p_type->kind == P_TYPE_FUNC) {
+  if (P_TYPE_GET_KIND(p_type) == P_TYPE_FUNC) {
+    PFunctionType* func_type = (PFunctionType*)p_type;
     fputs("fn (", stderr);
-    for (int i = 0; i < p_type->func_ty.arg_count; ++i) {
-      print_type(p_type->func_ty.args[i]);
-      if ((i + 1) != p_type->func_ty.arg_count)
+    for (int i = 0; i < func_type->arg_count; ++i) {
+      print_type(func_type->args[i]);
+      if ((i + 1) != func_type->arg_count)
         puts(", ");
     }
     fputs("): ", stderr);
-    print_type(p_type->func_ty.ret);
+    print_type(func_type->ret);
   } else {
-    fputs(builtin_types[(int)p_type->kind], stderr);
+    fputs(builtin_types[(int)P_TYPE_GET_KIND(p_type)], stderr);
   }
 }
 

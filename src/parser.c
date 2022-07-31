@@ -279,7 +279,7 @@ parse_func_decl(struct PParser* p_parser)
     return_type = parse_type(p_parser);
   }
 
-  PDeclFunction* decl = CREATE_DECL_EXTRA_SIZE(PDeclFunction, sizeof(PDeclParam*) * params.size, P_DECL_FUNCTION);
+  PDeclFunction* decl = CREATE_DECL_EXTRA_SIZE(PDeclFunction, sizeof(PDeclParam*) * (params.size - 1), P_DECL_FUNCTION);
   P_DECL_GET_NAME(decl) = identifier_info;
   decl->param_count = params.size;
   memcpy(decl->params, params.buffer, sizeof(PDeclParam*) * params.size);
@@ -641,8 +641,8 @@ parse_var_ref_or_call_expr(struct PParser* p_parser)
     PDynamicArray args;
     p_dynamic_array_init(&args);
 
-    int param_count = decl != NULL ? P_DECL_GET_TYPE(decl)->func_ty.arg_count : 0;
-    PType** param_types = decl != NULL ? P_DECL_GET_TYPE(decl)->func_ty.args : NULL;
+    int param_count = decl != NULL ? ((PFunctionType*)P_DECL_GET_TYPE(decl))->arg_count : 0;
+    PType** param_types = decl != NULL ? ((PFunctionType*)P_DECL_GET_TYPE(decl))->args : NULL;
 
     int i = 0;
     while (!LOOKAHEAD_IS(P_TOK_RPAREN)) {
@@ -673,7 +673,7 @@ parse_var_ref_or_call_expr(struct PParser* p_parser)
     expect_token(p_parser, P_TOK_RPAREN);
 
     PAstCallExpr* node = CREATE_NODE_EXTRA_SIZE(PAstCallExpr, sizeof(PAst*) * (args.size - 1), P_AST_NODE_CALL_EXPR);
-    P_AST_GET_TYPE(node) = P_DECL_GET_TYPE(decl)->func_ty.ret;
+    P_AST_GET_TYPE(node) = ((PFunctionType*)P_DECL_GET_TYPE(decl))->ret;
     node->func = decl;
     node->arg_count = args.size;
     memcpy(node->args, args.buffer, sizeof(PAst*) * args.size);

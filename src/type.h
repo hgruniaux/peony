@@ -20,27 +20,32 @@ typedef enum PTypeKind
   P_TYPE_FUNC
 } PTypeKind;
 
-typedef struct PType
+typedef struct PTypeCommon
 {
   PTypeKind kind;
-  struct PType* _next;
   void* _llvm_cached_type;
-  union
-  {
-    struct
-    {
-      struct PType* ret;
-      int arg_count;
-      struct PType* args[1]; /* struct hack */
-    } func_ty;
-  };
+} PTypeCommon;
+
+typedef struct PType
+{
+  PTypeCommon common;
 } PType;
+
+typedef struct PFunctionType
+{
+  PTypeCommon common;
+  PType* ret;
+  int arg_count;
+  PType* args[1]; /* tail-allocated */
+} PFunctionType;
+
+#define P_TYPE_GET_KIND(p_type) (((PType*)(p_type))->common.kind)
 
 void
 p_init_types(void);
 
-#define p_type_is_bool(p_type) ((p_type)->kind == P_TYPE_BOOL)
-#define p_type_is_void(p_type) ((p_type)->kind == P_TYPE_VOID)
+#define p_type_is_bool(p_type) (P_TYPE_GET_KIND(p_type) == P_TYPE_BOOL)
+#define p_type_is_void(p_type) (P_TYPE_GET_KIND(p_type) == P_TYPE_VOID)
 
 bool
 p_type_is_int(PType* p_type);

@@ -14,11 +14,11 @@ cg_to_llvm_type(PType* p_type)
 {
   assert(p_type != NULL);
 
-  if (p_type->_llvm_cached_type != NULL)
-    return p_type->_llvm_cached_type;
+  if (p_type->common._llvm_cached_type != NULL)
+    return p_type->common._llvm_cached_type;
 
   LLVMTypeRef type;
-  switch (p_type->kind) {
+  switch (P_TYPE_GET_KIND(p_type)) {
     case P_TYPE_VOID:
       type = LLVMVoidType();
       break;
@@ -48,14 +48,15 @@ cg_to_llvm_type(PType* p_type)
       type = LLVMDoubleType();
       break;
     case P_TYPE_FUNC: {
-      LLVMTypeRef* args = malloc(sizeof(LLVMTypeRef) * p_type->func_ty.arg_count);
+      PFunctionType* func_type = (PFunctionType*)p_type;
+      LLVMTypeRef* args = malloc(sizeof(LLVMTypeRef) * func_type->arg_count);
       assert(args != NULL);
 
-      for (int i = 0; i < p_type->func_ty.arg_count; ++i) {
-        args[i] = cg_to_llvm_type(p_type->func_ty.args[i]);
+      for (int i = 0; i < func_type->arg_count; ++i) {
+        args[i] = cg_to_llvm_type(func_type->args[i]);
       }
 
-      type = LLVMFunctionType(cg_to_llvm_type(p_type->func_ty.ret), args, p_type->func_ty.arg_count, false);
+      type = LLVMFunctionType(cg_to_llvm_type(func_type->ret), args, func_type->arg_count, false);
       free(args);
       break;
     }
@@ -64,7 +65,7 @@ cg_to_llvm_type(PType* p_type)
       HEDLEY_UNREACHABLE_RETURN(NULL);
   }
 
-  p_type->_llvm_cached_type = type;
+  p_type->common._llvm_cached_type = type;
   return type;
 }
 

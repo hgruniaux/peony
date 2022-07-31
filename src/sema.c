@@ -85,7 +85,7 @@ sema_create_func_type(PSema* p_s, PDeclFunction* p_node, PType* return_type)
   P_DECL_GET_TYPE(p_node) = p_type_get_function(return_type, param_types, p_node->param_count);
   free(param_types);
 
-  p_s->curr_func_type = P_DECL_GET_TYPE(p_node);
+  p_s->curr_func_type = (PFunctionType*)P_DECL_GET_TYPE(p_node);
 }
 
 bool
@@ -172,13 +172,13 @@ sema_check_return_stmt(PSema* p_s, PAstReturnStmt* p_node)
   bool has_error = false;
 
   if (p_node->ret_expr != NULL) {
-    if (p_s->curr_func_type->func_ty.ret != P_AST_GET_TYPE(p_node->ret_expr)) {
-      error("expected '%ty', found '%ty'", p_s->curr_func_type->func_ty.ret, P_AST_GET_TYPE(p_node->ret_expr));
+    if (p_s->curr_func_type->ret != P_AST_GET_TYPE(p_node->ret_expr)) {
+      error("expected '%ty', found '%ty'", p_s->curr_func_type->ret, P_AST_GET_TYPE(p_node->ret_expr));
       has_error = true;
       p_s->error_count++;
     }
   } else {
-    if (!p_type_is_void(p_s->curr_func_type->func_ty.ret)) {
+    if (!p_type_is_void(p_s->curr_func_type->ret)) {
       error("expected '%ty', found '%ty'", p_type_get_void(), P_AST_GET_TYPE(p_node->ret_expr));
       has_error = true;
       p_s->error_count++;
@@ -263,7 +263,7 @@ sema_check_int_literal(PSema* p_s, PAstIntLiteral* p_node)
   uintmax_t value = p_node->value;
 
   uintmax_t max_value = UINTMAX_MAX;
-  switch (P_AST_GET_TYPE(p_node)->kind) {
+  switch (P_TYPE_GET_KIND(P_AST_GET_TYPE(p_node))) {
     case P_TYPE_I8:
       max_value = INT8_MAX;
       break;

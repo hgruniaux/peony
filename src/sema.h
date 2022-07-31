@@ -20,7 +20,7 @@ typedef struct PSema
   int warning_count;
   int error_count;
 
-  PType* curr_func_type;
+  PFunctionType* curr_func_type;
 
   size_t current_scope_cache_idx;
   struct PScope* scope_cache[P_MAX_SCOPE_CACHE];
