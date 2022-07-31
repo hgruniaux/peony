@@ -67,6 +67,9 @@ bool
 sema_check_int_literal(PSema* p_s, PAstIntLiteral* p_node);
 
 bool
+sema_check_unary_expr(PSema* p_s, PAstUnaryExpr* p_node);
+
+bool
 sema_check_binary_expr(PSema* p_s, PAstBinaryExpr* p_node);
 
 bool

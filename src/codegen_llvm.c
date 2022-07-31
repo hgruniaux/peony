@@ -325,6 +325,27 @@ cg_decl_ref_expr(struct PCodegenLLVM* p_cg, PAstDeclRefExpr* p_node)
   }
 }
 
+static LLVMValueRef
+cg_unary_expr(struct PCodegenLLVM* p_cg, PAstUnaryExpr* p_node)
+{
+  assert(P_AST_GET_KIND(p_node) == P_AST_NODE_UNARY_EXPR);
+
+  LLVMValueRef sub_expr = cg_visit(p_cg, p_node->sub_expr);
+  switch (p_node->opcode) {
+    case P_UNARY_NEG:
+      if (p_type_is_signed(P_AST_GET_TYPE(p_node)))
+        return LLVMBuildNeg(p_cg->builder, sub_expr, "");
+      else if (p_type_is_float(P_AST_GET_TYPE(p_node)))
+        return LLVMBuildFNeg(p_cg->builder, sub_expr, "");
+      else
+        HEDLEY_UNREACHABLE_RETURN(NULL);
+    case P_UNARY_NOT:
+      return LLVMBuildNot(p_cg->builder, sub_expr, "");
+    default:
+      HEDLEY_UNREACHABLE_RETURN(NULL);
+  }
+}
+
 /* Implements all trivial binary opcodes. Compound assignments (e.g. +=)
  * or logical AND and OR (lazy operators) are not implemented by this function.
  */
@@ -636,6 +657,7 @@ cg_visit(struct PCodegenLLVM* p_cg, PAst* p_node)
     DISPATCH(P_AST_NODE_FLOAT_LITERAL, PAstFloatLiteral, cg_float_literal);
     DISPATCH(P_AST_NODE_PAREN_EXPR, PAstParenExpr, cg_paren_expr);
     DISPATCH(P_AST_NODE_DECL_REF_EXPR, PAstDeclRefExpr, cg_decl_ref_expr);
+    DISPATCH(P_AST_NODE_UNARY_EXPR, PAstUnaryExpr, cg_unary_expr);
     DISPATCH(P_AST_NODE_BINARY_EXPR, PAstBinaryExpr, cg_binary_expr);
     DISPATCH(P_AST_NODE_CALL_EXPR, PAstCallExpr, cg_call_expr);
     DISPATCH(P_AST_NODE_CAST_EXPR, PAstCastExpr, cg_cast_expr);

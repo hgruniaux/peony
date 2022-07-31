@@ -68,8 +68,7 @@ main()
   p_bump_init(&p_global_bump_allocator);
   p_init_types();
 
-  const char* code = "fn hello(x: bool): i64 {\n    return x as i64;\n}\n"
-                     "fn main(): i32 {\n    return (hello(true) as i32) + 1;\n}";
+  const char* code = "fn main(): u32 {\n    return !1;\n}";
 
   unsigned int lineno = 1;
   printf("%4d | ", lineno);

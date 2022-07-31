@@ -729,14 +729,42 @@ parse_primary_expr(struct PParser* p_parser)
 }
 
 /*
- * cast_expr:
+ * unary_expr:
  *     primary_expr
- *     primary_expr "as" type
+ *     "-" unary_expr
+ *     "!" unary_expr
+ */
+static PAst*
+parse_unary_expr(struct PParser* p_parser)
+{
+  PAstUnaryOp op;
+  if (LOOKAHEAD_IS(P_TOK_EXCLAIM)) {
+    consume_token(p_parser);
+    op = P_UNARY_NOT;
+  } else if (LOOKAHEAD_IS(P_TOK_MINUS)) {
+    consume_token(p_parser);
+    op = P_UNARY_NEG;
+  } else {
+    return parse_primary_expr(p_parser);
+  }
+
+  PAst* sub_expr = parse_unary_expr(p_parser);
+  PAstUnaryExpr* node = CREATE_NODE(PAstUnaryExpr, P_AST_NODE_UNARY_EXPR);
+  node->opcode = op;
+  node->sub_expr = sub_expr;
+  sema_check_unary_expr(&p_parser->sema, node);
+  return (PAst*)node;
+}
+
+/*
+ * cast_expr:
+ *     unary_expr
+ *     unary_expr "as" type
  */
 static PAst*
 parse_cast_expr(struct PParser* p_parser)
 {
-  PAst* sub_expr = parse_primary_expr(p_parser);
+  PAst* sub_expr = parse_unary_expr(p_parser);
 
   if (LOOKAHEAD_IS(P_TOK_KEY_as)) {
     consume_token(p_parser);

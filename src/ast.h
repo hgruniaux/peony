@@ -21,6 +21,7 @@ typedef enum PAstKind
   P_AST_NODE_FLOAT_LITERAL,
   P_AST_NODE_PAREN_EXPR,
   P_AST_NODE_DECL_REF_EXPR,
+  P_AST_NODE_UNARY_EXPR,
   P_AST_NODE_BINARY_EXPR,
   P_AST_NODE_CALL_EXPR,
   P_AST_NODE_CAST_EXPR
@@ -133,21 +134,6 @@ typedef struct PAstParenExpr
   PAst* sub_expr;
 } PAstParenExpr;
 
-typedef enum PAstCastKind
-{
-#define CAST_OPERATOR(p_kind) p_kind,
-#include "operator_kinds.def"
-} PAstCastKind;
-
-/** @brief A cast expression (e.g. `sub_expr as i32`). */
-typedef struct PAstCastExpr
-{
-  PAstCommon common;
-  PAstExprCommon expr;
-  PAst* sub_expr;
-  PAstCastKind cast_kind;
-} PAstCastExpr;
-
 /** @brief A declaration reference (e.g. `x` where x is a variable). */
 typedef struct PAstDeclRefExpr
 {
@@ -156,15 +142,21 @@ typedef struct PAstDeclRefExpr
   PDecl* decl;
 } PAstDeclRefExpr;
 
-/** @brief A function call. */
-typedef struct PAstCallExpr
+/** @brief Supported unary operators. */
+typedef enum PAstUnaryOp
+{
+#define UNARY_OPERATOR(p_kind) p_kind,
+#include "operator_kinds.def"
+} PAstUnaryOp;
+
+/** @brief An unary expression (e.g. `-x`). */
+typedef struct PAstUnaryExpr
 {
   PAstCommon common;
   PAstExprCommon expr;
-  PDecl* func;
-  int arg_count;
-  PAst* args[1]; /* tail-allocated */
-} PAstCallExpr;
+  PAstUnaryOp opcode;
+  PAst* sub_expr;
+} PAstUnaryExpr;
 
 /** @brief Supported binary operators. */
 typedef enum PAstBinaryOp
@@ -182,6 +174,32 @@ typedef struct PAstBinaryExpr
   PAst* lhs;
   PAst* rhs;
 } PAstBinaryExpr;
+
+/** @brief A function call. */
+typedef struct PAstCallExpr
+{
+  PAstCommon common;
+  PAstExprCommon expr;
+  PDecl* func;
+  int arg_count;
+  PAst* args[1]; /* tail-allocated */
+} PAstCallExpr;
+
+/** @brief Supported cast kinds. */
+typedef enum PAstCastKind
+{
+#define CAST_OPERATOR(p_kind) p_kind,
+#include "operator_kinds.def"
+} PAstCastKind;
+
+/** @brief A cast expression (e.g. `sub_expr as i32`). */
+typedef struct PAstCastExpr
+{
+  PAstCommon common;
+  PAstExprCommon expr;
+  PAst* sub_expr;
+  PAstCastKind cast_kind;
+} PAstCastExpr;
 
 #define P_AST_GET_KIND(p_node) (((PAst*)(p_node))->common.kind)
 #define P_AST_GET_TYPE(p_node) (((PAstParenExpr*)(p_node))->expr.type)

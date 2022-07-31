@@ -303,6 +303,28 @@ sema_check_int_literal(PSema* p_s, PAstIntLiteral* p_node)
 }
 
 bool
+sema_check_unary_expr(PSema* p_s, PAstUnaryExpr* p_node)
+{
+  assert(p_s != NULL && p_node != NULL && P_AST_GET_KIND(p_node) == P_AST_NODE_UNARY_EXPR);
+
+  assert(p_node->sub_expr != NULL);
+
+  bool has_error = false;
+
+  PType* type = P_AST_GET_TYPE(p_node->sub_expr);
+  P_AST_GET_TYPE(p_node) = type;
+
+  if ((p_node->opcode == P_UNARY_NEG && !p_type_is_float(type) && !p_type_is_signed(type)) ||
+      (p_node->opcode == P_UNARY_NOT && !p_type_is_int(type) && !p_type_is_bool(type))) {
+    error("could not apply unary operator '-' to type '%ty'", type);
+    p_s->error_count++;
+    has_error = true;
+  }
+
+  return has_error;
+}
+
+bool
 sema_check_binary_expr(PSema* p_s, PAstBinaryExpr* p_node)
 {
   assert(p_s != NULL && p_node != NULL && P_AST_GET_KIND(p_node) == P_AST_NODE_BINARY_EXPR);

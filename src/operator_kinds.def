@@ -17,6 +17,19 @@ CAST_OPERATOR(P_CAST_BOOL2FLOAT) /* Conversion from bool to a float type. */
 #undef CAST_OPERATOR
 
 /*
+ * Unary operators:
+ */
+
+#ifndef UNARY_OPERATOR
+#define UNARY_OPERATOR(p_kind)
+#endif
+
+UNARY_OPERATOR(P_UNARY_NEG) /* Negation, e.g. `-x`. */
+UNARY_OPERATOR(P_UNARY_NOT) /* Logical and bitwise not depending on type. */
+
+#undef UNARY_OPERATOR
+
+/*
  * Binary operators:
  */
 
