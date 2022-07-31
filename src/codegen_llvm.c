@@ -7,7 +7,7 @@
 
 #include <llvm-c/Analysis.h>
 #include <llvm-c/Core.h>
-#include <llvm-c/Transforms/PassManagerBuilder.h>
+#include <llvm-c/Transforms/PassBuilder.h>
 
 static LLVMTypeRef
 cg_to_llvm_type(PType* p_type)
@@ -674,8 +674,26 @@ p_cg_init(struct PCodegenLLVM* p_cg)
 {
   assert(p_cg != NULL);
 
+  LLVMInitializeNativeTarget();
+
   p_cg->module = LLVMModuleCreateWithName("");
   p_cg->builder = LLVMCreateBuilder();
+
+  p_cg->opt_level = 0;
+
+  const char* target_triple = LLVMGetDefaultTargetTriple();
+  const char* host_cpu = LLVMGetHostCPUName();
+  const char* host_features = LLVMGetHostCPUFeatures();
+  LLVMTargetRef target = NULL;
+  char* error = NULL;
+  LLVMSetTarget(p_cg->module, target_triple);
+  LLVMGetTargetFromTriple(target_triple, &target, &error);
+  LLVMDisposeMessage(error);
+  p_cg->target_machine = LLVMCreateTargetMachine(
+    target, target_triple, host_cpu, host_features, LLVMCodeGenLevelAggressive, LLVMRelocDefault, LLVMCodeModelDefault);
+  LLVMDisposeMessage(host_cpu);
+  LLVMDisposeMessage(host_features);
+  LLVMDisposeMessage(target_triple);
 }
 
 void
@@ -696,30 +714,20 @@ p_cg_dump(struct PCodegenLLVM* p_cg)
 }
 
 void
-p_cg_optimize(struct PCodegenLLVM* p_cg, int p_opt_level)
-{
-  assert(p_cg != NULL);
-  assert(p_opt_level >= 0 && p_opt_level <= 3);
-
-  const LLVMPassManagerBuilderRef pmb = LLVMPassManagerBuilderCreate();
-  LLVMPassManagerBuilderSetOptLevel(pmb, p_opt_level);
-
-  const LLVMPassManagerRef pass_manager = LLVMCreatePassManager();
-  LLVMPassManagerBuilderPopulateModulePassManager(pmb, pass_manager);
-
-  LLVMPassManagerBuilderDispose(pmb);
-
-  LLVMRunPassManager(pass_manager, p_cg->module);
-
-  LLVMDisposePassManager(pass_manager);
-}
-
-void
 p_cg_compile(struct PCodegenLLVM* p_cg, PAst* p_ast)
 {
   assert(p_cg != NULL);
 
   cg_visit(p_cg, p_ast);
+  if (p_cg->module_pm != NULL)
+    LLVMRunPassManager(p_cg->module_pm, p_cg->module);
+
+  LLVMPassBuilderOptionsRef options = LLVMCreatePassBuilderOptions();
+
+  char buffer[] = "default<O0>";
+  buffer[9] = (char)('0' + (char)p_cg->opt_level);
+  LLVMRunPasses(p_cg->module, buffer, p_cg->target_machine, options);
+  LLVMDisposePassBuilderOptions(options);
 
   char* msg = NULL;
   LLVMVerifyModule(p_cg->module, LLVMAbortProcessAction, &msg);

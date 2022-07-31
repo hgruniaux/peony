@@ -25,13 +25,10 @@ parse(const char* p_input)
   if (parser.sema.error_count == 0) {
     struct PCodegenLLVM codegen;
     p_cg_init(&codegen);
+    codegen.opt_level = 1;
 
     p_cg_compile(&codegen, ast);
 
-    printf("=== LLVM IR: BEFORE OPTIMIZATION ===\n");
-    p_cg_dump(&codegen);
-    p_cg_optimize(&codegen, 3);
-    printf("=== LLVM IR: AFTER OPTIMIZATION ===\n");
     p_cg_dump(&codegen);
     p_cg_destroy(&codegen);
   }
