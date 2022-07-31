@@ -453,8 +453,8 @@ parse_return_stmt(struct PParser* p_parser)
 
 /*
  * if_stmt:
- *     "if" "(" expr ")" compound_stmt
- *     "if" "(" expr ")" compound_stmt "else" (compound_stmt | if_stmt)
+ *     "if" expr compound_stmt
+ *     "if" expr compound_stmt "else" (compound_stmt | if_stmt)
  */
 static PAst*
 parse_if_stmt(struct PParser* p_parser)
@@ -462,9 +462,7 @@ parse_if_stmt(struct PParser* p_parser)
   assert(LOOKAHEAD_IS(P_TOK_KEY_if));
   consume_token(p_parser);
 
-  expect_token(p_parser, P_TOK_LPAREN);
   PAst* cond_expr = parse_expr(p_parser);
-  expect_token(p_parser, P_TOK_RPAREN);
 
   PAst* then_stmt = parse_compound_stmt(p_parser);
 
@@ -489,7 +487,7 @@ parse_if_stmt(struct PParser* p_parser)
 
 /*
  * while_stmt:
- *     "while" "(" expr ")" compound_stmt
+ *     "while" expr compound_stmt
  */
 static PAst*
 parse_while_stmt(struct PParser* p_parser)
@@ -502,9 +500,7 @@ parse_while_stmt(struct PParser* p_parser)
   PAstWhileStmt* node = CREATE_NODE(PAstWhileStmt, P_AST_NODE_WHILE_STMT);
   p_parser->sema.current_scope->statement = (PAst*)node;
 
-  expect_token(p_parser, P_TOK_LPAREN);
   PAst* cond_expr = parse_expr(p_parser);
-  expect_token(p_parser, P_TOK_RPAREN);
 
   PAst* body_stmt = parse_compound_stmt(p_parser);
 
