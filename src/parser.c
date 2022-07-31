@@ -405,7 +405,7 @@ parse_return_stmt(struct PParser* p_parser)
 /*
  * if_stmt:
  *     "if" "(" expr ")" compound_stmt
- *     "if" "(" expr ")" compound_stmt "else" compound_stmt
+ *     "if" "(" expr ")" compound_stmt "else" (compound_stmt | if_stmt)
  */
 static PAst*
 parse_if_stmt(struct PParser* p_parser)
@@ -422,7 +422,12 @@ parse_if_stmt(struct PParser* p_parser)
   PAst* else_stmt = NULL;
   if (LOOKAHEAD_IS(P_TOK_KEY_else)) {
     consume_token(p_parser);
-    else_stmt = parse_compound_stmt(p_parser);
+
+    if (LOOKAHEAD_IS(P_TOK_KEY_if)) {
+      else_stmt = parse_if_stmt(p_parser);
+    } else {
+      else_stmt = parse_compound_stmt(p_parser);
+    }
   }
 
   PAstIfStmt* node = CREATE_NODE(PAstIfStmt, P_AST_NODE_IF_STMT);
