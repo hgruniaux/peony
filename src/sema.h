@@ -39,8 +39,8 @@ sema_local_lookup(PSema* p_s, PIdentifierInfo* p_name);
 struct PSymbol*
 sema_lookup(PSema* p_s, PIdentifierInfo* p_name);
 
-void
-sema_create_func_type(PSema* p_s, PDeclFunction* p_node, PType* return_type);
+bool
+sema_check_pre_func_decl(PSema* p_s, PDeclFunction* p_node, PType* return_type);
 
 bool
 sema_check_func_decl(PSema* p_s, PDeclFunction* p_node);

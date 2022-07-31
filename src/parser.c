@@ -261,7 +261,13 @@ parse_func_decl(struct PParser* p_parser)
   decl->param_count = params.size;
   memcpy(decl->params, params.buffer, sizeof(PDeclParam*) * params.size);
   p_dynamic_array_destroy(&params);
-  sema_create_func_type(&p_parser->sema, decl, return_type);
+
+  if (sema_check_pre_func_decl(&p_parser->sema, decl, return_type)) {
+    expect_token(p_parser, P_TOK_LBRACE);
+    skip_until_no_error(p_parser, P_TOK_RBRACE);
+    sema_pop_scope(&p_parser->sema);
+    return decl;
+  }
 
   decl->body = parse_compound_stmt(p_parser);
 

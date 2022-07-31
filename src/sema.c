@@ -132,8 +132,8 @@ resolve_generic_type(PAst* p_node, PType* p_hint)
   }
 }
 
-void
-sema_create_func_type(PSema* p_s, PDeclFunction* p_node, PType* return_type)
+bool
+sema_check_pre_func_decl(PSema* p_s, PDeclFunction* p_node, PType* return_type)
 {
   assert(p_s != NULL && p_node != NULL && P_DECL_GET_KIND(p_node) == P_DECL_FUNCTION);
 
@@ -148,12 +148,6 @@ sema_create_func_type(PSema* p_s, PDeclFunction* p_node, PType* return_type)
   free(param_types);
 
   p_s->curr_func_type = (PFunctionType*)P_DECL_GET_TYPE(p_node);
-}
-
-bool
-sema_check_func_decl(PSema* p_s, PDeclFunction* p_node)
-{
-  assert(p_s != NULL && p_node != NULL && P_DECL_GET_KIND(p_node) == P_DECL_FUNCTION);
 
   PIdentifierInfo* name = P_DECL_GET_NAME(p_node);
   PSymbol* symbol = sema_local_lookup(p_s, name);
@@ -162,6 +156,18 @@ sema_check_func_decl(PSema* p_s, PDeclFunction* p_node)
     p_s->error_count++;
     return true;
   }
+
+  symbol = p_scope_add_symbol(p_s->current_scope, name);
+  symbol->decl = (PDecl*)p_node;
+  return false;
+}
+
+bool
+sema_check_func_decl(PSema* p_s, PDeclFunction* p_node)
+{
+  assert(p_s != NULL && p_node != NULL && P_DECL_GET_KIND(p_node) == P_DECL_FUNCTION);
+
+  PIdentifierInfo* name = P_DECL_GET_NAME(p_node);
 
   bool has_error = false;
   bool found_first_default_arg = false;
@@ -176,9 +182,6 @@ sema_check_func_decl(PSema* p_s, PDeclFunction* p_node)
       found_first_default_arg = true;
     }
   }
-
-  symbol = p_scope_add_symbol(p_s->current_scope, name);
-  symbol->decl = (PDecl*)p_node;
 
   return has_error;
 }
