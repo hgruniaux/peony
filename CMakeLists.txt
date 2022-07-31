@@ -3,10 +3,10 @@ cmake_minimum_required (VERSION 3.8)
 project("peony")
 
 add_executable(peony
-    "src/hedley.h"
+    "src/utils/hedley.h"
 
-    "src/bump_allocator.c"
-    "src/bump_allocator.h"
+    "src/utils/bump_allocator.c"
+    "src/utils/bump_allocator.h"
     "src/identifier_table.c"
     "src/identifier_table.h"
     "src/lexer.h"
@@ -21,7 +21,7 @@ add_executable(peony
     "src/ast.h"
     "src/ast.c"
     "src/parser.c"
- "src/parser.h" "src/type.h" "src/type.c" "src/scope.h"   "src/scope.c" "src/detail/hash_table_common.h" "src/detail/hash_table_common.c" "src/codegen_llvm.h" "src/codegen_llvm.c" "src/utils/dynamic_array.h" "src/utils/dynamic_array.c" "src/utils/diag.h" "src/utils/diag.c" "src/sema.h" "src/sema.c")
+ "src/parser.h" "src/type.h" "src/type.c" "src/scope.h"   "src/scope.c" "src/utils/hash_table_common.h" "src/utils/hash_table_common.c" "src/codegen_llvm.h" "src/codegen_llvm.c" "src/utils/dynamic_array.h" "src/utils/dynamic_array.c" "src/utils/diag.h" "src/utils/diag.c" "src/sema.h" "src/sema.c")
 
 if(MSCV)
     target_compile_options(peony /W4 /WX)

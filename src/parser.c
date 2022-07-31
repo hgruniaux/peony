@@ -3,6 +3,7 @@
 
 #include "utils/diag.h"
 #include "utils/dynamic_array.h"
+#include "utils/bump_allocator.h"
 
 #include <assert.h>
 #include <stdarg.h>

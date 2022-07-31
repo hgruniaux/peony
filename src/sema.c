@@ -2,6 +2,7 @@
 
 #include "scope.h"
 #include "utils/diag.h"
+#include "utils/bump_allocator.h"
 
 #include <assert.h>
 #include <stdlib.h>

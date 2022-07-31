@@ -1,7 +1,7 @@
 #include "type.h"
 
-#include "bump_allocator.h"
-#include "hedley.h"
+#include "utils/hedley.h"
+#include "utils/bump_allocator.h"
 #include "utils/dynamic_array.h"
 
 #include <assert.h>

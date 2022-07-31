@@ -1,6 +1,5 @@
 #pragma once
 
-#include "bump_allocator.h"
 #include "token_kind.h"
 
 #include <stddef.h>

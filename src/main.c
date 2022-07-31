@@ -1,5 +1,6 @@
 #include "codegen_llvm.h"
 #include "parser.h"
+#include "utils/bump_allocator.h"
 
 #include <stdio.h>
 

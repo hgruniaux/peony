@@ -1,6 +1,7 @@
 #include "identifier_table.h"
 
-#include "detail/hash_table_common.h"
+#include "utils/bump_allocator.h"
+#include "utils/hash_table_common.h"
 
 #include <assert.h>
 #include <stdio.h>

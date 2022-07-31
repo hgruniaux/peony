@@ -1,6 +1,6 @@
 #include "diag.h"
 
-#include "../hedley.h"
+#include "hedley.h"
 
 #include "../identifier_table.h"
 #include "../token.h"
