@@ -1,6 +1,7 @@
 #include "type.h"
 
 #include "bump_allocator.h"
+#include "hedley.h"
 
 #include <assert.h>
 #include <string.h>
@@ -97,6 +98,32 @@ p_type_is_float(PType* p_type)
       return false;
   }
 }
+
+int
+p_type_get_bitwidth(PType* p_type)
+{
+  switch (p_type->kind) {
+    case P_TYPE_BOOL:
+      return 1; /* not really stored as 1-bit */
+    case P_TYPE_I8:
+    case P_TYPE_U8:
+      return 8;
+    case P_TYPE_I16:
+    case P_TYPE_U16:
+      return 16;
+    case P_TYPE_I32:
+    case P_TYPE_U32:
+    case P_TYPE_F32:
+      return 32;
+    case P_TYPE_I64:
+    case P_TYPE_U64:
+    case P_TYPE_F64:
+      return 64;
+    default:
+      HEDLEY_UNREACHABLE_RETURN(-1);
+  }
+}
+
 PType*
 p_type_get_undef(void)
 {

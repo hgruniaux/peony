@@ -551,6 +551,59 @@ cg_call_expr(struct PCodegenLLVM* p_cg, PAstCallExpr* p_node)
 }
 
 static LLVMValueRef
+cg_cast_expr(struct PCodegenLLVM* p_cg, PAstCastExpr* p_node)
+{
+  assert(P_AST_GET_KIND(p_node) == P_AST_NODE_CAST_EXPR);
+
+  LLVMValueRef sub_expr = cg_visit(p_cg, p_node->sub_expr);
+  LLVMTypeRef target_ty = cg_to_llvm_type(P_AST_GET_TYPE(p_node));
+  switch (p_node->cast_kind) {
+    case P_CAST_NOOP:
+      return sub_expr;
+    case P_CAST_INT2INT: {
+      const int from_bitwidth = p_type_get_bitwidth(P_AST_GET_TYPE(p_node->sub_expr));
+      const int target_bitwidth = p_type_get_bitwidth(P_AST_GET_TYPE(p_node));
+
+      if (from_bitwidth > target_bitwidth) {
+        return LLVMBuildTrunc(p_cg->builder, sub_expr, target_ty, "");
+      } else { /* from_bitwidth < target_bitwidth */
+        if (p_type_is_unsigned(P_AST_GET_TYPE(p_node->sub_expr))) {
+          return LLVMBuildZExt(p_cg->builder, sub_expr, target_ty, "");
+        } else {
+          return LLVMBuildSExt(p_cg->builder, sub_expr, target_ty, "");
+        }
+      }
+    }
+    case P_CAST_INT2FLOAT:
+      if (p_type_is_unsigned(P_AST_GET_TYPE(p_node->sub_expr)))
+        return LLVMBuildUIToFP(p_cg->builder, sub_expr, target_ty, "");
+      else
+        return LLVMBuildSIToFP(p_cg->builder, sub_expr, target_ty, "");
+    case P_CAST_FLOAT2FLOAT: {
+      const int from_bitwidth = p_type_get_bitwidth(P_AST_GET_TYPE(p_node->sub_expr));
+      const int target_bitwidth = p_type_get_bitwidth(P_AST_GET_TYPE(p_node));
+
+      if (from_bitwidth > target_bitwidth) {
+        return LLVMBuildFPTrunc(p_cg->builder, sub_expr, target_ty, "");
+      } else {
+        return LLVMBuildFPExt(p_cg->builder, sub_expr, target_ty, "");
+      }
+    }
+    case P_CAST_FLOAT2INT:
+      if (p_type_is_unsigned(target_ty))
+        return LLVMBuildFPToUI(p_cg->builder, sub_expr, target_ty, "");
+      else
+        return LLVMBuildFPToSI(p_cg->builder, sub_expr, target_ty, "");
+    case P_CAST_BOOL2INT:
+      return LLVMBuildZExt(p_cg->builder, sub_expr, target_ty, "");
+    case P_CAST_BOOL2FLOAT:
+      return LLVMBuildUIToFP(p_cg->builder, sub_expr, target_ty, "");
+    default:
+      HEDLEY_UNREACHABLE_RETURN(NULL);
+  }
+}
+
+static LLVMValueRef
 cg_translation_unit(struct PCodegenLLVM* p_cg, PAstTranslationUnit* p_node)
 {
   assert(P_AST_GET_KIND(p_node) == P_AST_NODE_TRANSLATION_UNIT);
@@ -585,6 +638,7 @@ cg_visit(struct PCodegenLLVM* p_cg, PAst* p_node)
     DISPATCH(P_AST_NODE_DECL_REF_EXPR, PAstDeclRefExpr, cg_decl_ref_expr);
     DISPATCH(P_AST_NODE_BINARY_EXPR, PAstBinaryExpr, cg_binary_expr);
     DISPATCH(P_AST_NODE_CALL_EXPR, PAstCallExpr, cg_call_expr);
+    DISPATCH(P_AST_NODE_CAST_EXPR, PAstCastExpr, cg_cast_expr);
 #undef DISPATCH
 
     default:

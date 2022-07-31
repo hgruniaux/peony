@@ -51,6 +51,9 @@ p_type_is_unsigned(PType* p_type);
 bool
 p_type_is_float(PType* p_type);
 
+int
+p_type_get_bitwidth(PType* p_type);
+
 PType*
 p_type_get_undef(void);
 PType*

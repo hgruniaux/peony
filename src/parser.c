@@ -274,7 +274,7 @@ parse_func_decl(struct PParser* p_parser)
     consume_token(p_parser);
     return_type = parse_type(p_parser);
   }
-  
+
   PDeclFunction* decl = CREATE_DECL_EXTRA_SIZE(PDeclFunction, sizeof(PDeclParam*) * params.size, P_DECL_FUNCTION);
   P_DECL_GET_NAME(decl) = identifier_info;
   decl->param_count = params.size;
@@ -683,7 +683,7 @@ parse_var_ref_or_call_expr(struct PParser* p_parser)
     } else if (P_DECL_GET_KIND(symbol->decl) != P_DECL_VAR && P_DECL_GET_KIND(symbol->decl) != P_DECL_PARAM) {
       error("'%i' is not a variable", name);
     }
-    
+
     PAstDeclRefExpr* node = CREATE_NODE(PAstDeclRefExpr, P_AST_NODE_DECL_REF_EXPR);
     node->decl = decl;
 
@@ -728,11 +728,35 @@ parse_primary_expr(struct PParser* p_parser)
   }
 }
 
+/*
+ * cast_expr:
+ *     primary_expr
+ *     primary_expr "as" type
+ */
+static PAst*
+parse_cast_expr(struct PParser* p_parser)
+{
+  PAst* sub_expr = parse_primary_expr(p_parser);
+
+  if (LOOKAHEAD_IS(P_TOK_KEY_as)) {
+    consume_token(p_parser);
+    PType* type = parse_type(p_parser);
+
+    PAstCastExpr* node = CREATE_NODE(PAstCastExpr, P_AST_NODE_CAST_EXPR);
+    node->sub_expr = sub_expr;
+    P_AST_GET_TYPE(node) = type;
+    sema_check_cast_expr(&p_parser->sema, node);
+    return (PAst*)node;
+  }
+
+  return sub_expr;
+}
+
 static int
 get_binop_precedence(PTokenKind p_op)
 {
   switch (p_op) {
-#define BINOP(p_kind, p_tok, p_precedence)                                                                             \
+#define BINARY_OPERATOR(p_kind, p_tok, p_precedence)                                                                   \
   case p_tok:                                                                                                          \
     return p_precedence;
 #include "operator_kinds.def"
@@ -745,7 +769,7 @@ static PAstBinaryOp
 get_binop_from_tok_kind(PTokenKind p_op)
 {
   switch (p_op) {
-#define BINOP(p_kind, p_tok, p_precedence)                                                                             \
+#define BINARY_OPERATOR(p_kind, p_tok, p_precedence)                                                                   \
   case p_tok:                                                                                                          \
     return p_kind;
 #include "operator_kinds.def"
@@ -770,7 +794,7 @@ parse_binary_expr(struct PParser* p_parser, PAst* p_lhs, int p_expr_prec)
     consume_token(p_parser);
 
     /* Parse the primary expression after the binary operator. */
-    PAst* rhs = parse_primary_expr(p_parser);
+    PAst* rhs = parse_cast_expr(p_parser);
     if (rhs == NULL)
       return NULL;
 
@@ -796,7 +820,7 @@ parse_binary_expr(struct PParser* p_parser, PAst* p_lhs, int p_expr_prec)
 static PAst*
 parse_expr(struct PParser* p_parser)
 {
-  PAst* lhs = parse_primary_expr(p_parser);
+  PAst* lhs = parse_cast_expr(p_parser);
   return parse_binary_expr(p_parser, lhs, 0);
 }
 

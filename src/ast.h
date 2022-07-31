@@ -22,7 +22,8 @@ typedef enum PAstKind
   P_AST_NODE_PAREN_EXPR,
   P_AST_NODE_DECL_REF_EXPR,
   P_AST_NODE_BINARY_EXPR,
-  P_AST_NODE_CALL_EXPR
+  P_AST_NODE_CALL_EXPR,
+  P_AST_NODE_CAST_EXPR
 } PAstKind;
 
 typedef struct PDecl PDecl;
@@ -132,6 +133,21 @@ typedef struct PAstParenExpr
   PAst* sub_expr;
 } PAstParenExpr;
 
+typedef enum PAstCastKind
+{
+#define CAST_OPERATOR(p_kind) p_kind,
+#include "operator_kinds.def"
+} PAstCastKind;
+
+/** @brief A cast expression (e.g. `sub_expr as i32`). */
+typedef struct PAstCastExpr
+{
+  PAstCommon common;
+  PAstExprCommon expr;
+  PAst* sub_expr;
+  PAstCastKind cast_kind;
+} PAstCastExpr;
+
 /** @brief A declaration reference (e.g. `x` where x is a variable). */
 typedef struct PAstDeclRefExpr
 {
@@ -153,7 +169,7 @@ typedef struct PAstCallExpr
 /** @brief Supported binary operators. */
 typedef enum PAstBinaryOp
 {
-#define BINOP(p_kind, p_tok, p_precedence) p_kind,
+#define BINARY_OPERATOR(p_kind, p_tok, p_precedence) p_kind,
 #include "operator_kinds.def"
 } PAstBinaryOp;
 

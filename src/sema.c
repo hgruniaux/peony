@@ -371,3 +371,53 @@ sema_check_binary_expr(PSema* p_s, PAstBinaryExpr* p_node)
 
   return has_error;
 }
+
+bool
+sema_check_cast_expr(PSema* p_s, PAstCastExpr* p_node)
+{
+  assert(p_s != NULL && p_node != NULL && P_AST_GET_KIND(p_node) == P_AST_NODE_CAST_EXPR);
+
+  assert(p_node->sub_expr != NULL);
+  assert(P_AST_GET_TYPE(p_node) != NULL);
+
+  PType* from_ty = P_AST_GET_TYPE(p_node->sub_expr);
+  PType* target_ty = P_AST_GET_TYPE(p_node);
+
+  if (from_ty == target_ty) {
+    warning("no-op cast operator, expression already have type '%ty'", from_ty);
+    p_s->warning_count++;
+    p_node->cast_kind = P_CAST_NOOP;
+    return false;
+  }
+
+  p_node->cast_kind = P_CAST_NOOP;
+
+  if (p_type_is_int(from_ty)) {
+    if (p_type_is_float(target_ty)) {
+      p_node->cast_kind = P_CAST_INT2FLOAT;
+    } else if (p_type_is_int(target_ty)) {
+      if (p_type_get_bitwidth(from_ty) == p_type_get_bitwidth(target_ty))
+        p_node->cast_kind = P_CAST_NOOP; /* just a signed <-> unsigned conversion */
+      else
+        p_node->cast_kind = P_CAST_INT2INT;
+    }
+  } else if (p_type_is_float(from_ty)) {
+    if (p_type_is_int(target_ty))
+      p_node->cast_kind = P_CAST_FLOAT2INT;
+    else if (p_type_is_float(target_ty))
+      p_node->cast_kind = P_CAST_FLOAT2FLOAT;
+  } else if (p_type_is_bool(from_ty)) {
+    if (p_type_is_int(target_ty))
+      p_node->cast_kind = P_CAST_BOOL2INT;
+    else if (p_type_is_float(target_ty))
+      p_node->cast_kind = P_CAST_BOOL2FLOAT;
+  }
+
+  if (p_node->cast_kind == P_CAST_NOOP) {
+    error("invalid conversion from '%ty' to '%ty'", from_ty, target_ty);
+    p_s->error_count++;
+    return true;
+  }
+
+  return false;
+}
