@@ -17,8 +17,10 @@ PType g_type_u8;
 PType g_type_u16;
 PType g_type_u32;
 PType g_type_u64;
+PType g_type_generic_int;
 PType g_type_f32;
 PType g_type_f64;
+PType g_type_generic_float;
 PType g_type_bool;
 
 PDynamicArray g_func_types;
@@ -44,8 +46,10 @@ p_init_types(void)
   init_type(&g_type_u16, P_TYPE_U16);
   init_type(&g_type_u32, P_TYPE_U32);
   init_type(&g_type_u64, P_TYPE_U64);
+  init_type(&g_type_generic_int, P_TYPE_GENERIC_INT);
   init_type(&g_type_f32, P_TYPE_F32);
   init_type(&g_type_f64, P_TYPE_F64);
+  init_type(&g_type_generic_float, P_TYPE_GENERIC_FLOAT);
   init_type(&g_type_bool, P_TYPE_BOOL);
 
   p_dynamic_array_init(&g_func_types);
@@ -67,6 +71,7 @@ p_type_is_signed(PType* p_type)
     case P_TYPE_I16:
     case P_TYPE_I32:
     case P_TYPE_I64:
+    case P_TYPE_GENERIC_INT: /* generic int is both signed and unsigned */
       return true;
     default:
       return false;
@@ -82,6 +87,7 @@ p_type_is_unsigned(PType* p_type)
     case P_TYPE_U16:
     case P_TYPE_U32:
     case P_TYPE_U64:
+    case P_TYPE_GENERIC_INT: /* generic int is both signed and unsigned */
       return true;
     default:
       return false;
@@ -95,6 +101,7 @@ p_type_is_float(PType* p_type)
   switch (P_TYPE_GET_KIND(p_type)) {
     case P_TYPE_F32:
     case P_TYPE_F64:
+    case P_TYPE_GENERIC_FLOAT:
       return true;
     default:
       return false;
@@ -177,6 +184,11 @@ p_type_get_u64(void)
   return &g_type_u64;
 }
 PType*
+p_type_get_generic_int(void)
+{
+  return &g_type_generic_int;
+}
+PType*
 p_type_get_f32(void)
 {
   return &g_type_f32;
@@ -185,6 +197,11 @@ PType*
 p_type_get_f64(void)
 {
   return &g_type_f64;
+}
+PType*
+p_type_get_generic_float(void)
+{
+  return &g_type_generic_float;
 }
 PType*
 p_type_get_bool(void)

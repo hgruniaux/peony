@@ -66,8 +66,9 @@ print_severity(PDiagSeverity p_severity)
 static void
 print_type(PType* p_type)
 {
-  static const char* builtin_types[] = { "void", "undef", "i8",  "i16", "i32", "i64", "u8",
-                                         "u16",  "u32",   "u64", "f32", "f64", "bool" };
+  /* WARNING: Must have the same layout as PTypeKind. */
+  static const char* builtin_types[] = { "void", "undef", "i8",        "i16", "i32", "i64",     "u8",  "u16",
+                                         "u32",  "u64",   "{integer}", "f32", "f64", "{float}", "bool" };
 
   if (P_TYPE_GET_KIND(p_type) == P_TYPE_FUNCTION) {
     PFunctionType* func_type = (PFunctionType*)p_type;

@@ -14,8 +14,10 @@ typedef enum PTypeKind
   P_TYPE_U16,
   P_TYPE_U32,
   P_TYPE_U64,
+  P_TYPE_GENERIC_INT,
   P_TYPE_F32,
   P_TYPE_F64,
+  P_TYPE_GENERIC_FLOAT,
   P_TYPE_BOOL,
   P_TYPE_FUNCTION,
   P_TYPE_POINTER
@@ -55,6 +57,9 @@ p_init_types(void);
 #define p_type_is_void(p_type) (P_TYPE_GET_KIND(p_type) == P_TYPE_VOID)
 #define p_type_is_pointer(p_type) (P_TYPE_GET_KIND(p_type) == P_TYPE_POINTER)
 #define p_type_is_arithmetic(p_type) (p_type_is_int(p_type) || p_type_is_float(p_type))
+#define p_type_is_generic_int(p_type) (P_TYPE_GET_KIND(p_type) == P_TYPE_GENERIC_INT)
+#define p_type_is_generic_float(p_type) (P_TYPE_GET_KIND(p_type) == P_TYPE_GENERIC_FLOAT)
+#define p_type_is_generic(p_type) (p_type_is_generic_int(p_type) || p_type_is_generic_float(p_type))
 
 bool
 p_type_is_int(PType* p_type);
@@ -89,9 +94,13 @@ p_type_get_u32(void);
 PType*
 p_type_get_u64(void);
 PType*
+p_type_get_generic_int(void);
+PType*
 p_type_get_f32(void);
 PType*
 p_type_get_f64(void);
+PType*
+p_type_get_generic_float(void);
 PType*
 p_type_get_bool(void);
 

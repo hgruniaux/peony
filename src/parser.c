@@ -541,7 +541,7 @@ parse_int_literal(struct PParser* p_parser)
   consume_token(p_parser);
 
   PAstIntLiteral* node = CREATE_NODE(PAstIntLiteral, P_AST_NODE_INT_LITERAL);
-  P_AST_EXPR_GET_TYPE(node) = p_type_get_i32();
+  P_AST_EXPR_GET_TYPE(node) = p_type_get_generic_int();
   node->value = value;
   sema_check_int_literal(&p_parser->sema, node);
   return (PAst*)node;
@@ -557,7 +557,7 @@ parse_float_literal(struct PParser* p_parser)
   consume_token(p_parser);
 
   PAstFloatLiteral* node = CREATE_NODE(PAstFloatLiteral, P_AST_NODE_FLOAT_LITERAL);
-  P_AST_EXPR_GET_TYPE(node) = p_type_get_f32();
+  P_AST_EXPR_GET_TYPE(node) = p_type_get_generic_float();
   // TODO: parse value of float literal
   sema_check_float_literal(&p_parser->sema, node);
   return (PAst*)node;

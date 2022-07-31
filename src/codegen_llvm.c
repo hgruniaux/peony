@@ -304,6 +304,9 @@ cg_int_literal(struct PCodegenLLVM* p_cg, PAstIntLiteral* p_node)
 {
   assert(P_AST_GET_KIND(p_node) == P_AST_NODE_INT_LITERAL);
 
+  /* The semantic analyzer must have eliminated any use of the abstract type 'GENERIC_INT'. */
+  assert(!p_type_is_generic_int(P_AST_EXPR_GET_TYPE(p_node)));
+
   LLVMTypeRef type = cg_to_llvm_type(P_AST_EXPR_GET_TYPE(p_node));
   return LLVMConstInt(type, p_node->value, 0);
 }
@@ -312,6 +315,9 @@ static LLVMValueRef
 cg_float_literal(struct PCodegenLLVM* p_cg, PAstFloatLiteral* p_node)
 {
   assert(P_AST_GET_KIND(p_node) == P_AST_NODE_FLOAT_LITERAL);
+
+  /* The semantic analyzer must have eliminated any use of the abstract type 'GENERIC_FLOAT'. */
+  assert(!p_type_is_generic_float(P_AST_EXPR_GET_TYPE(p_node)));
 
   LLVMTypeRef type = cg_to_llvm_type(P_AST_EXPR_GET_TYPE(p_node));
   return LLVMConstReal(type, p_node->value);
