@@ -719,11 +719,9 @@ p_cg_compile(struct PCodegenLLVM* p_cg, PAst* p_ast)
   assert(p_cg != NULL);
 
   cg_visit(p_cg, p_ast);
-  if (p_cg->module_pm != NULL)
-    LLVMRunPassManager(p_cg->module_pm, p_cg->module);
 
+  /* Optimize: */
   LLVMPassBuilderOptionsRef options = LLVMCreatePassBuilderOptions();
-
   char buffer[] = "default<O0>";
   buffer[9] = (char)('0' + (char)p_cg->opt_level);
   LLVMRunPasses(p_cg->module, buffer, p_cg->target_machine, options);
