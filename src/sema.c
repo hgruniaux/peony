@@ -387,6 +387,12 @@ sema_check_binary_expr(PSema* p_s, PAstBinaryExpr* p_node)
         p_s->error_count++;
       }
 
+      if (!p_type_is_arithmetic(P_AST_GET_TYPE(p_node->lhs))) {
+        error("expected arithmetic type (either integer or float), found '%ty'", P_AST_GET_TYPE(p_node->lhs));
+        has_error = true;
+        p_s->error_count++;
+      }
+
       P_AST_GET_TYPE(p_node) = P_AST_GET_TYPE(p_node->lhs);
       break;
   }

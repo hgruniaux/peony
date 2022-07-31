@@ -17,7 +17,8 @@ typedef enum PTypeKind
   P_TYPE_F32,
   P_TYPE_F64,
   P_TYPE_BOOL,
-  P_TYPE_FUNCTION
+  P_TYPE_FUNCTION,
+  P_TYPE_POINTER
 } PTypeKind;
 
 typedef struct PTypeCommon
@@ -39,6 +40,12 @@ typedef struct PFunctionType
   PType* args[1]; /* tail-allocated */
 } PFunctionType;
 
+typedef struct PPointerType
+{
+  PTypeCommon common;
+  PType* element_type;
+} PPointerType;
+
 #define P_TYPE_GET_KIND(p_type) (((PType*)(p_type))->common.kind)
 
 void
@@ -46,6 +53,7 @@ p_init_types(void);
 
 #define p_type_is_bool(p_type) (P_TYPE_GET_KIND(p_type) == P_TYPE_BOOL)
 #define p_type_is_void(p_type) (P_TYPE_GET_KIND(p_type) == P_TYPE_VOID)
+#define p_type_is_arithmetic(p_type) (p_type_is_int(p_type) && p_type_is_float(p_type))
 
 bool
 p_type_is_int(PType* p_type);
@@ -88,3 +96,6 @@ p_type_get_bool(void);
 
 PType*
 p_type_get_function(PType* p_ret_ty, PType** p_args, int p_arg_count);
+
+PType*
+p_type_get_pointer(PType* p_element_ty);

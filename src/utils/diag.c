@@ -79,6 +79,10 @@ print_type(PType* p_type)
     }
     fputs("): ", stderr);
     print_type(func_type->ret_type);
+  } else if (P_TYPE_GET_KIND(p_type) == P_TYPE_POINTER) {
+    PPointerType* ptr_type = (PPointerType*)p_type;
+    fputs("*", stderr);
+    print_type(ptr_type->element_type);
   } else {
     fputs(builtin_types[(int)P_TYPE_GET_KIND(p_type)], stderr);
   }

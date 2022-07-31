@@ -22,6 +22,7 @@ PType g_type_f64;
 PType g_type_bool;
 
 PDynamicArray g_func_types;
+PDynamicArray g_pointer_types;
 
 static void
 init_type(PType* p_type, PTypeKind p_kind)
@@ -48,6 +49,7 @@ p_init_types(void)
   init_type(&g_type_bool, P_TYPE_BOOL);
 
   p_dynamic_array_init(&g_func_types);
+  p_dynamic_array_init(&g_pointer_types);
 }
 
 bool
@@ -212,4 +214,24 @@ p_type_get_function(PType* p_ret_ty, PType** p_args, int p_arg_count)
 
   p_dynamic_array_append(&g_func_types, func_type);
   return (PType*)func_type;
+}
+
+PType*
+p_type_get_pointer(PType* p_element_ty)
+{
+  assert(p_element_ty != NULL);
+
+  /* If the type already exists returns it (each type is unique). */
+  for (int i = 0; i < g_pointer_types.size; ++i) {
+    PPointerType* ptr_type = g_pointer_types.buffer[i];
+    if (ptr_type->element_type == p_element_ty)
+      return (PType*)ptr_type;
+  }
+
+  PPointerType* ptr_type = P_BUMP_ALLOC(&p_global_bump_allocator, PPointerType);
+  init_type((PType*)ptr_type, P_TYPE_POINTER);
+  ptr_type->element_type = p_element_ty;
+
+  p_dynamic_array_append(&g_pointer_types, ptr_type);
+  return (PType*)ptr_type;
 }

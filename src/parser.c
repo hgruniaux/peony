@@ -132,10 +132,16 @@ parse_stmt(struct PParser* p_parser);
  *     f32
  *     f64
  *     bool
+ *     "*" type
  */
 static PType*
 parse_type(struct PParser* p_parser)
 {
+  if (LOOKAHEAD_IS(P_TOK_STAR)) {
+    consume_token(p_parser);
+    return p_type_get_pointer(parse_type(p_parser));
+  }
+
   PType* type;
   switch (p_parser->lookahead.kind) {
     case P_TOK_KEY_i8:
