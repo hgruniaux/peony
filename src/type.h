@@ -53,7 +53,7 @@ p_init_types(void);
 
 #define p_type_is_bool(p_type) (P_TYPE_GET_KIND(p_type) == P_TYPE_BOOL)
 #define p_type_is_void(p_type) (P_TYPE_GET_KIND(p_type) == P_TYPE_VOID)
-#define p_type_is_arithmetic(p_type) (p_type_is_int(p_type) && p_type_is_float(p_type))
+#define p_type_is_arithmetic(p_type) (p_type_is_int(p_type) || p_type_is_float(p_type))
 
 bool
 p_type_is_int(PType* p_type);
