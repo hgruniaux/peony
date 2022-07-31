@@ -109,15 +109,21 @@ static void
 cg_finish_function_codegen(struct PCodegenLLVM* p_cg)
 {
   /* Correct all empty blocks that may have been generated. */
+  bool returns_void = LLVMGetReturnType(p_cg->current_function_type) == LLVMVoidType();
   LLVMBasicBlockRef block = LLVMGetFirstBasicBlock(p_cg->current_function);
   while (block != NULL) {
     if (LLVMGetBasicBlockTerminator(block) == NULL) {
       LLVMPositionBuilderAtEnd(p_cg->builder, block);
-      LLVMBuildUnreachable(p_cg->builder);
+      if (returns_void)
+        LLVMBuildRetVoid(p_cg->builder);
+      else
+        LLVMBuildUnreachable(p_cg->builder);
     }
 
     block = LLVMGetNextBasicBlock(block);
   }
+
+  LLVMVerifyFunction(p_cg->current_function, LLVMAbortProcessAction);
 }
 
 static void
@@ -132,6 +138,7 @@ cg_function_decl(struct PCodegenLLVM* p_cg, PDeclFunction* p_decl)
 
   if (p_decl->body != NULL) {
     p_cg->current_function = func;
+    p_cg->current_function_type = type;
     LLVMBasicBlockRef entry_bb = LLVMAppendBasicBlock(func, "");
     LLVMPositionBuilderAtEnd(p_cg->builder, entry_bb);
 
@@ -343,6 +350,10 @@ cg_unary_expr(struct PCodegenLLVM* p_cg, PAstUnaryExpr* p_node)
         HEDLEY_UNREACHABLE_RETURN(NULL);
     case P_UNARY_NOT:
       return LLVMBuildNot(p_cg->builder, sub_expr, "");
+    case P_UNARY_ADDRESS_OF:
+      return sub_expr;
+    case P_UNARY_DEREF:
+      return LLVMBuildLoad(p_cg->builder, sub_expr, "");
     default:
       HEDLEY_UNREACHABLE_RETURN(NULL);
   }

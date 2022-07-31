@@ -33,10 +33,6 @@ p_create_node_impl(size_t p_size, PAstKind p_kind)
   return node;
 }
 
-#define CREATE_NODE(p_type, p_kind) ((p_type*)create_node_impl(p_parser, sizeof(p_type), (p_kind)))
-#define CREATE_NODE_EXTRA_SIZE(p_type, p_extra_size, p_kind)                                                           \
-  ((p_type*)create_node_impl(p_parser, sizeof(p_type) + (p_extra_size), (p_kind)))
-
 PDecl*
 p_create_decl_impl(size_t p_size, PDeclKind p_kind)
 {

@@ -390,15 +390,52 @@ sema_check_unary_expr(PSema* p_s, PAstUnaryExpr* p_node)
   PType* type = P_AST_EXPR_GET_TYPE(p_node->sub_expr);
   P_AST_EXPR_GET_TYPE(p_node) = type;
 
-  if ((p_node->opcode == P_UNARY_NEG && !p_type_is_float(type) && !p_type_is_signed(type)) ||
-      (p_node->opcode == P_UNARY_NOT && !p_type_is_int(type) && !p_type_is_bool(type))) {
-    error("could not apply unary operator '-' to type '%ty'", type);
-    p_s->error_count++;
-    has_error = true;
+  switch (p_node->opcode) {
+    case P_UNARY_NEG:
+      if (!p_type_is_float(type) && !p_type_is_signed(type)) {
+        error("could not apply unary operator '-' to type '%ty'", type);
+        p_s->error_count++;
+        has_error = true;
+      }
+
+      p_node->sub_expr = convert_to_rvalue(p_node->sub_expr);
+      P_AST_EXPR_GET_VALUE_CATEGORY(p_node) = P_VC_RVALUE;
+      break;
+    case P_UNARY_NOT:
+      if (!p_type_is_float(type) && !p_type_is_signed(type)) {
+        error("could not apply unary operator '!' to type '%ty'", type);
+        p_s->error_count++;
+        has_error = true;
+      }
+
+      p_node->sub_expr = convert_to_rvalue(p_node->sub_expr);
+      P_AST_EXPR_GET_VALUE_CATEGORY(p_node) = P_VC_RVALUE;
+      break;
+    case P_UNARY_ADDRESS_OF:
+      if (P_AST_EXPR_IS_RVALUE(p_node->sub_expr)) {
+        error("could not take address of an rvalue of type '%ty'", type);
+        p_s->error_count++;
+        has_error = true;
+      }
+
+      P_AST_EXPR_GET_VALUE_CATEGORY(p_node) = P_VC_RVALUE;
+      P_AST_EXPR_GET_TYPE(p_node) = p_type_get_pointer(type);
+      break;
+    case P_UNARY_DEREF:
+      if (!p_type_is_pointer(type)) {
+        error("indirection requires pointer operand ('%ty' invalid)", type);
+        p_s->error_count++;
+        has_error = true;
+      } else {
+        P_AST_EXPR_GET_TYPE(p_node) = ((PPointerType*)type)->element_type;
+      }
+
+      P_AST_EXPR_GET_VALUE_CATEGORY(p_node) = P_VC_LVALUE;
+      break;
+    default:
+      HEDLEY_UNREACHABLE_RETURN(true);
   }
 
-  p_node->sub_expr = convert_to_rvalue(p_node->sub_expr);
-  P_AST_EXPR_GET_VALUE_CATEGORY(p_node) = P_VC_RVALUE;
   return has_error;
 }
 

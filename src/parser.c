@@ -672,19 +672,32 @@ parse_call_expr(struct PParser* p_parser)
  *     call_expr
  *     "-" unary_expr
  *     "!" unary_expr
+ *     "&" unary_expr
+ *     "*" deref_expr
  */
 static PAst*
 parse_unary_expr(struct PParser* p_parser)
 {
   PAstUnaryOp op;
-  if (LOOKAHEAD_IS(P_TOK_EXCLAIM)) {
-    consume_token(p_parser);
-    op = P_UNARY_NOT;
-  } else if (LOOKAHEAD_IS(P_TOK_MINUS)) {
-    consume_token(p_parser);
-    op = P_UNARY_NEG;
-  } else {
-    return parse_call_expr(p_parser);
+  switch (p_parser->lookahead.kind) {
+    case P_TOK_EXCLAIM:
+      consume_token(p_parser);
+      op = P_UNARY_NOT;
+      break;
+    case P_TOK_MINUS:
+      consume_token(p_parser);
+      op = P_UNARY_NEG;
+      break;
+    case P_TOK_AMP:
+      consume_token(p_parser);
+      op = P_UNARY_ADDRESS_OF;
+      break;
+    case P_TOK_STAR:
+      consume_token(p_parser);
+      op = P_UNARY_DEREF;
+      break;
+    default:
+      return parse_call_expr(p_parser);
   }
 
   PAst* sub_expr = parse_unary_expr(p_parser);
