@@ -1,8 +1,8 @@
 #include "type.h"
 
-#include "utils/hedley.h"
 #include "utils/bump_allocator.h"
 #include "utils/dynamic_array.h"
+#include "utils/hedley.h"
 
 #include <assert.h>
 #include <string.h>
@@ -59,13 +59,14 @@ p_init_types(void)
 bool
 p_type_is_int(PType* p_type)
 {
+  p_type = p_type_get_canonical(p_type);
   return p_type_is_signed(p_type) || p_type_is_unsigned(p_type);
 }
 
 bool
 p_type_is_signed(PType* p_type)
 {
-  assert(p_type != NULL);
+  p_type = p_type_get_canonical(p_type);
   switch (P_TYPE_GET_KIND(p_type)) {
     case P_TYPE_I8:
     case P_TYPE_I16:
@@ -81,7 +82,7 @@ p_type_is_signed(PType* p_type)
 bool
 p_type_is_unsigned(PType* p_type)
 {
-  assert(p_type != NULL);
+  p_type = p_type_get_canonical(p_type);
   switch (P_TYPE_GET_KIND(p_type)) {
     case P_TYPE_U8:
     case P_TYPE_U16:
@@ -97,7 +98,7 @@ p_type_is_unsigned(PType* p_type)
 bool
 p_type_is_float(PType* p_type)
 {
-  assert(p_type != NULL);
+  p_type = p_type_get_canonical(p_type);
   switch (P_TYPE_GET_KIND(p_type)) {
     case P_TYPE_F32:
     case P_TYPE_F64:
@@ -108,9 +109,24 @@ p_type_is_float(PType* p_type)
   }
 }
 
+bool
+p_type_is_arithmetic(PType* p_type)
+{
+  p_type = p_type_get_canonical(p_type);
+  return p_type_is_int(p_type) || p_type_is_float(p_type);
+}
+
+bool
+p_type_is_generic(PType* p_type)
+{
+  p_type = p_type_get_canonical(p_type);
+  return P_TYPE_GET_KIND(p_type) == P_TYPE_GENERIC_INT || P_TYPE_GET_KIND(p_type) == P_TYPE_GENERIC_FLOAT;
+}
+
 int
 p_type_get_bitwidth(PType* p_type)
 {
+  p_type = p_type_get_canonical(p_type);
   switch (P_TYPE_GET_KIND(p_type)) {
     case P_TYPE_BOOL:
       return 1; /* not really stored as 1-bit */
@@ -210,6 +226,17 @@ p_type_get_bool(void)
 }
 
 PType*
+p_type_get_paren(PType* p_sub_type)
+{
+  assert(p_sub_type != NULL);
+
+  PParenType* type = P_BUMP_ALLOC(&p_global_bump_allocator, PParenType);
+  init_type((PType*)type, P_TYPE_PAREN);
+  type->sub_type = p_sub_type;
+  return (PType*)type;
+}
+
+PType*
 p_type_get_function(PType* p_ret_ty, PType** p_args, int p_arg_count)
 {
   assert(p_ret_ty != NULL && (p_arg_count == 0 || p_args != NULL));
@@ -251,4 +278,17 @@ p_type_get_pointer(PType* p_element_ty)
 
   p_dynamic_array_append(&g_pointer_types, ptr_type);
   return (PType*)ptr_type;
+}
+
+PType*
+p_type_get_canonical(PType* p_type)
+{
+  assert(p_type != NULL);
+
+  switch (P_TYPE_GET_KIND(p_type)) {
+    case P_TYPE_PAREN:
+      return p_type_get_canonical(((PParenType*)p_type)->sub_type);
+    default:
+      return p_type;
+  }
 }

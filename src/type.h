@@ -19,6 +19,7 @@ typedef enum PTypeKind
   P_TYPE_F64,
   P_TYPE_GENERIC_FLOAT,
   P_TYPE_BOOL,
+  P_TYPE_PAREN, /** @brief Parenthesized type (e.g. `(i32)`), unlike other types they are not unique. */
   P_TYPE_FUNCTION,
   P_TYPE_POINTER
 } PTypeKind;
@@ -33,6 +34,12 @@ typedef struct PType
 {
   PTypeCommon common;
 } PType;
+
+typedef struct PParenType
+{
+  PTypeCommon common;
+  PType* sub_type;
+} PParenType;
 
 typedef struct PFunctionType
 {
@@ -53,13 +60,11 @@ typedef struct PPointerType
 void
 p_init_types(void);
 
-#define p_type_is_bool(p_type) (P_TYPE_GET_KIND(p_type) == P_TYPE_BOOL)
-#define p_type_is_void(p_type) (P_TYPE_GET_KIND(p_type) == P_TYPE_VOID)
-#define p_type_is_pointer(p_type) (P_TYPE_GET_KIND(p_type) == P_TYPE_POINTER)
-#define p_type_is_arithmetic(p_type) (p_type_is_int(p_type) || p_type_is_float(p_type))
-#define p_type_is_generic_int(p_type) (P_TYPE_GET_KIND(p_type) == P_TYPE_GENERIC_INT)
-#define p_type_is_generic_float(p_type) (P_TYPE_GET_KIND(p_type) == P_TYPE_GENERIC_FLOAT)
-#define p_type_is_generic(p_type) (p_type_is_generic_int(p_type) || p_type_is_generic_float(p_type))
+#define p_type_is_bool(p_type) (P_TYPE_GET_KIND(p_type_get_canonical(p_type)) == P_TYPE_BOOL)
+#define p_type_is_void(p_type) (P_TYPE_GET_KIND(p_type_get_canonical(p_type)) == P_TYPE_VOID)
+#define p_type_is_pointer(p_type) (P_TYPE_GET_KIND(p_type_get_canonical(p_type)) == P_TYPE_POINTER)
+#define p_type_is_generic_int(p_type) (P_TYPE_GET_KIND(p_type_get_canonical(p_type)) == P_TYPE_GENERIC_INT)
+#define p_type_is_generic_float(p_type) (P_TYPE_GET_KIND(p_type_get_canonical(p_type)) == P_TYPE_GENERIC_FLOAT)
 
 bool
 p_type_is_int(PType* p_type);
@@ -69,6 +74,10 @@ bool
 p_type_is_unsigned(PType* p_type);
 bool
 p_type_is_float(PType* p_type);
+bool
+p_type_is_arithmetic(PType* p_type);
+bool
+p_type_is_generic(PType* p_type);
 
 int
 p_type_get_bitwidth(PType* p_type);
@@ -105,7 +114,13 @@ PType*
 p_type_get_bool(void);
 
 PType*
+p_type_get_paren(PType* p_sub_type);
+
+PType*
 p_type_get_function(PType* p_ret_ty, PType** p_args, int p_arg_count);
 
 PType*
 p_type_get_pointer(PType* p_element_ty);
+
+PType*
+p_type_get_canonical(PType* p_type);

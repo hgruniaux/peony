@@ -91,6 +91,9 @@ convert_to_rvalue(PAst* p_node)
 static bool
 are_types_compatible(PType* p_from, PType* p_to)
 {
+  p_from = p_type_get_canonical(p_from);
+  p_to = p_type_get_canonical(p_to);
+
   if (p_from == p_to)
     return true;
 

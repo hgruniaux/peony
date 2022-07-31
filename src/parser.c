@@ -104,6 +104,7 @@ parse_stmt(struct PParser* p_parser);
  *     f64
  *     bool
  *     "*" type
+ *     "(" type ")"
  */
 static PType*
 parse_type(struct PParser* p_parser)
@@ -111,6 +112,11 @@ parse_type(struct PParser* p_parser)
   if (LOOKAHEAD_IS(P_TOK_STAR)) {
     consume_token(p_parser);
     return p_type_get_pointer(parse_type(p_parser));
+  } else if (LOOKAHEAD_IS(P_TOK_LPAREN)) {
+    consume_token(p_parser);
+    PType* sub_type = parse_type(p_parser);
+    expect_token(p_parser, P_TOK_RPAREN);
+    return p_type_get_paren(sub_type);
   }
 
   PType* type;

@@ -84,6 +84,9 @@ print_type(PType* p_type)
     PPointerType* ptr_type = (PPointerType*)p_type;
     fputs("*", stderr);
     print_type(ptr_type->element_type);
+  } else if (P_TYPE_GET_KIND(p_type) == P_TYPE_PAREN) {
+    PParenType* paren_type = (PParenType*)p_type;
+    print_type(paren_type->sub_type);
   } else {
     fputs(builtin_types[(int)P_TYPE_GET_KIND(p_type)], stderr);
   }

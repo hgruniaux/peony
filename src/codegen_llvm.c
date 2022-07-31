@@ -14,6 +14,8 @@ cg_to_llvm_type(PType* p_type)
 {
   assert(p_type != NULL);
 
+  p_type = p_type_get_canonical(p_type);
+
   if (p_type->common._llvm_cached_type != NULL)
     return p_type->common._llvm_cached_type;
 
