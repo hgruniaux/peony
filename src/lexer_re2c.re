@@ -67,6 +67,7 @@ p_lex(struct PLexer* p_lexer, struct PToken* p_token)
             ","   { p_token->kind = P_TOK_COMMA; break; }
             ":"   { p_token->kind = P_TOK_COLON; break; }
             ";"   { p_token->kind = P_TOK_SEMI; break; }
+            "->"  { p_token->kind = P_TOK_ARROW; break; }
             "="   { p_token->kind = P_TOK_EQUAL; break; }
             "=="  { p_token->kind = P_TOK_EQUAL_EQUAL; break; }
             "<"   { p_token->kind = P_TOK_LESS; break; }

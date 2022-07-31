@@ -215,8 +215,12 @@ parse_compound_stmt(struct PParser* p_parser)
 
 /*
  * func_decl:
- *     "fn" identifier "(" param_list ")" type_specifier ";"
- *     "fn" identifier "(" param_list ")" type_specifier compound_stmt
+ *     "fn" identifier "(" param_list ")" func_type_specifier ";"
+ *     "fn" identifier "(" param_list ")" func_type_specifier compound_stmt
+ *
+ * func_type_specifier:
+ *     ""
+ *     "->" type
  *
  * param_list:
  *     param
@@ -270,7 +274,7 @@ parse_func_decl(struct PParser* p_parser)
   expect_token(p_parser, P_TOK_RPAREN);
 
   PType* return_type = NULL;
-  if (LOOKAHEAD_IS(P_TOK_COLON)) {
+  if (LOOKAHEAD_IS(P_TOK_ARROW)) {
     consume_token(p_parser);
     return_type = parse_type(p_parser);
   }
