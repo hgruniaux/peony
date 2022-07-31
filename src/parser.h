@@ -26,5 +26,5 @@ p_parser_init(struct PParser* p_parser);
 void
 p_parser_destroy(struct PParser* p_parser);
 
-struct PAst*
+PAst*
 p_parse(struct PParser* p_parser);

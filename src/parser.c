@@ -1,9 +1,9 @@
 #include "parser.h"
 #include "scope.h"
 
+#include "utils/bump_allocator.h"
 #include "utils/diag.h"
 #include "utils/dynamic_array.h"
-#include "utils/bump_allocator.h"
 
 #include <assert.h>
 #include <stdarg.h>
@@ -11,36 +11,6 @@
 #include <string.h>
 
 #define LOOKAHEAD_IS(p_kind) ((p_parser)->lookahead.kind == (p_kind))
-
-static PAst*
-create_node_impl(struct PParser* p_parser, size_t p_size, PAstKind p_kind)
-{
-  PAst* node = p_bump_alloc(&p_global_bump_allocator, p_size, P_ALIGNOF(PAst));
-  assert(node != NULL);
-  P_AST_GET_KIND(node) = p_kind;
-  return node;
-}
-
-#define CREATE_NODE(p_type, p_kind) ((p_type*)create_node_impl(p_parser, sizeof(p_type), (p_kind)))
-#define CREATE_NODE_EXTRA_SIZE(p_type, p_extra_size, p_kind)                                                           \
-  ((p_type*)create_node_impl(p_parser, sizeof(p_type) + (p_extra_size), (p_kind)))
-
-static PDecl*
-create_decl_impl(struct PParser* p_parser, size_t p_size, PDeclKind p_kind)
-{
-  PDecl* decl = p_bump_alloc(&p_global_bump_allocator, p_size, P_ALIGNOF(PDecl));
-  assert(decl != NULL);
-  decl->common.kind = p_kind;
-  decl->common.name = NULL;
-  decl->common.type = NULL;
-  decl->common._llvm_address = NULL;
-  decl->common.used = false;
-  return decl;
-}
-
-#define CREATE_DECL(p_type, p_kind) ((p_type*)create_decl_impl(p_parser, sizeof(p_type), (p_kind)))
-#define CREATE_DECL_EXTRA_SIZE(p_type, p_extra_size, p_kind)                                                           \
-  ((p_type*)create_decl_impl(p_parser, sizeof(p_type) + (p_extra_size), (p_kind)))
 
 static void
 consume_token(struct PParser* p_parser)
@@ -340,12 +310,12 @@ parse_let_stmt(struct PParser* p_parser)
 
   if (type == NULL) {
     if (init_expr != NULL)
-      type = P_AST_GET_TYPE(init_expr);
+      type = P_AST_EXPR_GET_TYPE(init_expr);
     else
       type = p_type_get_undef();
   }
 
-  if (init_expr != NULL && type != P_AST_GET_TYPE(init_expr)) {
+  if (init_expr != NULL && type != P_AST_EXPR_GET_TYPE(init_expr)) {
     error("initialization expression and variable do not have the same type");
   }
 
@@ -548,8 +518,9 @@ parse_bool_literal(struct PParser* p_parser)
   consume_token(p_parser);
 
   PAstBoolLiteral* node = CREATE_NODE(PAstBoolLiteral, P_AST_NODE_BOOL_LITERAL);
-  P_AST_GET_TYPE(node) = p_type_get_bool();
+  P_AST_EXPR_GET_TYPE(node) = p_type_get_bool();
   node->value = value;
+  sema_check_bool_literal(&p_parser->sema, node);
   return (PAst*)node;
 }
 
@@ -570,7 +541,7 @@ parse_int_literal(struct PParser* p_parser)
   consume_token(p_parser);
 
   PAstIntLiteral* node = CREATE_NODE(PAstIntLiteral, P_AST_NODE_INT_LITERAL);
-  P_AST_GET_TYPE(node) = p_type_get_i32();
+  P_AST_EXPR_GET_TYPE(node) = p_type_get_i32();
   node->value = value;
   sema_check_int_literal(&p_parser->sema, node);
   return (PAst*)node;
@@ -586,8 +557,9 @@ parse_float_literal(struct PParser* p_parser)
   consume_token(p_parser);
 
   PAstFloatLiteral* node = CREATE_NODE(PAstFloatLiteral, P_AST_NODE_FLOAT_LITERAL);
-  P_AST_GET_TYPE(node) = p_type_get_f32();
+  P_AST_EXPR_GET_TYPE(node) = p_type_get_f32();
   // TODO: parse value of float literal
+  sema_check_float_literal(&p_parser->sema, node);
   return (PAst*)node;
 }
 
@@ -603,110 +575,25 @@ parse_paren_expr(struct PParser* p_parser)
 
   PAstParenExpr* node = CREATE_NODE(PAstParenExpr, P_AST_NODE_PAREN_EXPR);
   node->sub_expr = parse_expr(p_parser);
-  P_AST_GET_TYPE(node) = P_AST_GET_TYPE(node->sub_expr);
-
+  sema_check_paren_expr(&p_parser->sema, node);
   expect_token(p_parser, P_TOK_RPAREN);
   return (PAst*)node;
 }
 
 /*
- * primary_expr:
- *     identifier "(" arg_list ")"
+ * decl_ref_expr:
  *     identifier
- *
- * arg_list:
- *     expr
- *     arg_list "," expr
  */
 static PAst*
-parse_var_ref_or_call_expr(struct PParser* p_parser)
+parse_decl_ref_expr(struct PParser* p_parser)
 {
   assert(p_parser->lookahead.kind == P_TOK_IDENTIFIER);
 
   PIdentifierInfo* name = p_parser->lookahead.data.identifier_info;
   consume_token(p_parser);
-
-  PSymbol* symbol = sema_lookup(&p_parser->sema, name);
-  PDecl* decl = NULL;
-  if (symbol != NULL)
-    decl = symbol->decl;
-
-  if (LOOKAHEAD_IS(P_TOK_LPAREN)) {
-    /* Is a function call expr. */
-    consume_token(p_parser); /* consume '(' */
-
-    if (symbol == NULL) {
-      error("use of undeclared function '%i'");
-    } else if (P_DECL_GET_KIND(decl) != P_DECL_FUNCTION) {
-      error("'%i' is not a function");
-    }
-
-    if (decl != NULL)
-      decl->common.used = true;
-
-    /* Parse arguments: */
-    PDynamicArray args;
-    p_dynamic_array_init(&args);
-
-    int param_count = decl != NULL ? ((PFunctionType*)P_DECL_GET_TYPE(decl))->arg_count : 0;
-    PType** param_types = decl != NULL ? ((PFunctionType*)P_DECL_GET_TYPE(decl))->args : NULL;
-
-    int i = 0;
-    while (!LOOKAHEAD_IS(P_TOK_RPAREN)) {
-      PAst* arg = parse_expr(p_parser);
-      p_dynamic_array_append(&args, arg);
-
-      if (i < param_count && P_AST_GET_TYPE(arg) != param_types[i]) {
-        error("%d-th argument of '%i' expected to be of type '%ty' but is of "
-              "type '%ty'",
-              i,
-              name,
-              param_types[i],
-              P_AST_GET_TYPE(arg));
-      }
-
-      ++i;
-
-      if (!LOOKAHEAD_IS(P_TOK_COMMA))
-        break;
-
-      consume_token(p_parser); /* consume ',' */
-    }
-
-    if (param_count != args.size) {
-      error("function '%i' expects %d arguments but %d were provided", name, param_count, (int)args.size);
-    }
-
-    expect_token(p_parser, P_TOK_RPAREN);
-
-    PAstCallExpr* node = CREATE_NODE_EXTRA_SIZE(PAstCallExpr, sizeof(PAst*) * (args.size - 1), P_AST_NODE_CALL_EXPR);
-    P_AST_GET_TYPE(node) = ((PFunctionType*)P_DECL_GET_TYPE(decl))->ret_type;
-    node->func = decl;
-    node->arg_count = args.size;
-    memcpy(node->args, args.buffer, sizeof(PAst*) * args.size);
-    p_dynamic_array_destroy(&args);
-    return (PAst*)node;
-  } else {
-    /* Is a var ref expr. */
-
-    if (symbol == NULL) {
-      error("use of undeclared variable '%i'", name);
-    } else if (P_DECL_GET_KIND(symbol->decl) != P_DECL_VAR && P_DECL_GET_KIND(symbol->decl) != P_DECL_PARAM) {
-      error("'%i' is not a variable", name);
-    }
-
-    PAstDeclRefExpr* node = CREATE_NODE(PAstDeclRefExpr, P_AST_NODE_DECL_REF_EXPR);
-    node->decl = decl;
-
-    if (decl == NULL) {
-      P_AST_GET_TYPE(node) = NULL;
-    } else {
-      P_AST_GET_TYPE(node) = P_DECL_GET_TYPE(decl);
-      decl->common.used = true;
-    }
-
-    return (PAst*)node;
-  }
+  PAstDeclRefExpr* node = CREATE_NODE(PAstDeclRefExpr, P_AST_NODE_DECL_REF_EXPR);
+  sema_check_decl_ref_expr(&p_parser->sema, node, name);
+  return (PAst*)node;
 }
 
 /*
@@ -715,8 +602,7 @@ parse_var_ref_or_call_expr(struct PParser* p_parser)
  *     int_literal
  *     float_literal
  *     paren_expr
- *     identifier "(" arg_list ")"
- *     identifier
+ *     decl_ref_expr
  */
 static PAst*
 parse_primary_expr(struct PParser* p_parser)
@@ -732,7 +618,7 @@ parse_primary_expr(struct PParser* p_parser)
     case P_TOK_LPAREN:
       return parse_paren_expr(p_parser);
     case P_TOK_IDENTIFIER:
-      return parse_var_ref_or_call_expr(p_parser);
+      return parse_decl_ref_expr(p_parser);
     default:
       unexpected_token(p_parser);
       return NULL;
@@ -740,8 +626,50 @@ parse_primary_expr(struct PParser* p_parser)
 }
 
 /*
- * unary_expr:
+ * call_expr:
  *     primary_expr
+ *     primary_expr "(" arg_list ")"
+ *
+ * arg_list:
+ *     expr
+ *     arg_list "," expr
+ */
+static PAst*
+parse_call_expr(struct PParser* p_parser)
+{
+  PAst* callee = parse_primary_expr(p_parser);
+  if (!LOOKAHEAD_IS(P_TOK_LPAREN))
+    return callee;
+
+  consume_token(p_parser); /* consume '(' */
+
+  /* Parse arguments: */
+  PDynamicArray args;
+  p_dynamic_array_init(&args);
+
+  while (!LOOKAHEAD_IS(P_TOK_RPAREN)) {
+    PAst* arg = parse_expr(p_parser);
+    p_dynamic_array_append(&args, arg);
+
+    if (!LOOKAHEAD_IS(P_TOK_COMMA))
+      break;
+    consume_token(p_parser); /* consume ',' */
+  }
+
+  expect_token(p_parser, P_TOK_RPAREN);
+
+  PAstCallExpr* node = CREATE_NODE_EXTRA_SIZE(PAstCallExpr, sizeof(PAst*) * (args.size - 1), P_AST_NODE_CALL_EXPR);
+  node->callee = callee;
+  node->arg_count = args.size;
+  memcpy(node->args, args.buffer, sizeof(PAst*) * args.size);
+  p_dynamic_array_destroy(&args);
+  sema_check_call_expr(&p_parser->sema, node);
+  return (PAst*)node;
+}
+
+/*
+ * unary_expr:
+ *     call_expr
  *     "-" unary_expr
  *     "!" unary_expr
  */
@@ -756,7 +684,7 @@ parse_unary_expr(struct PParser* p_parser)
     consume_token(p_parser);
     op = P_UNARY_NEG;
   } else {
-    return parse_primary_expr(p_parser);
+    return parse_call_expr(p_parser);
   }
 
   PAst* sub_expr = parse_unary_expr(p_parser);
@@ -783,7 +711,7 @@ parse_cast_expr(struct PParser* p_parser)
 
     PAstCastExpr* node = CREATE_NODE(PAstCastExpr, P_AST_NODE_CAST_EXPR);
     node->sub_expr = sub_expr;
-    P_AST_GET_TYPE(node) = type;
+    P_AST_EXPR_GET_TYPE(node) = type;
     sema_check_cast_expr(&p_parser->sema, node);
     return (PAst*)node;
   }

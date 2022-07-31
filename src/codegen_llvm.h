@@ -9,7 +9,6 @@ struct PCodegenLLVM
   LLVMModuleRef module;
   LLVMBuilderRef builder;
   LLVMValueRef current_function;
-  bool is_in_lhs;
 };
 
 void
