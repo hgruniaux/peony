@@ -10,10 +10,6 @@ struct PLexer
 
   unsigned int b_keep_comments;
 
-  /* Rudimentary location tracking: */
-  const char* filename;
-  unsigned int lineno;
-
   /* For re2c: */
   const char* cursor;
 };

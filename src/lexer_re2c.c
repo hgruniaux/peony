@@ -141,7 +141,6 @@ yy5:
 yy6:
     ++p_lexer->cursor;
     {
-                ++p_lexer->lineno;
                 ++CURRENT_LINENO;
                 continue;
             }
@@ -172,6 +171,8 @@ yy11:
                 if (!p_lexer->b_keep_comments)
                     continue;
 
+                p_token->data.literal_begin = tok_begin + 1;
+                p_token->data.literal_end = p_lexer->cursor;
                 p_token->kind = P_TOK_COMMENT;
                 break;
             }

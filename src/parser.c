@@ -12,10 +12,53 @@
 
 #define LOOKAHEAD_IS(p_kind) ((p_parser)->lookahead.kind == (p_kind))
 
+static const char*
+trim_whitespace_left(const char* p_it)
+{
+  while (*p_it == ' ' || *p_it == '\t')
+    ++p_it;
+
+  return p_it;
+}
+
+static const char*
+trim_whitespace_right(const char* p_it)
+{
+  while (p_it[-1] == ' ' || p_it[-1] == '\t')
+    --p_it;
+
+  return p_it;
+}
+
 static void
 consume_token(struct PParser* p_parser)
 {
   p_lex(p_parser->lexer, &p_parser->lookahead);
+
+  if (LOOKAHEAD_IS(P_TOK_COMMENT) && g_verify_mode_enabled) {
+    const char* it = p_parser->lookahead.data.literal_begin;
+    while (*it == ' ' || *it == '\t')
+      ++it;
+
+    const char* expect_error_marker = "EXPECT-ERROR:";
+    const char* expect_warning_marker = "EXPECT-WARNING:";
+
+    if (memcmp(it, expect_error_marker, strlen(expect_error_marker)) == 0) {
+      it += strlen(expect_error_marker);
+      it = trim_whitespace_left(it);
+      const char* end = p_parser->lookahead.data.literal_end;
+      end = trim_whitespace_right(end);
+      verify_expect_error(it, end);
+    } else if (memcmp(it, expect_warning_marker, strlen(expect_warning_marker)) == 0) {
+      it += strlen(expect_warning_marker);
+      it = trim_whitespace_left(it);
+      const char* end = p_parser->lookahead.data.literal_end;
+      end = trim_whitespace_right(end);
+      verify_expect_warning(it, end);
+    }
+
+    consume_token(p_parser);
+  }
 }
 
 static bool

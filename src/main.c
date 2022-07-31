@@ -5,6 +5,7 @@
 
 #include <assert.h>
 #include <stdio.h>
+#include <string.h>
 
 void
 parse(const char* p_input)
@@ -63,10 +64,16 @@ read_file(const char* p_filename)
 int
 main(int p_argc, char* p_argv[])
 {
-  if (p_argc != 2) {
+  if (p_argc < 2) {
     printf("USAGE:\n");
     printf("    %s filename\n", p_argv[0]);
     return EXIT_FAILURE;
+  }
+
+  for (int i = 1; i < p_argc; ++i) {
+    if (strcmp(p_argv[i], "-verify") == 0) {
+      g_verify_mode_enabled = true;
+    }
   }
 
   const char* code = read_file(p_argv[1]);
@@ -77,6 +84,9 @@ main(int p_argc, char* p_argv[])
   p_init_types();
 
   parse(code);
+
+  if (g_verify_mode_enabled)
+    verify_finalize();
 
   free(code);
   p_bump_destroy(&p_global_bump_allocator);
