@@ -612,7 +612,7 @@ cg_cast_expr(struct PCodegenLLVM* p_cg, PAstCastExpr* p_node)
       }
     }
     case P_CAST_FLOAT2INT:
-      if (p_type_is_unsigned(target_ty))
+      if (p_type_is_unsigned(P_AST_GET_TYPE(p_node)))
         return LLVMBuildFPToUI(p_cg->builder, sub_expr, target_ty, "");
       else
         return LLVMBuildFPToSI(p_cg->builder, sub_expr, target_ty, "");
