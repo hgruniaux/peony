@@ -37,6 +37,7 @@ cg_to_llvm_type(PType* p_type)
       break;
     case P_TYPE_I32:
     case P_TYPE_U32:
+    case P_TYPE_CHAR:
       type = LLVMInt32Type();
       break;
     case P_TYPE_I64:

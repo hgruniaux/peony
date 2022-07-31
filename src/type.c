@@ -9,6 +9,7 @@
 
 PType g_type_undef;
 PType g_type_void;
+PType g_type_char;
 PType g_type_i8;
 PType g_type_i16;
 PType g_type_i32;
@@ -38,6 +39,7 @@ p_init_types(void)
 {
   init_type(&g_type_undef, P_TYPE_UNDEF);
   init_type(&g_type_void, P_TYPE_VOID);
+  init_type(&g_type_char, P_TYPE_CHAR);
   init_type(&g_type_i8, P_TYPE_I8);
   init_type(&g_type_i16, P_TYPE_I16);
   init_type(&g_type_i32, P_TYPE_I32);
@@ -136,6 +138,7 @@ p_type_get_bitwidth(PType* p_type)
     case P_TYPE_I16:
     case P_TYPE_U16:
       return 16;
+    case P_TYPE_CHAR:
     case P_TYPE_I32:
     case P_TYPE_U32:
     case P_TYPE_F32:
@@ -158,6 +161,11 @@ PType*
 p_type_get_void()
 {
   return &g_type_void;
+}
+PType*
+p_type_get_char(void)
+{
+  return &g_type_char;
 }
 PType*
 p_type_get_i8(void)

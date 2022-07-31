@@ -6,6 +6,7 @@ typedef enum PTypeKind
 {
   P_TYPE_VOID,
   P_TYPE_UNDEF,
+  P_TYPE_CHAR, /** @brief Unicode scalar value. */
   P_TYPE_I8,
   P_TYPE_I16,
   P_TYPE_I32,
@@ -62,6 +63,7 @@ p_init_types(void);
 
 #define p_type_is_bool(p_type) (P_TYPE_GET_KIND(p_type_get_canonical(p_type)) == P_TYPE_BOOL)
 #define p_type_is_void(p_type) (P_TYPE_GET_KIND(p_type_get_canonical(p_type)) == P_TYPE_VOID)
+#define p_type_is_char(p_type) (P_TYPE_GET_KIND(p_type_get_canonical(p_type)) == P_TYPE_CHAR)
 #define p_type_is_pointer(p_type) (P_TYPE_GET_KIND(p_type_get_canonical(p_type)) == P_TYPE_POINTER)
 #define p_type_is_generic_int(p_type) (P_TYPE_GET_KIND(p_type_get_canonical(p_type)) == P_TYPE_GENERIC_INT)
 #define p_type_is_generic_float(p_type) (P_TYPE_GET_KIND(p_type_get_canonical(p_type)) == P_TYPE_GENERIC_FLOAT)
@@ -86,6 +88,8 @@ PType*
 p_type_get_undef(void);
 PType*
 p_type_get_void(void);
+PType*
+p_type_get_char(void);
 PType*
 p_type_get_i8(void);
 PType*

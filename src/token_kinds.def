@@ -63,6 +63,7 @@ PUNCTUACTOR(AMP_EQUAL, "|=")
 /* Keywords: */
 KEYWORD(void)
 KEYWORD(bool)
+KEYWORD(char)
 KEYWORD(i8)
 KEYWORD(i16)
 KEYWORD(i32)

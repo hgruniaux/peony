@@ -109,10 +109,11 @@ are_types_compatible(PType* p_from, PType* p_to)
 static void
 resolve_generic_type(PAst* p_node, PType* p_hint)
 {
-  assert(p_type_is_generic(P_AST_EXPR_GET_TYPE(p_node)));
+  PType* canonical_type = p_type_get_canonical(P_AST_EXPR_GET_TYPE(p_node));
+  assert(p_type_is_generic(canonical_type));
 
   if (p_hint == NULL) {
-    if (p_type_is_generic_int(P_AST_EXPR_GET_TYPE(p_node)))
+    if (p_type_is_generic_int(canonical_type))
       p_hint = p_type_get_i32();
     else
       p_hint = p_type_get_f32();
@@ -611,7 +612,7 @@ sema_check_call_expr(PSema* p_s, PAstCallExpr* p_node)
         error("expected '%ty', found '%ty'", func_type->args[i], P_AST_EXPR_GET_TYPE(p_node->args[i]));
         p_s->error_count++;
         has_error = true;
-      } else if (p_type_is_generic(p_node->args[i])) {
+      } else if (p_type_is_generic(P_AST_EXPR_GET_TYPE(p_node->args[i]))) {
         resolve_generic_type(p_node->args[i], func_type->args[i]);
       }
     }

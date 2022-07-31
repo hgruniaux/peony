@@ -92,6 +92,7 @@ parse_stmt(struct PParser* p_parser);
 
 /*
  * type:
+ *     char
  *     i8
  *     i16
  *     i32
@@ -121,6 +122,9 @@ parse_type(struct PParser* p_parser)
 
   PType* type;
   switch (p_parser->lookahead.kind) {
+    case P_TOK_KEY_char:
+      type = p_type_get_char();
+      break;
     case P_TOK_KEY_i8:
       type = p_type_get_i8();
       break;
