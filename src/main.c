@@ -1,36 +1,14 @@
 #include "codegen_llvm.h"
 #include "parser.h"
 #include "utils/bump_allocator.h"
+#include "utils/diag.h"
 
+#include <assert.h>
 #include <stdio.h>
-
-void
-lex(const char* p_input)
-{
-  struct PIdentifierTable identifier_table;
-  p_identifier_table_init(&identifier_table);
-
-  struct PLexer lexer;
-  lexer.identifier_table = &identifier_table;
-  lexer.input = p_input;
-  p_lexer_init(&lexer);
-
-  struct PToken token;
-  do {
-    p_lex(&lexer, &token);
-    p_token_dump(&token);
-  } while (token.kind != P_TOK_EOF);
-
-  p_lexer_destroy(&lexer);
-  p_identifier_table_destroy(&identifier_table);
-}
 
 void
 parse(const char* p_input)
 {
-  struct PBumpAllocator allocator;
-  p_bump_init(&allocator);
-
   struct PIdentifierTable identifier_table;
   p_identifier_table_init(&identifier_table);
 
@@ -60,31 +38,50 @@ parse(const char* p_input)
 
   p_lexer_destroy(&lexer);
   p_identifier_table_destroy(&identifier_table);
-  p_bump_destroy(&allocator);
+}
+
+static const char*
+read_file(const char* p_filename)
+{
+  FILE* file = fopen(p_filename, "rb");
+  if (file == NULL) {
+    error("failed to open file '%s'", p_filename);
+    return NULL;
+  }
+
+  fseek(file, 0, SEEK_END);
+  long bufsize = ftell(file);
+  fseek(file, 0, SEEK_SET);
+
+  char* buffer = malloc(sizeof(char) * (bufsize + 1 /* NUL-terminated */));
+  assert(buffer != NULL);
+
+  fread(buffer, sizeof(char), bufsize, file);
+  buffer[bufsize] = '\0';
+
+  fclose(file);
+  return buffer;
 }
 
 int
-main()
+main(int p_argc, char* p_argv[])
 {
+  if (p_argc != 2) {
+    printf("USAGE:\n");
+    printf("    %s filename\n", p_argv[0]);
+    return EXIT_FAILURE;
+  }
+
+  const char* code = read_file(p_argv[1]);
+  if (code == NULL)
+    return EXIT_FAILURE;
+
   p_bump_init(&p_global_bump_allocator);
   p_init_types();
 
-  const char* code = "fn main() -> u32 {\n    return 1 as u32;\n}";
-
-  unsigned int lineno = 1;
-  printf("%4d | ", lineno);
-  for (const char* it = code; *it != '\0'; ++it) {
-    if (*it == '\n') {
-      lineno += 1;
-      printf("\n%4d | ", lineno);
-      continue;
-    }
-
-    putchar(*it);
-  }
-  puts("\n");
-
   parse(code);
 
+  free(code);
   p_bump_destroy(&p_global_bump_allocator);
+  return EXIT_SUCCESS;
 }
