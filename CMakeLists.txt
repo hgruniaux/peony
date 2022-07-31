@@ -25,6 +25,8 @@ add_executable(peony
 
 if(MSCV)
     target_compile_options(peony /W4 /WX)
+elif(CLANG)
+    target_compile_options(peony -Wall)
 endif()
 
 find_program(RE2C_PROGRAM re2c)
