@@ -506,6 +506,14 @@ sema_check_binary_expr(PSema* p_s, PAstBinaryExpr* p_node)
 
   bool has_error = false;
 
+  /* Resolve generic types. */
+  if (p_type_is_generic(P_AST_EXPR_GET_TYPE(p_node->lhs)) && !p_type_is_generic(P_AST_EXPR_GET_TYPE(p_node->rhs))) {
+    resolve_generic_type(p_node->lhs, P_AST_EXPR_GET_TYPE(p_node->rhs));
+  } else if (!p_type_is_generic(P_AST_EXPR_GET_TYPE(p_node->lhs)) &&
+             p_type_is_generic(P_AST_EXPR_GET_TYPE(p_node->rhs))) {
+    resolve_generic_type(p_node->rhs, P_AST_EXPR_GET_TYPE(p_node->lhs));
+  }
+
   switch (p_node->opcode) {
     case P_BINARY_LOG_AND:
     case P_BINARY_LOG_OR:
@@ -563,14 +571,6 @@ sema_check_binary_expr(PSema* p_s, PAstBinaryExpr* p_node)
         error("expected arithmetic type (either integer or float), found '%ty'", P_AST_EXPR_GET_TYPE(p_node->lhs));
         has_error = true;
         p_s->error_count++;
-      }
-
-      /* Resolve generic types. */
-      if (p_type_is_generic(P_AST_EXPR_GET_TYPE(p_node->lhs)) && !p_type_is_generic(P_AST_EXPR_GET_TYPE(p_node->rhs))) {
-        resolve_generic_type(p_node->lhs, P_AST_EXPR_GET_TYPE(p_node->rhs));
-      } else if (!p_type_is_generic(P_AST_EXPR_GET_TYPE(p_node->lhs)) &&
-                 p_type_is_generic(P_AST_EXPR_GET_TYPE(p_node->rhs))) {
-        resolve_generic_type(p_node->rhs, P_AST_EXPR_GET_TYPE(p_node->lhs));
       }
 
       P_AST_EXPR_GET_TYPE(p_node) = P_AST_EXPR_GET_TYPE(p_node->lhs);
