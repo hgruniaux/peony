@@ -66,6 +66,15 @@ typedef struct PPointerType
 void
 p_init_types(void);
 
+/** @brief Checks if the type is already a canonical type. */
+HEDLEY_ALWAYS_INLINE static bool
+p_type_is_canonical(PType* p_type)
+{
+  return p_type == p_type->common.canonical_type;
+}
+/** @brief Gets the canonical type of the given type.
+ *
+ * Canonical types are cached so this function is just a pointer access. */
 HEDLEY_ALWAYS_INLINE static PType*
 p_type_get_canonical(PType* p_type)
 {

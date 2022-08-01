@@ -2,6 +2,10 @@
 
 #include <stddef.h>
 
+#include "hedley.h"
+
+HEDLEY_BEGIN_C_DECLS
+
 /*
  * This file implements a generic dynamic array that stores
  * pointers.
@@ -22,3 +26,5 @@ void
 p_dynamic_array_destroy(PDynamicArray* p_array);
 void
 p_dynamic_array_append(PDynamicArray* p_array, PDynamicArrayItem p_item);
+
+HEDLEY_END_C_DECLS

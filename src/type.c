@@ -5,6 +5,7 @@
 #include "utils/hedley.h"
 
 #include <assert.h>
+#include <stdlib.h>
 #include <string.h>
 
 PType g_type_undef;
@@ -242,7 +243,7 @@ p_type_get_paren(PType* p_sub_type)
   PParenType* type = P_BUMP_ALLOC(&p_global_bump_allocator, PParenType);
   init_type((PType*)type, P_TYPE_PAREN);
   type->sub_type = p_sub_type;
-  type->common.canonical_type = p_sub_type;
+  type->common.canonical_type = p_type_get_canonical(p_sub_type);
   return (PType*)type;
 }
 
@@ -251,7 +252,7 @@ p_type_get_function(PType* p_ret_ty, PType** p_args, int p_arg_count)
 {
   assert(p_ret_ty != NULL && (p_arg_count == 0 || p_args != NULL));
 
-  /* If the type already exists returns it (each type is unique). */
+  /* If the type already exists returns it (one unique instance per type). */
   for (int i = 0; i < g_func_types.size; ++i) {
     PFunctionType* func_type = g_func_types.buffer[i];
     if (func_type->ret_type == p_ret_ty && func_type->arg_count == p_arg_count &&
@@ -266,6 +267,32 @@ p_type_get_function(PType* p_ret_ty, PType** p_args, int p_arg_count)
   func_type->arg_count = p_arg_count;
   memcpy(func_type->args, p_args, sizeof(PType*) * p_arg_count);
 
+  // Verify if this function type is canonical (that is if its return type and
+  // its arguments are all canonicals).
+  bool is_canonical = p_type_is_canonical(p_ret_ty);
+  if (is_canonical) {
+    for (int i = 0; i < p_arg_count; ++i) {
+      if (!p_type_is_canonical(p_args[i])) {
+        is_canonical = false;
+        break;
+      }
+    }
+  }
+
+  // If not canonical then compute its canonical type.
+  if (!is_canonical) {
+    PType** canonical_args = malloc(sizeof(PType*) * p_arg_count);
+    assert(canonical_args != NULL);
+
+    for (int i = 0; i < p_arg_count; ++i) {
+      canonical_args[i] = p_type_get_canonical(p_args[i]);
+    }
+
+    func_type->common.canonical_type = p_type_get_function(p_type_get_canonical(p_ret_ty), canonical_args, p_arg_count);
+
+    free(canonical_args);
+  }
+
   p_dynamic_array_append(&g_func_types, func_type);
   return (PType*)func_type;
 }
@@ -275,7 +302,7 @@ p_type_get_pointer(PType* p_element_ty)
 {
   assert(p_element_ty != NULL);
 
-  /* If the type already exists returns it (each type is unique). */
+  /* If the type already exists returns it (one unique instance per type). */
   for (int i = 0; i < g_pointer_types.size; ++i) {
     PPointerType* ptr_type = g_pointer_types.buffer[i];
     if (ptr_type->element_type == p_element_ty)
