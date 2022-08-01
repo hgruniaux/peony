@@ -79,7 +79,6 @@ convert_to_rvalue(PAst* p_node)
 
   PAstLValueToRValueExpr* node = CREATE_NODE(PAstLValueToRValueExpr, P_AST_NODE_LVALUE_TO_RVALUE_EXPR);
   node->sub_expr = p_node;
-  P_AST_EXPR_GET_TYPE(node) = P_AST_EXPR_GET_TYPE(p_node);
   P_AST_EXPR_GET_VALUE_CATEGORY(node) = P_VC_RVALUE;
   return (PAst*)node;
 }
@@ -103,36 +102,6 @@ are_types_compatible(PType* p_from, PType* p_to)
     return true;
 
   return false;
-}
-
-static void
-resolve_generic_type(PAst* p_node, PType* p_hint)
-{
-  PType* canonical_type = p_type_get_canonical(P_AST_EXPR_GET_TYPE(p_node));
-  assert(p_type_is_generic(canonical_type));
-
-  if (p_hint == NULL) {
-    if (p_type_is_generic_int(canonical_type))
-      p_hint = p_type_get_i32();
-    else
-      p_hint = p_type_get_f32();
-  }
-
-  P_AST_EXPR_GET_TYPE(p_node) = p_hint;
-
-  switch (P_AST_GET_KIND(p_node)) {
-    case P_AST_NODE_PAREN_EXPR:
-      resolve_generic_type(((PAstParenExpr*)p_node)->sub_expr, p_hint);
-      break;
-    case P_AST_NODE_UNARY_EXPR:
-      resolve_generic_type(((PAstUnaryExpr*)p_node)->sub_expr, p_hint);
-      break;
-    case P_AST_NODE_CAST_EXPR:
-      resolve_generic_type(((PAstCastExpr*)p_node)->sub_expr, p_hint);
-      break;
-    default:
-      break;
-  }
 }
 
 bool
@@ -204,8 +173,8 @@ sema_check_param_decl(PSema* p_s, PDeclParam* p_node)
 
   bool has_error = false;
 
-  if (p_node->default_expr != NULL && P_AST_EXPR_GET_TYPE(p_node->default_expr) != P_DECL_GET_TYPE(p_node)) {
-    error("expected '%ty', found '%ty'", P_DECL_GET_TYPE(p_node), P_AST_EXPR_GET_TYPE(p_node->default_expr));
+  if (p_node->default_expr != NULL && p_ast_get_type(p_node->default_expr) != P_DECL_GET_TYPE(p_node)) {
+    error("expected '%ty', found '%ty'", P_DECL_GET_TYPE(p_node), p_ast_get_type(p_node->default_expr));
     has_error = true;
     p_s->error_count++;
   }
@@ -276,20 +245,17 @@ sema_check_return_stmt(PSema* p_s, PAstReturnStmt* p_node)
   bool has_error = false;
 
   if (p_node->ret_expr != NULL) {
-    if (!are_types_compatible(P_AST_EXPR_GET_TYPE(p_node->ret_expr), p_s->curr_func_type->ret_type)) {
-      error("expected '%ty', found '%ty'", p_s->curr_func_type->ret_type, P_AST_EXPR_GET_TYPE(p_node->ret_expr));
+    PType* ret_type = p_ast_get_type(p_node->ret_expr);
+    if (!are_types_compatible(ret_type, p_s->curr_func_type->ret_type)) {
+      error("expected '%ty', found '%ty'", p_s->curr_func_type->ret_type, ret_type);
       has_error = true;
       p_s->error_count++;
-    }
-
-    if (p_type_is_generic(P_AST_EXPR_GET_TYPE(p_node->ret_expr))) {
-      resolve_generic_type(p_node->ret_expr, p_s->curr_func_type->ret_type);
     }
 
     p_node->ret_expr = convert_to_rvalue(p_node->ret_expr);
   } else {
     if (!p_type_is_void(p_s->curr_func_type->ret_type)) {
-      error("expected '%ty', found '%ty'", p_type_get_void(), P_AST_EXPR_GET_TYPE(p_node->ret_expr));
+      error("expected '%ty', found '%ty'", p_type_get_void(), p_ast_get_type(p_node->ret_expr));
       has_error = true;
       p_s->error_count++;
     }
@@ -331,8 +297,9 @@ sema_check_if_stmt(PSema* p_s, PAstIfStmt* p_node)
 
   bool has_error = false;
 
-  if (!p_type_is_bool(P_AST_EXPR_GET_TYPE(p_node->cond_expr))) {
-    error("expected '%ty', found '%ty'", p_type_get_bool(), P_AST_EXPR_GET_TYPE(p_node->cond_expr));
+  PType* cond_type = p_ast_get_type(p_node->cond_expr);
+  if (!p_type_is_bool(cond_type)) {
+    error("expected '%ty', found '%ty'", p_type_get_bool(), cond_type);
     has_error = true;
     p_s->error_count++;
   }
@@ -353,8 +320,9 @@ sema_check_while_stmt(PSema* p_s, PAstWhileStmt* p_node)
 
   bool has_error = false;
 
-  if (!p_type_is_bool(P_AST_EXPR_GET_TYPE(p_node->cond_expr))) {
-    error("expected '%ty', found '%ty'", p_type_get_bool(), P_AST_EXPR_GET_TYPE(p_node->cond_expr));
+  PType* cond_type = p_ast_get_type(p_node->cond_expr);
+  if (!p_type_is_bool(cond_type)) {
+    error("expected '%ty', found '%ty'", p_type_get_bool(), cond_type);
     has_error = true;
     p_s->error_count++;
   }
@@ -370,7 +338,6 @@ sema_check_bool_literal(PSema* p_s, PAstBoolLiteral* p_node)
 {
   assert(p_s != NULL && p_node != NULL && P_AST_GET_KIND(p_node) == P_AST_NODE_BOOL_LITERAL);
 
-  P_AST_EXPR_GET_TYPE(p_node) = p_type_get_bool();
   P_AST_EXPR_GET_VALUE_CATEGORY(p_node) = P_VC_RVALUE;
   return false;
 }
@@ -385,7 +352,7 @@ sema_check_int_literal(PSema* p_s, PAstIntLiteral* p_node)
   uintmax_t value = p_node->value;
 
   uintmax_t max_value = UINTMAX_MAX;
-  switch (P_TYPE_GET_KIND(P_AST_EXPR_GET_TYPE(p_node))) {
+  switch (P_TYPE_GET_KIND(p_node->type)) {
     case P_TYPE_I8:
       max_value = INT8_MAX;
       break;
@@ -419,7 +386,7 @@ sema_check_int_literal(PSema* p_s, PAstIntLiteral* p_node)
   }
 
   if (value > max_value) {
-    error("integer literal too large for its type '%ty'", P_AST_EXPR_GET_TYPE(p_node));
+    error("integer literal too large for its type '%ty'", p_node->type);
     has_error = true;
     p_s->error_count++;
   }
@@ -454,7 +421,6 @@ sema_check_decl_ref_expr(PSema* p_s, PAstDeclRefExpr* p_node, PIdentifierInfo* p
     p_s->error_count++;
   } else {
     decl = symbol->decl;
-    P_AST_EXPR_GET_TYPE(p_node) = P_DECL_GET_TYPE(decl);
     decl->common.used = true;
   }
 
@@ -469,7 +435,6 @@ sema_check_paren_expr(PSema* p_s, PAstParenExpr* p_node)
 {
   assert(p_s != NULL && p_node != NULL && P_AST_GET_KIND(p_node) == P_AST_NODE_PAREN_EXPR);
 
-  P_AST_EXPR_GET_TYPE(p_node) = P_AST_EXPR_GET_TYPE(p_node->sub_expr);
   P_AST_EXPR_GET_VALUE_CATEGORY(p_node) = P_AST_EXPR_GET_VALUE_CATEGORY(p_node->sub_expr);
   return false;
 }
@@ -483,8 +448,8 @@ sema_check_unary_expr(PSema* p_s, PAstUnaryExpr* p_node)
 
   bool has_error = false;
 
-  PType* type = P_AST_EXPR_GET_TYPE(p_node->sub_expr);
-  P_AST_EXPR_GET_TYPE(p_node) = type;
+  PType* type = p_ast_get_type(p_node->sub_expr);
+  p_node->type = type;
 
   switch (p_node->opcode) {
     case P_UNARY_NEG:
@@ -515,7 +480,7 @@ sema_check_unary_expr(PSema* p_s, PAstUnaryExpr* p_node)
       }
 
       P_AST_EXPR_GET_VALUE_CATEGORY(p_node) = P_VC_RVALUE;
-      P_AST_EXPR_GET_TYPE(p_node) = p_type_get_pointer(type);
+      p_node->type = p_type_get_pointer(type);
       break;
     case P_UNARY_DEREF:
       if (!p_type_is_pointer(type)) {
@@ -523,7 +488,7 @@ sema_check_unary_expr(PSema* p_s, PAstUnaryExpr* p_node)
         p_s->error_count++;
         has_error = true;
       } else {
-        P_AST_EXPR_GET_TYPE(p_node) = ((PPointerType*)type)->element_type;
+        p_node->type = ((PPointerType*)type)->element_type;
       }
 
       P_AST_EXPR_GET_VALUE_CATEGORY(p_node) = P_VC_LVALUE;
@@ -545,25 +510,20 @@ sema_check_binary_expr(PSema* p_s, PAstBinaryExpr* p_node)
 
   bool has_error = false;
 
-  /* Resolve generic types. */
-  if (p_type_is_generic(P_AST_EXPR_GET_TYPE(p_node->lhs)) && !p_type_is_generic(P_AST_EXPR_GET_TYPE(p_node->rhs))) {
-    resolve_generic_type(p_node->lhs, P_AST_EXPR_GET_TYPE(p_node->rhs));
-  } else if (!p_type_is_generic(P_AST_EXPR_GET_TYPE(p_node->lhs)) &&
-             p_type_is_generic(P_AST_EXPR_GET_TYPE(p_node->rhs))) {
-    resolve_generic_type(p_node->rhs, P_AST_EXPR_GET_TYPE(p_node->lhs));
-  }
+  PType* lhs_type = p_ast_get_type(p_node->lhs);
+  PType* rhs_type = p_ast_get_type(p_node->rhs);
 
   switch (p_node->opcode) {
     case P_BINARY_LOG_AND:
     case P_BINARY_LOG_OR:
-      if (!p_type_is_bool(P_AST_EXPR_GET_TYPE(p_node->lhs))) {
-        error("expected '%ty', found '%ty'", p_type_get_bool(), P_AST_EXPR_GET_TYPE(p_node->lhs));
+      if (!p_type_is_bool(lhs_type)) {
+        error("expected '%ty', found '%ty'", p_type_get_bool(), lhs_type);
         has_error = true;
         p_s->error_count++;
       }
 
-      if (!p_type_is_bool(P_AST_EXPR_GET_TYPE(p_node->rhs))) {
-        error("expected '%ty', found '%ty'", p_type_get_bool(), P_AST_EXPR_GET_TYPE(p_node->lhs));
+      if (!p_type_is_bool(rhs_type)) {
+        error("expected '%ty', found '%ty'", p_type_get_bool(), rhs_type);
         has_error = true;
         p_s->error_count++;
       }
@@ -575,7 +535,7 @@ sema_check_binary_expr(PSema* p_s, PAstBinaryExpr* p_node)
     case P_BINARY_LE:
     case P_BINARY_GT:
     case P_BINARY_GE:
-      P_AST_EXPR_GET_TYPE(p_node) = p_type_get_bool();
+      p_node->type = p_type_get_bool();
       break;
 
     case P_BINARY_BIT_AND:
@@ -584,35 +544,33 @@ sema_check_binary_expr(PSema* p_s, PAstBinaryExpr* p_node)
     case P_BINARY_ASSIGN_BIT_AND:
     case P_BINARY_ASSIGN_BIT_XOR:
     case P_BINARY_ASSIGN_BIT_OR:
-      if (!p_type_is_int(P_AST_EXPR_GET_TYPE(p_node->lhs))) {
-        error("expected integer type, found '%ty'", P_AST_EXPR_GET_TYPE(p_node->lhs));
+      if (!p_type_is_int(lhs_type)) {
+        error("expected integer type, found '%ty'", lhs_type);
         has_error = true;
         p_s->error_count++;
       }
 
-      if (!p_type_is_int(P_AST_EXPR_GET_TYPE(p_node->rhs))) {
-        error("expected integer type, found '%ty'", P_AST_EXPR_GET_TYPE(p_node->rhs));
+      if (!p_type_is_int(rhs_type)) {
+        error("expected integer type, found '%ty'", rhs_type);
         has_error = true;
         p_s->error_count++;
       }
 
       HEDLEY_FALL_THROUGH;
     default:
-      if (!are_types_compatible(P_AST_EXPR_GET_TYPE(p_node->lhs), P_AST_EXPR_GET_TYPE(p_node->rhs))) {
-        error("type mismatch, got '%ty' for LHS and '%ty' for RHS",
-              P_AST_EXPR_GET_TYPE(p_node->lhs),
-              P_AST_EXPR_GET_TYPE(p_node->rhs));
+      if (!are_types_compatible(lhs_type, rhs_type)) {
+        error("type mismatch, got '%ty' for LHS and '%ty' for RHS", lhs_type, rhs_type);
         has_error = true;
         p_s->error_count++;
       }
 
-      if (!p_type_is_arithmetic(P_AST_EXPR_GET_TYPE(p_node->lhs))) {
-        error("expected arithmetic type (either integer or float), found '%ty'", P_AST_EXPR_GET_TYPE(p_node->lhs));
+      if (!p_type_is_arithmetic(lhs_type)) {
+        error("expected arithmetic type (either integer or float), found '%ty'", rhs_type);
         has_error = true;
         p_s->error_count++;
       }
 
-      P_AST_EXPR_GET_TYPE(p_node) = P_AST_EXPR_GET_TYPE(p_node->lhs);
+      p_node->type = lhs_type;
       break;
   }
 
@@ -634,7 +592,7 @@ sema_check_call_expr(PSema* p_s, PAstCallExpr* p_node)
 
   bool has_error = false;
 
-  PFunctionType* func_type = ((PFunctionType*)P_AST_EXPR_GET_TYPE(p_node->callee));
+  PFunctionType* func_type = ((PFunctionType*)p_ast_get_type(p_node->callee));
 
   if (func_type->arg_count != p_node->arg_count) {
     error("expected %d arguments, but got %d arguments", func_type->arg_count, p_node->arg_count);
@@ -643,17 +601,15 @@ sema_check_call_expr(PSema* p_s, PAstCallExpr* p_node)
   } else {
     /* Check arguments type */
     for (int i = 0; i < p_node->arg_count; ++i) {
-      if (!are_types_compatible(P_AST_EXPR_GET_TYPE(p_node->args[i]), func_type->args[i])) {
-        error("expected '%ty', found '%ty'", func_type->args[i], P_AST_EXPR_GET_TYPE(p_node->args[i]));
+      PType* arg_type = p_ast_get_type(p_node->args[i]);
+      if (!are_types_compatible(arg_type, func_type->args[i])) {
+        error("expected '%ty', found '%ty'", func_type->args[i], arg_type);
         p_s->error_count++;
         has_error = true;
-      } else if (p_type_is_generic(P_AST_EXPR_GET_TYPE(p_node->args[i]))) {
-        resolve_generic_type(p_node->args[i], func_type->args[i]);
       }
     }
   }
 
-  P_AST_EXPR_GET_TYPE(p_node) = func_type->ret_type;
   P_AST_EXPR_GET_VALUE_CATEGORY(p_node) = P_VC_RVALUE;
   return has_error;
 }
@@ -663,11 +619,10 @@ sema_check_cast_expr(PSema* p_s, PAstCastExpr* p_node)
 {
   assert(p_s != NULL && p_node != NULL && P_AST_GET_KIND(p_node) == P_AST_NODE_CAST_EXPR);
 
-  assert(p_node->sub_expr != NULL);
-  assert(P_AST_EXPR_GET_TYPE(p_node) != NULL);
+  assert(p_node->sub_expr != NULL && p_node->type != NULL);
 
-  PType* from_ty = P_AST_EXPR_GET_TYPE(p_node->sub_expr);
-  PType* target_ty = P_AST_EXPR_GET_TYPE(p_node);
+  PType* from_ty = p_ast_get_type(p_node->sub_expr);
+  PType* target_ty = p_node->type;
 
   P_AST_EXPR_GET_VALUE_CATEGORY(p_node) = P_AST_EXPR_GET_VALUE_CATEGORY(p_node->sub_expr);
 
@@ -680,11 +635,6 @@ sema_check_cast_expr(PSema* p_s, PAstCastExpr* p_node)
 
   bool valid_cast = true;
   if (p_type_is_int(from_ty)) {
-    if (p_type_is_generic_int(P_AST_EXPR_GET_TYPE(p_node))) {
-      /* Resolve generic integer with the biggest int type. */
-      resolve_generic_type((PAst*)p_node, p_type_get_i64());
-    }
-
     if (p_type_is_float(target_ty)) {
       p_node->cast_kind = P_CAST_INT2FLOAT;
     } else if (p_type_is_int(target_ty)) {
@@ -696,11 +646,6 @@ sema_check_cast_expr(PSema* p_s, PAstCastExpr* p_node)
       valid_cast = false;
     }
   } else if (p_type_is_float(from_ty)) {
-    if (p_type_is_generic_float(P_AST_EXPR_GET_TYPE(p_node))) {
-      /* Resolve generic float with the biggest float type. */
-      resolve_generic_type((PAst*)p_node, p_type_get_f64());
-    }
-
     if (p_type_is_int(target_ty))
       p_node->cast_kind = P_CAST_FLOAT2INT;
     else if (p_type_is_float(target_ty))

@@ -44,12 +44,6 @@ typedef struct PAstCommon
   PSourceRange source_range;
 } PAstCommon;
 
-typedef struct PAstExprCommon
-{
-  PType* type;
-  PValueCategory value_category;
-} PAstExprCommon;
-
 typedef struct PAst
 {
   PAstCommon common;
@@ -130,6 +124,11 @@ typedef struct PAstWhileStmt
   PAst* body_stmt;
 } PAstWhileStmt;
 
+typedef struct PAstExprCommon
+{
+  PValueCategory value_category;
+} PAstExprCommon;
+
 typedef struct PAstExpr
 {
   PAstCommon common;
@@ -149,6 +148,7 @@ typedef struct PAstIntLiteral
 {
   PAstCommon common;
   PAstExprCommon expr_common;
+  PType* type;
   uintmax_t value;
 } PAstIntLiteral;
 
@@ -157,6 +157,7 @@ typedef struct PAstFloatLiteral
 {
   PAstCommon common;
   PAstExprCommon expr_common;
+  PType* type;
   double value;
 } PAstFloatLiteral;
 
@@ -190,6 +191,7 @@ typedef struct PAstUnaryExpr
 {
   PAstCommon common;
   PAstExprCommon expr_common;
+  PType* type;
   PSourceLocation op_loc;
   PAstUnaryOp opcode;
   PAst* sub_expr;
@@ -210,6 +212,7 @@ typedef struct PAstBinaryExpr
 {
   PAstCommon common;
   PAstExprCommon expr_common;
+  PType* type;
   PSourceLocation op_loc;
   PAstBinaryOp opcode;
   PAst* lhs;
@@ -238,6 +241,7 @@ typedef struct PAstCastExpr
 {
   PAstCommon common;
   PAstExprCommon expr_common;
+  PType* type;
   PAst* sub_expr;
   PAstCastKind cast_kind;
 } PAstCastExpr;
@@ -250,9 +254,11 @@ typedef struct PAstLValueToRValueExpr
   PAst* sub_expr;
 } PAstLValueToRValueExpr;
 
+PType*
+p_ast_get_type(PAst* p_ast);
+
 #define P_AST_GET_KIND(p_node) (((PAst*)(p_node))->common.kind)
 #define P_AST_GET_SOURCE_RANGE(p_node) (((PAst*)(p_node))->common.source_range)
-#define P_AST_EXPR_GET_TYPE(p_node) (((PAstExpr*)(p_node))->expr_common.type)
 #define P_AST_EXPR_GET_VALUE_CATEGORY(p_node) (((PAstExpr*)(p_node))->expr_common.value_category)
 #define P_AST_EXPR_IS_LVALUE(p_node) (P_AST_EXPR_GET_VALUE_CATEGORY(p_node) == P_VC_LVALUE)
 #define P_AST_EXPR_IS_RVALUE(p_node) (P_AST_EXPR_GET_VALUE_CATEGORY(p_node) == P_VC_RVALUE)

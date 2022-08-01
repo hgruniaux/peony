@@ -24,6 +24,49 @@ p_binop_is_assignment(PAstBinaryOp p_binop)
   }
 }
 
+#define CAST(p_node, p_type) ((p_type*)(p_node))
+
+PType*
+p_ast_get_type(PAst* p_ast)
+{
+  assert(p_ast != NULL);
+
+#define DUMMY_TYPE p_type_get_i32()
+  switch (P_AST_GET_KIND(p_ast)) {
+    case P_AST_NODE_INT_LITERAL:
+    case P_AST_NODE_FLOAT_LITERAL:
+    case P_AST_NODE_UNARY_EXPR:
+    case P_AST_NODE_BINARY_EXPR:
+    case P_AST_NODE_CAST_EXPR:
+      return CAST(p_ast, PAstIntLiteral)->type;
+
+    case P_AST_NODE_BOOL_LITERAL:
+      return p_type_get_bool();
+    case P_AST_NODE_PAREN_EXPR:
+      return p_ast_get_type(CAST(p_ast, PAstParenExpr)->sub_expr);
+    case P_AST_NODE_LVALUE_TO_RVALUE_EXPR:
+      return p_ast_get_type(CAST(p_ast, PAstLValueToRValueExpr)->sub_expr);
+    case P_AST_NODE_DECL_REF_EXPR: {
+      PDecl* decl = CAST(p_ast, PAstDeclRefExpr)->decl;
+      if (decl == NULL)
+        return DUMMY_TYPE;
+
+      return P_DECL_GET_TYPE(decl);
+    }
+    case P_AST_NODE_CALL_EXPR: {
+      PType* callee_type = p_ast_get_type(CAST(p_ast, PAstCallExpr)->callee);
+      if (!p_type_is_function(callee_type))
+        return DUMMY_TYPE;
+
+      return CAST(callee_type, PFunctionType)->ret_type;
+    }
+
+    default: // This node has no concept of type.
+      return NULL;
+  }
+#undef DUMMY_TYPE
+}
+
 PAst*
 p_create_node_impl(size_t p_size, PAstKind p_kind)
 {

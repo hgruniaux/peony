@@ -378,12 +378,12 @@ parse_let_stmt(struct PParser* p_parser)
 
   if (type == NULL) {
     if (init_expr != NULL)
-      type = P_AST_EXPR_GET_TYPE(init_expr);
+      type = p_ast_get_type(init_expr);
     else
       type = p_type_get_undef();
   }
 
-  if (init_expr != NULL && type != P_AST_EXPR_GET_TYPE(init_expr)) {
+  if (init_expr != NULL && type != p_ast_get_type(init_expr)) {
     error("initialization expression and variable do not have the same type");
   }
 
@@ -608,7 +608,6 @@ parse_bool_literal(struct PParser* p_parser)
   consume_token(p_parser);
 
   PAstBoolLiteral* node = CREATE_NODE(PAstBoolLiteral, P_AST_NODE_BOOL_LITERAL);
-  P_AST_EXPR_GET_TYPE(node) = p_type_get_bool();
   node->value = value;
 
   SET_NODE_LOC_RANGE(node, loc_begin, loc_end);
@@ -636,7 +635,7 @@ parse_int_literal(struct PParser* p_parser)
   consume_token(p_parser);
 
   PAstIntLiteral* node = CREATE_NODE(PAstIntLiteral, P_AST_NODE_INT_LITERAL);
-  P_AST_EXPR_GET_TYPE(node) = p_type_get_i32();
+  node->type = p_type_get_i32();
   node->value = value;
 
   SET_NODE_LOC_RANGE(node, loc_begin, loc_end);
@@ -657,7 +656,7 @@ parse_float_literal(struct PParser* p_parser)
   consume_token(p_parser);
 
   PAstFloatLiteral* node = CREATE_NODE(PAstFloatLiteral, P_AST_NODE_FLOAT_LITERAL);
-  P_AST_EXPR_GET_TYPE(node) = p_type_get_f32();
+  node->type = p_type_get_f32();
   // TODO: parse value of float literal
   SET_NODE_LOC_RANGE(node, loc_begin, loc_end);
   sema_check_float_literal(&p_parser->sema, node);
@@ -842,7 +841,7 @@ parse_cast_expr(struct PParser* p_parser)
 
     PAstCastExpr* node = CREATE_NODE(PAstCastExpr, P_AST_NODE_CAST_EXPR);
     node->sub_expr = sub_expr;
-    P_AST_EXPR_GET_TYPE(node) = type;
+    node->type = type;
     // FIXME: better end source location for cast expr instead of LOOKAHEAD_BEGIN_LOC
     //        probably use type->source_range.end when types have localizations.
     SET_NODE_LOC_RANGE(node, P_AST_GET_SOURCE_RANGE(sub_expr).begin, LOOKAHEAD_BEGIN_LOC);

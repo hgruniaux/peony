@@ -333,7 +333,7 @@ cg_int_literal(struct PCodegenLLVM* p_cg, PAstIntLiteral* p_node)
 {
   assert(P_AST_GET_KIND(p_node) == P_AST_NODE_INT_LITERAL);
 
-  LLVMTypeRef type = cg_to_llvm_type(P_AST_EXPR_GET_TYPE(p_node));
+  LLVMTypeRef type = cg_to_llvm_type(p_node->type);
   return LLVMConstInt(type, p_node->value, 0);
 }
 
@@ -342,7 +342,7 @@ cg_float_literal(struct PCodegenLLVM* p_cg, PAstFloatLiteral* p_node)
 {
   assert(P_AST_GET_KIND(p_node) == P_AST_NODE_FLOAT_LITERAL);
 
-  LLVMTypeRef type = cg_to_llvm_type(P_AST_EXPR_GET_TYPE(p_node));
+  LLVMTypeRef type = cg_to_llvm_type(p_node->type);
   return LLVMConstReal(type, p_node->value);
 }
 
@@ -371,9 +371,9 @@ cg_unary_expr(struct PCodegenLLVM* p_cg, PAstUnaryExpr* p_node)
   LLVMValueRef sub_expr = cg_visit(p_cg, p_node->sub_expr);
   switch (p_node->opcode) {
     case P_UNARY_NEG:
-      if (p_type_is_signed(P_AST_EXPR_GET_TYPE(p_node)))
+      if (p_type_is_signed(p_node->type))
         return LLVMBuildNeg(p_cg->builder, sub_expr, "");
-      else if (p_type_is_float(P_AST_EXPR_GET_TYPE(p_node)))
+      else if (p_type_is_float(p_node->type))
         return LLVMBuildFNeg(p_cg->builder, sub_expr, "");
       else
         HEDLEY_UNREACHABLE_RETURN(NULL);
@@ -560,13 +560,12 @@ cg_binary_expr(struct PCodegenLLVM* p_cg, PAstBinaryExpr* p_node)
   } else if (p_binop_is_assignment(p_node->opcode)) {
     const LLVMValueRef lhs = cg_visit(p_cg, p_node->lhs);
     const LLVMValueRef rhs = cg_visit(p_cg, p_node->rhs);
-    return cg_assignment_impl(p_cg, P_AST_EXPR_GET_TYPE(p_node), p_node->opcode, lhs, rhs);
+    return cg_assignment_impl(p_cg, p_node->type, p_node->opcode, lhs, rhs);
   }
 
-  PType* type = P_AST_EXPR_GET_TYPE(p_node->lhs);
   const LLVMValueRef lhs = cg_visit(p_cg, p_node->lhs);
   const LLVMValueRef rhs = cg_visit(p_cg, p_node->rhs);
-  return cg_binary_expr_impl(p_cg, type, p_node->opcode, lhs, rhs);
+  return cg_binary_expr_impl(p_cg, p_ast_get_type(p_node->lhs), p_node->opcode, lhs, rhs);
 }
 
 static LLVMValueRef
@@ -596,49 +595,50 @@ cg_cast_expr(struct PCodegenLLVM* p_cg, PAstCastExpr* p_node)
 {
   assert(P_AST_GET_KIND(p_node) == P_AST_NODE_CAST_EXPR);
 
+  PType* source_ty = p_ast_get_type(p_node->sub_expr);
   LLVMValueRef sub_expr = cg_visit(p_cg, p_node->sub_expr);
-  LLVMTypeRef target_ty = cg_to_llvm_type(P_AST_EXPR_GET_TYPE(p_node));
+  LLVMTypeRef llvm_target_ty = cg_to_llvm_type(p_node->type);
   switch (p_node->cast_kind) {
     case P_CAST_NOOP:
       return sub_expr;
     case P_CAST_INT2INT: {
-      const int from_bitwidth = p_type_get_bitwidth(P_AST_EXPR_GET_TYPE(p_node->sub_expr));
-      const int target_bitwidth = p_type_get_bitwidth(P_AST_EXPR_GET_TYPE(p_node));
+      const int from_bitwidth = p_type_get_bitwidth(source_ty);
+      const int target_bitwidth = p_type_get_bitwidth(p_node->type);
 
       if (from_bitwidth > target_bitwidth) {
-        return LLVMBuildTrunc(p_cg->builder, sub_expr, target_ty, "");
+        return LLVMBuildTrunc(p_cg->builder, sub_expr, llvm_target_ty, "");
       } else { /* from_bitwidth < target_bitwidth */
-        if (p_type_is_unsigned(P_AST_EXPR_GET_TYPE(p_node->sub_expr))) {
-          return LLVMBuildZExt(p_cg->builder, sub_expr, target_ty, "");
+        if (p_type_is_unsigned(source_ty)) {
+          return LLVMBuildZExt(p_cg->builder, sub_expr, llvm_target_ty, "");
         } else {
-          return LLVMBuildSExt(p_cg->builder, sub_expr, target_ty, "");
+          return LLVMBuildSExt(p_cg->builder, sub_expr, llvm_target_ty, "");
         }
       }
     }
     case P_CAST_INT2FLOAT:
-      if (p_type_is_unsigned(P_AST_EXPR_GET_TYPE(p_node->sub_expr)))
-        return LLVMBuildUIToFP(p_cg->builder, sub_expr, target_ty, "");
+      if (p_type_is_unsigned(source_ty))
+        return LLVMBuildUIToFP(p_cg->builder, sub_expr, llvm_target_ty, "");
       else
-        return LLVMBuildSIToFP(p_cg->builder, sub_expr, target_ty, "");
+        return LLVMBuildSIToFP(p_cg->builder, sub_expr, llvm_target_ty, "");
     case P_CAST_FLOAT2FLOAT: {
-      const int from_bitwidth = p_type_get_bitwidth(P_AST_EXPR_GET_TYPE(p_node->sub_expr));
-      const int target_bitwidth = p_type_get_bitwidth(P_AST_EXPR_GET_TYPE(p_node));
+      const int from_bitwidth = p_type_get_bitwidth(source_ty);
+      const int target_bitwidth = p_type_get_bitwidth(p_node->type);
 
       if (from_bitwidth > target_bitwidth) {
-        return LLVMBuildFPTrunc(p_cg->builder, sub_expr, target_ty, "");
+        return LLVMBuildFPTrunc(p_cg->builder, sub_expr, llvm_target_ty, "");
       } else {
-        return LLVMBuildFPExt(p_cg->builder, sub_expr, target_ty, "");
+        return LLVMBuildFPExt(p_cg->builder, sub_expr, llvm_target_ty, "");
       }
     }
     case P_CAST_FLOAT2INT:
-      if (p_type_is_unsigned(P_AST_EXPR_GET_TYPE(p_node)))
-        return LLVMBuildFPToUI(p_cg->builder, sub_expr, target_ty, "");
+      if (p_type_is_unsigned(p_node->type))
+        return LLVMBuildFPToUI(p_cg->builder, sub_expr, llvm_target_ty, "");
       else
-        return LLVMBuildFPToSI(p_cg->builder, sub_expr, target_ty, "");
+        return LLVMBuildFPToSI(p_cg->builder, sub_expr, llvm_target_ty, "");
     case P_CAST_BOOL2INT:
-      return LLVMBuildZExt(p_cg->builder, sub_expr, target_ty, "");
+      return LLVMBuildZExt(p_cg->builder, sub_expr, llvm_target_ty, "");
     case P_CAST_BOOL2FLOAT:
-      return LLVMBuildUIToFP(p_cg->builder, sub_expr, target_ty, "");
+      return LLVMBuildUIToFP(p_cg->builder, sub_expr, llvm_target_ty, "");
     default:
       HEDLEY_UNREACHABLE_RETURN(NULL);
   }
