@@ -22,6 +22,7 @@ PDiagContext g_diag_context = { .diagnostic_count = { 0 },
 
 static PDiag g_current_diag = { .flushed = true };
 
+PSourceLocation g_current_source_location = 0;
 PSourceFile* g_current_source_file = NULL;
 bool g_verify_mode_enabled = false;
 bool g_enable_ansi_colors = true;
@@ -64,6 +65,7 @@ diag(PDiagKind p_kind)
   g_current_diag.range_count = 0;
   g_current_diag.arg_count = 0;
   g_current_diag.flushed = false;
+  g_current_diag.caret_location = g_current_source_location;
   return &g_current_diag;
 }
 

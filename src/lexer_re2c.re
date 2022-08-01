@@ -28,6 +28,7 @@ p_lex(PLexer* p_lexer, PToken* p_token)
     for (;;) {
         p_lexer->marked_cursor = p_lexer->cursor;
         p_lexer->marked_source_location = p_lexer->marked_cursor - p_lexer->source_file->buffer;
+        g_current_source_location = p_lexer->marked_source_location;
 
         #define FILL_TOKEN(p_kind) (fill_token(p_lexer, p_token, p_kind))
 

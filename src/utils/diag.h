@@ -78,6 +78,7 @@ typedef struct PDiagContext
 
 extern PDiagContext g_diag_context;
 
+extern PSourceLocation g_current_source_location;
 extern PSourceFile* g_current_source_file;
 extern bool g_verify_mode_enabled;
 extern bool g_enable_ansi_colors;
