@@ -110,9 +110,9 @@ TEST(diag_formatter, type_arg)
   // Function type.
   PType* func_args[] = { p_type_get_bool(), p_type_get_f32() };
   PDiagArgument func_type;
-  pointer_type.type = P_DAT_TYPE;
-  pointer_type.value_type = p_type_get_function(p_type_get_i32(), func_args, 2);
-  check_arg_format(&pointer_type, "fn (bool, f32) -> i32");
+  func_type.type = P_DAT_TYPE;
+  func_type.value_type = p_type_get_function(p_type_get_i32(), func_args, 2);
+  check_arg_format(&func_type, "fn (bool, f32) -> i32");
 }
 
 TEST(diag_formatter, plural_s)
