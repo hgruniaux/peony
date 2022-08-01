@@ -63,7 +63,12 @@ typedef struct PDiag
   uint32_t range_count;
   PDiagArgument args[P_DIAG_MAX_ARGUMENTS];
   uint32_t arg_count;
-  bool flushed;
+
+#ifdef P_DEBUG
+  bool debug_was_flushed;
+  const char* debug_source_filename;
+  int debug_source_line;
+#endif
 } PDiag;
 
 typedef struct PDiagContext
@@ -83,11 +88,22 @@ extern PSourceFile* g_current_source_file;
 extern bool g_verify_mode_enabled;
 extern bool g_enable_ansi_colors;
 
+#ifdef P_DEBUG
+PDiag*
+diag_debug_impl(PDiagKind p_kind, const char* p_filename, int p_line);
+
+PDiag*
+diag_at_debug_impl(PDiagKind p_kind, PSourceLocation p_location, const char* p_filename, int p_line);
+
+#define diag(p_kind) diag_debug_impl((p_kind), __FILE__, __LINE__)
+#define diag_at(p_kind, p_location) diag_at_debug_impl((p_kind), (p_location), __FILE__, __LINE__)
+#else
 PDiag*
 diag(PDiagKind p_kind);
 
 PDiag*
 diag_at(PDiagKind p_kind, PSourceLocation p_location);
+#endif
 
 void
 diag_add_arg_char(PDiag* p_diag, char p_arg);

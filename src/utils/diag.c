@@ -20,7 +20,11 @@ PDiagContext g_diag_context = { .diagnostic_count = { 0 },
                                 .ignore_warnings = false };
 
 
-static PDiag g_current_diag = { .flushed = true };
+#ifdef P_DEBUG
+static PDiag g_current_diag = { .debug_was_flushed = true };
+#else
+static PDiag g_current_diag;
+#endif
 
 PSourceLocation g_current_source_location = 0;
 PSourceFile* g_current_source_file = NULL;
@@ -54,17 +58,27 @@ static const char* g_diag_messages[] = {
 #include "diag_kinds.def"
 };
 
+#ifdef P_DEBUG
+#undef diag
+#undef diag_at
+#endif
+
 PDiag*
 diag(PDiagKind p_kind)
 {
-  assert(g_current_diag.flushed && "a call to diag_flush() was forgotten");
+#ifdef P_DEBUG
+  if (!g_current_diag.debug_was_flushed) {
+    fprintf(stderr, "internal compiler error: diag_flush() was not called for diagnostic generated at %s:%d\n",
+        g_current_diag.debug_source_filename, g_current_diag.debug_source_line);
+    abort();
+  }
+#endif
 
   g_current_diag.kind = p_kind;
   g_current_diag.severity = g_diag_severities[p_kind];
   g_current_diag.message = g_diag_messages[p_kind];
   g_current_diag.range_count = 0;
   g_current_diag.arg_count = 0;
-  g_current_diag.flushed = false;
   g_current_diag.caret_location = g_current_source_location;
   return &g_current_diag;
 }
@@ -76,6 +90,28 @@ diag_at(PDiagKind p_kind, PSourceLocation p_location)
   d->caret_location = p_location;
   return d;
 }
+
+#ifdef P_DEBUG
+PDiag*
+diag_debug_impl(PDiagKind p_kind, const char* p_filename, int p_line)
+{
+  PDiag* d = diag(p_kind);
+  d->debug_was_flushed = false;
+  d->debug_source_filename = p_filename;
+  d->debug_source_line = p_line;
+  return d;
+}
+
+PDiag*
+diag_at_debug_impl(PDiagKind p_kind, PSourceLocation p_location, const char* p_filename, int p_line)
+{
+  PDiag* d = diag_at(p_kind, p_location);
+  d->debug_was_flushed = false;
+  d->debug_source_filename = p_filename;
+  d->debug_source_line = p_line;
+  return d;
+}
+#endif
 
 void
 diag_add_arg_char(PDiag* p_diag, char p_arg)
@@ -151,6 +187,10 @@ diag_flush(PDiag* p_diag)
     p_diag->severity = P_DIAG_ERROR;
 
   g_diag_context.diagnostic_count[p_diag->severity]++;
+
+#ifdef P_DEBUG
+  p_diag->debug_was_flushed = true;
+#endif
 
   if (!g_verify_mode_enabled) {
     // Print source location:
