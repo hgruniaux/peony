@@ -288,7 +288,6 @@ parse_func_decl(struct PParser* p_parser)
 
   expect_token(p_parser, P_TOK_LPAREN);
 
-  sema_push_scope(&p_parser->sema, P_SF_NONE);
   /* Parse parameters: */
   PDynamicArray params;
   p_dynamic_array_init(&params);
@@ -306,8 +305,6 @@ parse_func_decl(struct PParser* p_parser)
     P_DECL_GET_TYPE(param) = type;
     param->default_expr = NULL;
     p_dynamic_array_append(&params, param);
-
-    sema_check_param_decl(&p_parser->sema, param);
 
     if (!LOOKAHEAD_IS(P_TOK_COMMA))
       break;
@@ -332,6 +329,12 @@ parse_func_decl(struct PParser* p_parser)
     skip_until_no_error(p_parser, P_TOK_RBRACE);
     sema_pop_scope(&p_parser->sema);
     return (PDecl*)decl;
+  }
+
+  sema_push_scope(&p_parser->sema, P_SF_NONE);
+  /* Checks arguments: */
+  for (int i = 0; i < decl->param_count; ++i) {
+    sema_check_param_decl(&p_parser->sema, decl->params[i]);
   }
 
   decl->body = parse_compound_stmt(p_parser);
