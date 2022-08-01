@@ -103,7 +103,7 @@ add_executable(peony_test
 
     "src/utils/line_map_test.cxx"
     "src/utils/diag_formatter_test.cxx"
- "src/utils/dynamic_array_test.cxx" "src/type_test.cxx")
+ "src/utils/dynamic_array_test.cxx" "src/type_test.cxx" "src/identifier_table_test.cxx")
 
 target_link_libraries(peony_test PRIVATE peony_lib)
 target_link_libraries(peony_test PRIVATE GTest::gtest)

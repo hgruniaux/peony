@@ -193,6 +193,8 @@ p_identifier_table_get(PIdentifierTable* p_table,
   PIdentifierInfo* identifier_info =
     ident_info_new(p_spelling_begin, p_spelling_end, hash);
 
+  p_table->item_count++;
+
   if (!P_NEEDS_REHASHING(p_table)) {
     p_table->identifiers[bucket_idx] = identifier_info;
   } else {
