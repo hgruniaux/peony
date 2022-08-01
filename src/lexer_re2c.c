@@ -8,13 +8,24 @@
 
 
 
+static void
+fill_token(PLexer* p_lexer, PToken* p_token, PTokenKind p_kind)
+{
+    p_token->kind = p_kind;
+    p_token->source_location = p_lexer->marked_source_location;
+    p_token->token_length = p_lexer->cursor - p_lexer->marked_cursor;
+}
+
 void
-p_lex(struct PLexer* p_lexer, struct PToken* p_token)
+p_lex(PLexer* p_lexer, PToken* p_token)
 {
     assert(p_lexer != NULL && p_token != NULL);
 
     for (;;) {
-        const char* tok_begin = p_lexer->cursor;
+        p_lexer->marked_cursor = p_lexer->cursor;
+        p_lexer->marked_source_location = p_lexer->marked_cursor - p_lexer->source_file->buffer;
+
+        #define FILL_TOKEN(p_kind) (fill_token(p_lexer, p_token, p_kind))
 
         
 {
@@ -116,7 +127,7 @@ p_lex(struct PLexer* p_lexer, struct PToken* p_token)
 yy1:
     ++p_lexer->cursor;
     {
-                p_token->kind = P_TOK_EOF;
+                FILL_TOKEN(P_TOK_EOF);
                 break;
             }
 yy2:
@@ -142,6 +153,9 @@ yy6:
     ++p_lexer->cursor;
     {
                 ++CURRENT_LINENO;
+
+                uint32_t line_pos = p_lexer->cursor - p_lexer->source_file->buffer;
+                p_line_map_add(&p_lexer->source_file->line_map, line_pos);
                 continue;
             }
 yy7:
@@ -157,7 +171,7 @@ yy8:
         default: goto yy9;
     }
 yy9:
-    { p_token->kind = P_TOK_EXCLAIM; break; }
+    { FILL_TOKEN(P_TOK_EXCLAIM); break; }
 yy10:
     yych = *++p_lexer->cursor;
     switch (yych) {
@@ -168,12 +182,12 @@ yy10:
     }
 yy11:
     {
-                if (!p_lexer->b_keep_comments)
+                if (!g_verify_mode_enabled)
                     continue;
 
-                p_token->data.literal_begin = tok_begin + 1;
+                FILL_TOKEN(P_TOK_COMMENT);
+                p_token->data.literal_begin = p_lexer->marked_cursor + 1;
                 p_token->data.literal_end = p_lexer->cursor;
-                p_token->kind = P_TOK_COMMENT;
                 break;
             }
 yy12:
@@ -183,7 +197,7 @@ yy12:
         default: goto yy13;
     }
 yy13:
-    { p_token->kind = P_TOK_PERCENT; break; }
+    { FILL_TOKEN(P_TOK_PERCENT); break; }
 yy14:
     yych = *++p_lexer->cursor;
     switch (yych) {
@@ -192,13 +206,13 @@ yy14:
         default: goto yy15;
     }
 yy15:
-    { p_token->kind = P_TOK_AMP; break; }
+    { FILL_TOKEN(P_TOK_AMP); break; }
 yy16:
     ++p_lexer->cursor;
-    { p_token->kind = P_TOK_LPAREN; break; }
+    { FILL_TOKEN(P_TOK_LPAREN); break; }
 yy17:
     ++p_lexer->cursor;
-    { p_token->kind = P_TOK_RPAREN; break; }
+    { FILL_TOKEN(P_TOK_RPAREN); break; }
 yy18:
     yych = *++p_lexer->cursor;
     switch (yych) {
@@ -206,7 +220,7 @@ yy18:
         default: goto yy19;
     }
 yy19:
-    { p_token->kind = P_TOK_STAR; break; }
+    { FILL_TOKEN(P_TOK_STAR); break; }
 yy20:
     yych = *++p_lexer->cursor;
     switch (yych) {
@@ -214,10 +228,10 @@ yy20:
         default: goto yy21;
     }
 yy21:
-    { p_token->kind = P_TOK_PLUS; break; }
+    { FILL_TOKEN(P_TOK_PLUS); break; }
 yy22:
     ++p_lexer->cursor;
-    { p_token->kind = P_TOK_COMMA; break; }
+    { FILL_TOKEN(P_TOK_COMMA); break; }
 yy23:
     yych = *++p_lexer->cursor;
     switch (yych) {
@@ -226,7 +240,7 @@ yy23:
         default: goto yy24;
     }
 yy24:
-    { p_token->kind = P_TOK_MINUS; break; }
+    { FILL_TOKEN(P_TOK_MINUS); break; }
 yy25:
     yych = *++p_lexer->cursor;
     switch (yych) {
@@ -234,7 +248,7 @@ yy25:
         default: goto yy26;
     }
 yy26:
-    { p_token->kind = P_TOK_SLASH; break; }
+    { FILL_TOKEN(P_TOK_SLASH); break; }
 yy27:
     yych = *++p_lexer->cursor;
     switch (yych) {
@@ -252,17 +266,17 @@ yy27:
     }
 yy28:
     {
-                p_token->kind = P_TOK_INT_LITERAL;
-                p_token->data.literal_begin = tok_begin;
+                FILL_TOKEN(P_TOK_INT_LITERAL);
+                p_token->data.literal_begin = p_lexer->marked_cursor;
                 p_token->data.literal_end = p_lexer->cursor;
                 break;
             }
 yy29:
     ++p_lexer->cursor;
-    { p_token->kind = P_TOK_COLON; break; }
+    { FILL_TOKEN(P_TOK_COLON); break; }
 yy30:
     ++p_lexer->cursor;
-    { p_token->kind = P_TOK_SEMI; break; }
+    { FILL_TOKEN(P_TOK_SEMI); break; }
 yy31:
     yych = *++p_lexer->cursor;
     switch (yych) {
@@ -271,7 +285,7 @@ yy31:
         default: goto yy32;
     }
 yy32:
-    { p_token->kind = P_TOK_LESS; break; }
+    { FILL_TOKEN(P_TOK_LESS); break; }
 yy33:
     yych = *++p_lexer->cursor;
     switch (yych) {
@@ -279,7 +293,7 @@ yy33:
         default: goto yy34;
     }
 yy34:
-    { p_token->kind = P_TOK_EQUAL; break; }
+    { FILL_TOKEN(P_TOK_EQUAL); break; }
 yy35:
     yych = *++p_lexer->cursor;
     switch (yych) {
@@ -288,7 +302,7 @@ yy35:
         default: goto yy36;
     }
 yy36:
-    { p_token->kind = P_TOK_GREATER; break; }
+    { FILL_TOKEN(P_TOK_GREATER); break; }
 yy37:
     yych = *++p_lexer->cursor;
     switch (yych) {
@@ -361,12 +375,12 @@ yy38:
     {
                 struct PIdentifierInfo* ident = p_identifier_table_get(
                     p_lexer->identifier_table,
-                    tok_begin,
+                    p_lexer->marked_cursor,
                     p_lexer->cursor
                 );
 
                 assert(ident != NULL);
-                p_token->kind = ident->token_kind;
+                FILL_TOKEN(ident->token_kind);
                 p_token->data.identifier_info = ident;
                 break;
             }
@@ -377,10 +391,10 @@ yy39:
         default: goto yy40;
     }
 yy40:
-    { p_token->kind = P_TOK_CARET; break; }
+    { FILL_TOKEN(P_TOK_CARET); break; }
 yy41:
     ++p_lexer->cursor;
-    { p_token->kind = P_TOK_LBRACE; break; }
+    { FILL_TOKEN(P_TOK_LBRACE); break; }
 yy42:
     yych = *++p_lexer->cursor;
     switch (yych) {
@@ -389,37 +403,37 @@ yy42:
         default: goto yy43;
     }
 yy43:
-    { p_token->kind = P_TOK_PIPE; break; }
+    { FILL_TOKEN(P_TOK_PIPE); break; }
 yy44:
     ++p_lexer->cursor;
-    { p_token->kind = P_TOK_RBRACE; break; }
+    { FILL_TOKEN(P_TOK_RBRACE); break; }
 yy45:
     ++p_lexer->cursor;
-    { p_token->kind = P_TOK_EXCLAIM_EQUAL; break; }
+    { FILL_TOKEN(P_TOK_EXCLAIM_EQUAL); break; }
 yy46:
     ++p_lexer->cursor;
-    { p_token->kind = P_TOK_PERCENT_EQUAL; break; }
+    { FILL_TOKEN(P_TOK_PERCENT_EQUAL); break; }
 yy47:
     ++p_lexer->cursor;
-    { p_token->kind = P_TOK_AMP_AMP; break; }
+    { FILL_TOKEN(P_TOK_AMP_AMP); break; }
 yy48:
     ++p_lexer->cursor;
-    { p_token->kind = P_TOK_AMP_EQUAL; break; }
+    { FILL_TOKEN(P_TOK_AMP_EQUAL); break; }
 yy49:
     ++p_lexer->cursor;
-    { p_token->kind = P_TOK_STAR_EQUAL; break; }
+    { FILL_TOKEN(P_TOK_STAR_EQUAL); break; }
 yy50:
     ++p_lexer->cursor;
-    { p_token->kind = P_TOK_PLUS_EQUAL; break; }
+    { FILL_TOKEN(P_TOK_PLUS_EQUAL); break; }
 yy51:
     ++p_lexer->cursor;
-    { p_token->kind = P_TOK_MINUS_EQUAL; break; }
+    { FILL_TOKEN(P_TOK_MINUS_EQUAL); break; }
 yy52:
     ++p_lexer->cursor;
-    { p_token->kind = P_TOK_ARROW; break; }
+    { FILL_TOKEN(P_TOK_ARROW); break; }
 yy53:
     ++p_lexer->cursor;
-    { p_token->kind = P_TOK_SLASH_EQUAL; break; }
+    { FILL_TOKEN(P_TOK_SLASH_EQUAL); break; }
 yy54:
     yych = *++p_lexer->cursor;
     switch (yych) {
@@ -427,16 +441,16 @@ yy54:
         default: goto yy55;
     }
 yy55:
-    { p_token->kind = P_TOK_LESS_LESS; break; }
+    { FILL_TOKEN(P_TOK_LESS_LESS); break; }
 yy56:
     ++p_lexer->cursor;
-    { p_token->kind = P_TOK_LESS_EQUAL; break; }
+    { FILL_TOKEN(P_TOK_LESS_EQUAL); break; }
 yy57:
     ++p_lexer->cursor;
-    { p_token->kind = P_TOK_EQUAL_EQUAL; break; }
+    { FILL_TOKEN(P_TOK_EQUAL_EQUAL); break; }
 yy58:
     ++p_lexer->cursor;
-    { p_token->kind = P_TOK_GREATER_EQUAL; break; }
+    { FILL_TOKEN(P_TOK_GREATER_EQUAL); break; }
 yy59:
     yych = *++p_lexer->cursor;
     switch (yych) {
@@ -444,22 +458,22 @@ yy59:
         default: goto yy60;
     }
 yy60:
-    { p_token->kind = P_TOK_GREATER_GREATER; break; }
+    { FILL_TOKEN(P_TOK_GREATER_GREATER); break; }
 yy61:
     ++p_lexer->cursor;
-    { p_token->kind = P_TOK_CARET_EQUAL; break; }
+    { FILL_TOKEN(P_TOK_CARET_EQUAL); break; }
 yy62:
     ++p_lexer->cursor;
-    { p_token->kind = P_TOK_PIPE_EQUAL; break; }
+    { FILL_TOKEN(P_TOK_PIPE_EQUAL); break; }
 yy63:
     ++p_lexer->cursor;
-    { p_token->kind = P_TOK_PIPE_PIPE; break; }
+    { FILL_TOKEN(P_TOK_PIPE_PIPE); break; }
 yy64:
     ++p_lexer->cursor;
-    { p_token->kind = P_TOK_LESS_LESS_EQUAL; break; }
+    { FILL_TOKEN(P_TOK_LESS_LESS_EQUAL); break; }
 yy65:
     ++p_lexer->cursor;
-    { p_token->kind = P_TOK_GREATER_GREATER_EQUAL; break; }
+    { FILL_TOKEN(P_TOK_GREATER_GREATER_EQUAL); break; }
 }
 
     }

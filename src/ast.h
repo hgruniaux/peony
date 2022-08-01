@@ -2,6 +2,7 @@
 
 #include "identifier_table.h"
 #include "type.h"
+#include "utils/source_location.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -40,6 +41,7 @@ typedef enum PValueCategory
 typedef struct PAstCommon
 {
   PAstKind kind;
+  PSourceRange source_range;
 } PAstCommon;
 
 typedef struct PAstExprCommon
@@ -64,6 +66,8 @@ typedef struct PAstTranslationUnit
 typedef struct PAstCompoundStmt
 {
   PAstCommon common;
+  PSourceLocation lbrace_loc;
+  PSourceLocation rbrace_loc;
   int stmt_count;
   PAst* stmts[1]; /* tail-allocated */
 } PAstCompoundStmt;
@@ -161,6 +165,8 @@ typedef struct PAstParenExpr
 {
   PAstCommon common;
   PAstExprCommon expr_common;
+  PSourceLocation lparen_loc;
+  PSourceLocation rparen_loc;
   PAst* sub_expr;
 } PAstParenExpr;
 
@@ -184,6 +190,7 @@ typedef struct PAstUnaryExpr
 {
   PAstCommon common;
   PAstExprCommon expr_common;
+  PSourceLocation op_loc;
   PAstUnaryOp opcode;
   PAst* sub_expr;
 } PAstUnaryExpr;
@@ -203,6 +210,7 @@ typedef struct PAstBinaryExpr
 {
   PAstCommon common;
   PAstExprCommon expr_common;
+  PSourceLocation op_loc;
   PAstBinaryOp opcode;
   PAst* lhs;
   PAst* rhs;
@@ -243,6 +251,7 @@ typedef struct PAstLValueToRValueExpr
 } PAstLValueToRValueExpr;
 
 #define P_AST_GET_KIND(p_node) (((PAst*)(p_node))->common.kind)
+#define P_AST_GET_SOURCE_RANGE(p_node) (((PAst*)(p_node))->common.source_range)
 #define P_AST_EXPR_GET_TYPE(p_node) (((PAstExpr*)(p_node))->expr_common.type)
 #define P_AST_EXPR_GET_VALUE_CATEGORY(p_node) (((PAstExpr*)(p_node))->expr_common.value_category)
 #define P_AST_EXPR_IS_LVALUE(p_node) (P_AST_EXPR_GET_VALUE_CATEGORY(p_node) == P_VC_LVALUE)

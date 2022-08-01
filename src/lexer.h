@@ -2,23 +2,24 @@
 
 #include "identifier_table.h"
 #include "token.h"
+#include "utils/source_file.h"
 
-struct PLexer
+typedef struct PLexer
 {
   struct PIdentifierTable* identifier_table;
-  const char* input;
-
-  unsigned int b_keep_comments;
+  PSourceFile* source_file;
 
   /* For re2c: */
   const char* cursor;
-};
+  const char* marked_cursor;
+  PSourceLocation marked_source_location;
+} PLexer;
 
 void
-p_lexer_init(struct PLexer* p_lexer);
+p_lexer_init(PLexer* p_lexer, PSourceFile* p_source_file);
 
 void
-p_lexer_destroy(struct PLexer* p_lexer);
+p_lexer_destroy(PLexer* p_lexer);
 
 void
-p_lex(struct PLexer* p_lexer, struct PToken* p_token);
+p_lex(PLexer* p_lexer, PToken* p_token);

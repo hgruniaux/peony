@@ -6,17 +6,17 @@
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 void
-parse(const char* p_input)
+parse(PSourceFile* p_source_file)
 {
   struct PIdentifierTable identifier_table;
   p_identifier_table_init(&identifier_table);
 
-  struct PLexer lexer;
+  PLexer lexer;
   lexer.identifier_table = &identifier_table;
-  lexer.input = p_input;
-  p_lexer_init(&lexer);
+  p_lexer_init(&lexer, p_source_file);
 
   struct PParser parser;
   parser.lexer = &lexer;
@@ -38,29 +38,6 @@ parse(const char* p_input)
   p_identifier_table_destroy(&identifier_table);
 }
 
-static const char*
-read_file(const char* p_filename)
-{
-  FILE* file = fopen(p_filename, "rb");
-  if (file == NULL) {
-    error("failed to open file '%s'", p_filename);
-    return NULL;
-  }
-
-  fseek(file, 0, SEEK_END);
-  long bufsize = ftell(file);
-  fseek(file, 0, SEEK_SET);
-
-  char* buffer = malloc(sizeof(char) * (bufsize + 1 /* NUL-terminated */));
-  assert(buffer != NULL);
-
-  fread(buffer, sizeof(char), bufsize, file);
-  buffer[bufsize] = '\0';
-
-  fclose(file);
-  return buffer;
-}
-
 int
 main(int p_argc, char* p_argv[])
 {
@@ -76,19 +53,21 @@ main(int p_argc, char* p_argv[])
     }
   }
 
-  const char* code = read_file(p_argv[1]);
-  if (code == NULL)
+  PSourceFile* source_file = p_source_file_open(p_argv[1]);
+  if (source_file == NULL) {
+    error("failed to open file '%s'", p_argv[1]);
     return EXIT_FAILURE;
+  }
 
   p_bump_init(&p_global_bump_allocator);
   p_init_types();
 
-  parse(code);
+  parse(source_file);
 
   if (g_verify_mode_enabled)
     verify_finalize();
 
-  free(code);
+  p_source_file_close(source_file);
   p_bump_destroy(&p_global_bump_allocator);
   return EXIT_SUCCESS;
 }

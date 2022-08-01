@@ -3,7 +3,7 @@
 #include <stddef.h>
 
 const char*
-p_token_kind_get_name(enum PTokenKind p_token_kind)
+p_token_kind_get_name(PTokenKind p_token_kind)
 {
   switch (p_token_kind) {
 #define TOKEN(kind)                                                            \
@@ -19,7 +19,7 @@ p_token_kind_get_name(enum PTokenKind p_token_kind)
 }
 
 const char*
-p_token_kind_get_spelling(enum PTokenKind p_token_kind)
+p_token_kind_get_spelling(PTokenKind p_token_kind)
 {
   switch (p_token_kind) {
 #define TOKEN(kind)                                                            \
@@ -38,7 +38,7 @@ p_token_kind_get_spelling(enum PTokenKind p_token_kind)
 }
 
 bool
-p_token_kind_is_keyword(enum PTokenKind p_token_kind)
+p_token_kind_is_keyword(PTokenKind p_token_kind)
 {
   switch (p_token_kind) {
 #define TOKEN(kind)

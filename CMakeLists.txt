@@ -2,7 +2,7 @@ cmake_minimum_required (VERSION 3.8)
 
 project("peony")
 
-add_executable(peony
+add_library(peony_lib STATIC
     "src/utils/hedley.h"
 
     "src/utils/bump_allocator.c"
@@ -11,7 +11,6 @@ add_executable(peony
     "src/identifier_table.h"
     "src/lexer.h"
     "src/lexer_re2c.c"
-    "src/main.c"
     "src/token.c"
     "src/token.h"
     "src/token_kind.c"
@@ -21,7 +20,10 @@ add_executable(peony
     "src/ast.h"
     "src/ast.c"
     "src/parser.c"
- "src/parser.h" "src/type.h" "src/type.c" "src/scope.h"   "src/scope.c" "src/utils/hash_table_common.h" "src/utils/hash_table_common.c" "src/codegen_llvm.h" "src/codegen_llvm.c" "src/utils/dynamic_array.h" "src/utils/dynamic_array.c" "src/utils/diag.h" "src/utils/diag.c" "src/sema.h" "src/sema.c")
+ "src/parser.h" "src/type.h" "src/type.c" "src/scope.h"   "src/scope.c" "src/utils/hash_table_common.h" "src/utils/hash_table_common.c" "src/codegen_llvm.h" "src/codegen_llvm.c" "src/utils/dynamic_array.h" "src/utils/dynamic_array.c" "src/utils/diag.h" "src/utils/diag.c" "src/sema.h" "src/sema.c" "src/utils/line_map.h" "src/utils/line_map.c" "src/utils/source_location.h" "src/utils/source_file.h" "src/utils/source_file.c" "src/utils/source_location.c")
+
+add_executable(peony "src/main.c")
+target_link_libraries(peony PRIVATE peony_lib)
 
 if(MSCV)
     target_compile_options(peony /W4 /WX)
@@ -48,10 +50,24 @@ list(APPEND CMAKE_MODULE_PATH "${LLVM_CMAKE_DIR}")
 include(HandleLLVMOptions)
 add_definitions(${LLVM_DEFINITIONS})
 
-target_include_directories(peony PRIVATE ${LLVM_INCLUDE_DIRS})
+target_include_directories(peony_lib PUBLIC ${LLVM_INCLUDE_DIRS})
 
 # Find the libraries that correspond to the LLVM components that we wish to use
 llvm_map_components_to_libnames(llvm_libs support core irreader x86codegen passes )
 
 # Link against LLVM libraries
-target_link_libraries(peony PRIVATE ${llvm_libs})
+target_link_libraries(peony_lib PUBLIC ${llvm_libs})
+
+# Testing:
+enable_testing()
+include(GoogleTest)
+find_package(GTest CONFIG REQUIRED)
+
+add_executable(peony_test
+    "src/utils/line_map_test.cxx"
+)
+
+target_link_libraries(peony_test PRIVATE peony_lib)
+target_link_libraries(peony_test PRIVATE GTest::gtest GTest::gtest_main)
+gtest_discover_tests(peony_test)
+

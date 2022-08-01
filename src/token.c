@@ -5,7 +5,7 @@
 #include <stdio.h>
 
 const char*
-p_get_token_spelling(struct PToken* p_token)
+p_get_token_spelling(PToken* p_token)
 {
   if (p_token->kind == P_TOK_IDENTIFIER) {
     return p_token->data.identifier_info->spelling;
@@ -15,7 +15,7 @@ p_get_token_spelling(struct PToken* p_token)
 }
 
 void
-p_token_dump(struct PToken* p_token)
+p_token_dump(PToken* p_token)
 {
   assert(p_token != NULL);
 

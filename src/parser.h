@@ -6,7 +6,7 @@
 
 struct PParser
 {
-  struct PLexer* lexer;
+  PLexer* lexer;
   PToken lookahead;
 
   PSema sema;

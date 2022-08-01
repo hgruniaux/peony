@@ -11,6 +11,11 @@
 #include <string.h>
 
 #define LOOKAHEAD_IS(p_kind) ((p_parser)->lookahead.kind == (p_kind))
+#define LOOKAHEAD_BEGIN_LOC ((p_parser)->lookahead.source_location)
+#define LOOKAHEAD_END_LOC ((p_parser)->lookahead.source_location + (p_parser)->lookahead.token_length)
+#define SET_NODE_LOC_RANGE(p_node, p_loc_beg, p_loc_end)                                                               \
+  (P_AST_GET_SOURCE_RANGE(p_node).begin = (p_loc_beg));                                                                \
+  (P_AST_GET_SOURCE_RANGE(p_node).end = (p_loc_end))
 
 static const char*
 trim_whitespace_left(const char* p_it)
@@ -221,6 +226,7 @@ parse_compound_stmt(struct PParser* p_parser)
 {
   sema_push_scope(&p_parser->sema, P_SF_NONE);
 
+  PSourceLocation lbrace_loc = LOOKAHEAD_BEGIN_LOC;
   expect_token(p_parser, P_TOK_LBRACE);
 
   PDynamicArray stmts;
@@ -230,6 +236,7 @@ parse_compound_stmt(struct PParser* p_parser)
     p_dynamic_array_append(&stmts, stmt);
   }
 
+  PSourceLocation rbrace_loc = LOOKAHEAD_BEGIN_LOC;
   expect_token(p_parser, P_TOK_RBRACE);
 
   PAstCompoundStmt* node =
@@ -237,6 +244,7 @@ parse_compound_stmt(struct PParser* p_parser)
   node->stmt_count = stmts.size;
   memcpy(node->stmts, stmts.buffer, sizeof(PAst*) * stmts.size);
   p_dynamic_array_destroy(&stmts);
+  SET_NODE_LOC_RANGE(node, lbrace_loc, rbrace_loc + 1);
   sema_pop_scope(&p_parser->sema);
   return (PAst*)node;
 }
@@ -317,7 +325,7 @@ parse_func_decl(struct PParser* p_parser)
     expect_token(p_parser, P_TOK_LBRACE);
     skip_until_no_error(p_parser, P_TOK_RBRACE);
     sema_pop_scope(&p_parser->sema);
-    return decl;
+    return (PDecl*)decl;
   }
 
   decl->body = parse_compound_stmt(p_parser);
@@ -340,6 +348,8 @@ static PAst*
 parse_let_stmt(struct PParser* p_parser)
 {
   assert(LOOKAHEAD_IS(P_TOK_KEY_let));
+
+  PSourceLocation loc_begin = LOOKAHEAD_BEGIN_LOC;
   consume_token(p_parser);
 
   PIdentifierInfo* identifier_info = NULL;
@@ -363,6 +373,7 @@ parse_let_stmt(struct PParser* p_parser)
     init_expr = parse_expr(p_parser);
   }
 
+  PSourceLocation loc_end = LOOKAHEAD_END_LOC;
   skip_until(p_parser, P_TOK_SEMI);
 
   if (type == NULL) {
@@ -390,6 +401,7 @@ parse_let_stmt(struct PParser* p_parser)
 
   PAstLetStmt* node = CREATE_NODE(PAstLetStmt, P_AST_NODE_LET_STMT);
   node->var_decl = symbol->decl;
+  SET_NODE_LOC_RANGE(node, loc_begin, loc_end);
   return (PAst*)node;
 }
 
@@ -401,11 +413,14 @@ static PAst*
 parse_break_stmt(struct PParser* p_parser)
 {
   assert(LOOKAHEAD_IS(P_TOK_KEY_break));
+
+  PSourceLocation loc_begin = LOOKAHEAD_BEGIN_LOC;
   consume_token(p_parser);
 
+  PAstBreakStmt* node = CREATE_NODE(PAstBreakStmt, P_AST_NODE_BREAK_STMT);
+  SET_NODE_LOC_RANGE(node, loc_begin, LOOKAHEAD_END_LOC);
   expect_token(p_parser, P_TOK_SEMI);
 
-  PAstBreakStmt* node = CREATE_NODE(PAstBreakStmt, P_AST_NODE_BREAK_STMT);
   sema_check_break_stmt(&p_parser->sema, node);
   return (PAst*)node;
 }
@@ -418,11 +433,14 @@ static PAst*
 parse_continue_stmt(struct PParser* p_parser)
 {
   assert(LOOKAHEAD_IS(P_TOK_KEY_continue));
+
+  PSourceLocation loc_begin = LOOKAHEAD_BEGIN_LOC;
   consume_token(p_parser);
 
+  PAstContinueStmt* node = CREATE_NODE(PAstContinueStmt, P_AST_NODE_CONTINUE_STMT);
+  SET_NODE_LOC_RANGE(node, loc_begin, LOOKAHEAD_END_LOC);
   expect_token(p_parser, P_TOK_SEMI);
 
-  PAstContinueStmt* node = CREATE_NODE(PAstContinueStmt, P_AST_NODE_CONTINUE_STMT);
   sema_check_continue_stmt(&p_parser->sema, node);
   return (PAst*)node;
 }
@@ -436,6 +454,8 @@ static PAst*
 parse_return_stmt(struct PParser* p_parser)
 {
   assert(LOOKAHEAD_IS(P_TOK_KEY_return));
+
+  PSourceLocation loc_begin = LOOKAHEAD_BEGIN_LOC;
   consume_token(p_parser);
 
   PAst* ret_expr = NULL;
@@ -445,9 +465,11 @@ parse_return_stmt(struct PParser* p_parser)
 
   PAstReturnStmt* node = CREATE_NODE(PAstReturnStmt, P_AST_NODE_RETURN_STMT);
   node->ret_expr = ret_expr;
-  sema_check_return_stmt(&p_parser->sema, node);
 
+  SET_NODE_LOC_RANGE(node, loc_begin, LOOKAHEAD_END_LOC);
   expect_token(p_parser, P_TOK_SEMI);
+
+  sema_check_return_stmt(&p_parser->sema, node);
   return (PAst*)node;
 }
 
@@ -460,12 +482,14 @@ static PAst*
 parse_if_stmt(struct PParser* p_parser)
 {
   assert(LOOKAHEAD_IS(P_TOK_KEY_if));
+
+  PSourceLocation loc_begin = LOOKAHEAD_BEGIN_LOC;
   consume_token(p_parser);
 
   PAst* cond_expr = parse_expr(p_parser);
-
   PAst* then_stmt = parse_compound_stmt(p_parser);
 
+  PSourceLocation loc_end;
   PAst* else_stmt = NULL;
   if (LOOKAHEAD_IS(P_TOK_KEY_else)) {
     consume_token(p_parser);
@@ -475,12 +499,18 @@ parse_if_stmt(struct PParser* p_parser)
     } else {
       else_stmt = parse_compound_stmt(p_parser);
     }
+
+    loc_end = P_AST_GET_SOURCE_RANGE(else_stmt).end;
+  } else {
+    loc_end = P_AST_GET_SOURCE_RANGE(then_stmt).end;
   }
 
   PAstIfStmt* node = CREATE_NODE(PAstIfStmt, P_AST_NODE_IF_STMT);
   node->cond_expr = cond_expr;
   node->then_stmt = then_stmt;
   node->else_stmt = else_stmt;
+
+  SET_NODE_LOC_RANGE(node, loc_begin, loc_end);
   sema_check_if_stmt(&p_parser->sema, node);
   return (PAst*)node;
 }
@@ -493,6 +523,8 @@ static PAst*
 parse_while_stmt(struct PParser* p_parser)
 {
   assert(LOOKAHEAD_IS(P_TOK_KEY_while));
+
+  PSourceLocation loc_begin = LOOKAHEAD_BEGIN_LOC;
   consume_token(p_parser);
 
   sema_push_scope(&p_parser->sema, P_SF_BREAK | P_SF_CONTINUE);
@@ -506,6 +538,8 @@ parse_while_stmt(struct PParser* p_parser)
 
   node->cond_expr = cond_expr;
   node->body_stmt = body_stmt;
+
+  SET_NODE_LOC_RANGE(node, loc_begin, P_AST_GET_SOURCE_RANGE(body_stmt).end);
   sema_check_while_stmt(&p_parser->sema, node);
   sema_pop_scope(&p_parser->sema);
   return (PAst*)node;
@@ -567,12 +601,17 @@ parse_bool_literal(struct PParser* p_parser)
 {
   assert(LOOKAHEAD_IS(P_TOK_KEY_true) || LOOKAHEAD_IS(P_TOK_KEY_false));
 
+  PSourceLocation loc_begin = LOOKAHEAD_BEGIN_LOC;
+  PSourceLocation loc_end = LOOKAHEAD_END_LOC;
+
   const bool value = LOOKAHEAD_IS(P_TOK_KEY_true);
   consume_token(p_parser);
 
   PAstBoolLiteral* node = CREATE_NODE(PAstBoolLiteral, P_AST_NODE_BOOL_LITERAL);
   P_AST_EXPR_GET_TYPE(node) = p_type_get_bool();
   node->value = value;
+
+  SET_NODE_LOC_RANGE(node, loc_begin, loc_end);
   sema_check_bool_literal(&p_parser->sema, node);
   return (PAst*)node;
 }
@@ -585,6 +624,9 @@ parse_int_literal(struct PParser* p_parser)
 {
   assert(LOOKAHEAD_IS(P_TOK_INT_LITERAL));
 
+  PSourceLocation loc_begin = LOOKAHEAD_BEGIN_LOC;
+  PSourceLocation loc_end = LOOKAHEAD_END_LOC;
+
   unsigned long long value = 0;
   for (const char* it = p_parser->lookahead.data.literal_begin; it != p_parser->lookahead.data.literal_end; ++it) {
     value *= 10;
@@ -596,6 +638,8 @@ parse_int_literal(struct PParser* p_parser)
   PAstIntLiteral* node = CREATE_NODE(PAstIntLiteral, P_AST_NODE_INT_LITERAL);
   P_AST_EXPR_GET_TYPE(node) = p_type_get_i32();
   node->value = value;
+
+  SET_NODE_LOC_RANGE(node, loc_begin, loc_end);
   sema_check_int_literal(&p_parser->sema, node);
   return (PAst*)node;
 }
@@ -607,11 +651,15 @@ static PAst*
 parse_float_literal(struct PParser* p_parser)
 {
   assert(LOOKAHEAD_IS(P_TOK_FLOAT_LITERAL));
+
+  PSourceLocation loc_begin = LOOKAHEAD_BEGIN_LOC;
+  PSourceLocation loc_end = LOOKAHEAD_END_LOC;
   consume_token(p_parser);
 
   PAstFloatLiteral* node = CREATE_NODE(PAstFloatLiteral, P_AST_NODE_FLOAT_LITERAL);
   P_AST_EXPR_GET_TYPE(node) = p_type_get_f32();
   // TODO: parse value of float literal
+  SET_NODE_LOC_RANGE(node, loc_begin, loc_end);
   sema_check_float_literal(&p_parser->sema, node);
   return (PAst*)node;
 }
@@ -624,12 +672,21 @@ static PAst*
 parse_paren_expr(struct PParser* p_parser)
 {
   assert(LOOKAHEAD_IS(P_TOK_LPAREN));
+
+  PSourceLocation lparen_loc = LOOKAHEAD_BEGIN_LOC;
   consume_token(p_parser);
 
   PAstParenExpr* node = CREATE_NODE(PAstParenExpr, P_AST_NODE_PAREN_EXPR);
   node->sub_expr = parse_expr(p_parser);
-  sema_check_paren_expr(&p_parser->sema, node);
+
+  PSourceLocation rparen_loc = LOOKAHEAD_BEGIN_LOC;
   expect_token(p_parser, P_TOK_RPAREN);
+
+  node->lparen_loc = lparen_loc;
+  node->rparen_loc = rparen_loc;
+
+  SET_NODE_LOC_RANGE(node, lparen_loc, rparen_loc + 1);
+  sema_check_paren_expr(&p_parser->sema, node);
   return (PAst*)node;
 }
 
@@ -642,9 +699,12 @@ parse_decl_ref_expr(struct PParser* p_parser)
 {
   assert(p_parser->lookahead.kind == P_TOK_IDENTIFIER);
 
+  PSourceLocation loc_begin = LOOKAHEAD_BEGIN_LOC;
+  PSourceLocation loc_end = LOOKAHEAD_END_LOC;
   PIdentifierInfo* name = p_parser->lookahead.data.identifier_info;
   consume_token(p_parser);
   PAstDeclRefExpr* node = CREATE_NODE(PAstDeclRefExpr, P_AST_NODE_DECL_REF_EXPR);
+  SET_NODE_LOC_RANGE(node, loc_begin, loc_end);
   sema_check_decl_ref_expr(&p_parser->sema, node, name);
   return (PAst*)node;
 }
@@ -709,6 +769,7 @@ parse_call_expr(struct PParser* p_parser)
     consume_token(p_parser); /* consume ',' */
   }
 
+  PSourceLocation end_loc = LOOKAHEAD_END_LOC;
   expect_token(p_parser, P_TOK_RPAREN);
 
   PAstCallExpr* node = CREATE_NODE_EXTRA_SIZE(PAstCallExpr, sizeof(PAst*) * (args.size - 1), P_AST_NODE_CALL_EXPR);
@@ -716,6 +777,7 @@ parse_call_expr(struct PParser* p_parser)
   node->arg_count = args.size;
   memcpy(node->args, args.buffer, sizeof(PAst*) * args.size);
   p_dynamic_array_destroy(&args);
+  SET_NODE_LOC_RANGE(node, P_AST_GET_SOURCE_RANGE(callee).begin, end_loc);
   sema_check_call_expr(&p_parser->sema, node);
   return (PAst*)node;
 }
@@ -732,6 +794,7 @@ static PAst*
 parse_unary_expr(struct PParser* p_parser)
 {
   PAstUnaryOp op;
+  PSourceLocation op_loc = LOOKAHEAD_BEGIN_LOC;
   switch (p_parser->lookahead.kind) {
     case P_TOK_EXCLAIM:
       consume_token(p_parser);
@@ -755,8 +818,10 @@ parse_unary_expr(struct PParser* p_parser)
 
   PAst* sub_expr = parse_unary_expr(p_parser);
   PAstUnaryExpr* node = CREATE_NODE(PAstUnaryExpr, P_AST_NODE_UNARY_EXPR);
+  node->op_loc = op_loc;
   node->opcode = op;
   node->sub_expr = sub_expr;
+  SET_NODE_LOC_RANGE(node, op_loc, P_AST_GET_SOURCE_RANGE(sub_expr).end);
   sema_check_unary_expr(&p_parser->sema, node);
   return (PAst*)node;
 }
@@ -778,6 +843,9 @@ parse_cast_expr(struct PParser* p_parser)
     PAstCastExpr* node = CREATE_NODE(PAstCastExpr, P_AST_NODE_CAST_EXPR);
     node->sub_expr = sub_expr;
     P_AST_EXPR_GET_TYPE(node) = type;
+    // FIXME: better end source location for cast expr instead of LOOKAHEAD_BEGIN_LOC
+    //        probably use type->source_range.end when types have localizations.
+    SET_NODE_LOC_RANGE(node, P_AST_GET_SOURCE_RANGE(sub_expr).begin, LOOKAHEAD_BEGIN_LOC);
     sema_check_cast_expr(&p_parser->sema, node);
     return (PAst*)node;
   }
@@ -824,6 +892,7 @@ parse_binary_expr(struct PParser* p_parser, PAst* p_lhs, int p_expr_prec)
 
     /* Okay, we know this is a binary_op. */
     const PAstBinaryOp binary_op = get_binop_from_tok_kind(p_parser->lookahead.kind);
+    const PSourceLocation op_loc = LOOKAHEAD_BEGIN_LOC;
     consume_token(p_parser);
 
     /* Parse the primary expression after the binary operator. */
@@ -845,6 +914,8 @@ parse_binary_expr(struct PParser* p_parser, PAst* p_lhs, int p_expr_prec)
     new_lhs->lhs = p_lhs;
     new_lhs->rhs = rhs;
     new_lhs->opcode = binary_op;
+    new_lhs->op_loc = op_loc;
+    SET_NODE_LOC_RANGE(new_lhs, P_AST_GET_SOURCE_RANGE(p_lhs).begin, P_AST_GET_SOURCE_RANGE(rhs).end);
     sema_check_binary_expr(&p_parser->sema, new_lhs);
     p_lhs = (PAst*)new_lhs;
   }
@@ -868,6 +939,7 @@ parse_expr(struct PParser* p_parser)
 static PAst*
 parse_translation_unit(struct PParser* p_parser)
 {
+  PSourceLocation loc_begin = LOOKAHEAD_BEGIN_LOC;
   sema_push_scope(&p_parser->sema, P_SF_NONE);
 
   PDynamicArray decls;
@@ -884,6 +956,7 @@ parse_translation_unit(struct PParser* p_parser)
 
   p_dynamic_array_destroy(&decls);
   sema_pop_scope(&p_parser->sema);
+  SET_NODE_LOC_RANGE(node, loc_begin, LOOKAHEAD_END_LOC);
   return (PAst*)node;
 }
 
