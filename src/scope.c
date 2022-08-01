@@ -111,6 +111,8 @@ p_scope_add_symbol(PScope* p_scope, PIdentifierInfo* p_name)
   symbol->scope = p_scope;
   symbol->name = p_name;
 
+  ++p_scope->item_count;
+
   /* Insert the symbol into the hash table: */
   if (!P_NEEDS_REHASHING(p_scope)) {
     p_scope->symbols[bucket_idx] = symbol;
