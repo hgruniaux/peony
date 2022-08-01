@@ -69,6 +69,11 @@ cg_to_llvm_type(PType* p_type)
       type = LLVMPointerType(cg_to_llvm_type(ptr_type->element_type), 0);
       break;
     }
+    case P_TYPE_ARRAY: {
+      PArrayType* array_type = (PArrayType*)p_type;
+      type = LLVMArrayType(cg_to_llvm_type(array_type->element_type), array_type->num_elements);
+      break;
+    }
     default:
       HEDLEY_UNREACHABLE_RETURN(NULL);
   }
