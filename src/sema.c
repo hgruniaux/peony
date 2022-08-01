@@ -21,8 +21,9 @@ sema_push_scope(PSema* p_s, PScopeFlags p_flags)
     if (new_scope == NULL) {
       new_scope = P_BUMP_ALLOC(&p_global_bump_allocator, PScope);
       p_s->scope_cache[p_s->current_scope_cache_idx] = new_scope;
-      p_scope_init(new_scope, p_s->current_scope, p_flags);
     }
+
+    p_scope_init(new_scope, p_s->current_scope, p_flags);
   }
 
   p_s->current_scope = new_scope;
@@ -341,6 +342,7 @@ sema_act_on_break_stmt(PSema* p_s, PSourceRange p_range)
 
   PAstBreakStmt* node = CREATE_NODE(PAstBreakStmt, P_AST_NODE_BREAK_STMT);
   node->loop_target = break_scope->statement;
+  assert(node->loop_target != NULL);
   return node;
 }
 
@@ -358,6 +360,7 @@ sema_act_on_continue_stmt(PSema* p_s, PSourceRange p_range)
 
   PAstContinueStmt* node = CREATE_NODE(PAstContinueStmt, P_AST_NODE_CONTINUE_STMT);
   node->loop_target = continue_scope->statement;
+  assert(node->loop_target != NULL);
   return node;
 }
 
@@ -450,10 +453,20 @@ sema_act_on_if_stmt(PSema* p_s, PAst* p_cond_expr, PAst* p_then_stmt, PAst* p_el
   return node;
 }
 
-PAstWhileStmt*
-sema_act_on_while_stmt(PSema* p_s, PAst* p_cond_expr, PAst* p_body_stmt, PScope* p_scope)
+PAstLoopStmt*
+sema_act_on_loop_stmt(PSema* p_s, PScope* p_scope)
 {
-  if (p_cond_expr == NULL || p_body_stmt == NULL)
+  assert(p_scope != NULL);
+
+  PAstLoopStmt* node = CREATE_NODE(PAstLoopStmt, P_AST_NODE_LOOP_STMT);
+  p_scope->statement = (PAst*)node;
+  return node;
+}
+
+PAstWhileStmt*
+sema_act_on_while_stmt(PSema* p_s, PAst* p_cond_expr, PScope* p_scope)
+{
+  if (p_cond_expr == NULL)
     return NULL;
 
   assert(p_scope != NULL);
@@ -465,7 +478,6 @@ sema_act_on_while_stmt(PSema* p_s, PAst* p_cond_expr, PAst* p_body_stmt, PScope*
 
   PAstWhileStmt* node = CREATE_NODE(PAstWhileStmt, P_AST_NODE_WHILE_STMT);
   node->cond_expr = p_cond_expr;
-  node->body_stmt = p_body_stmt;
   p_scope->statement = (PAst*)node;
   return node;
 }
@@ -766,6 +778,8 @@ check_call_args(PSourceRange p_call_range,
       diag_flush(d);
       has_error = true;
     }
+
+    p_args[i] = convert_to_rvalue(p_args[i]);
   }
 
   return !has_error;

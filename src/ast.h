@@ -15,6 +15,7 @@ typedef enum PAstKind
   P_AST_NODE_BREAK_STMT,
   P_AST_NODE_CONTINUE_STMT,
   P_AST_NODE_RETURN_STMT,
+  P_AST_NODE_LOOP_STMT,
   P_AST_NODE_WHILE_STMT,
   P_AST_NODE_IF_STMT,
   P_AST_NODE_BOOL_LITERAL,
@@ -94,7 +95,7 @@ typedef struct PAstReturnStmt
   PAst* ret_expr;
 } PAstReturnStmt;
 
-/** @brief A `if (cond_expr) then_stmt else else_stmt`. */
+/** @brief A `if cond_expr { then_stmt } else { else_stmt }` (else_stmt is optional). */
 typedef struct PAstIfStmt
 {
   PAstCommon common;
@@ -109,13 +110,15 @@ typedef struct PAstLoopCommon
   void* _llvm_continue_label;
 } PAstLoopCommon;
 
+/** @brief A `loop { body_stmt }`. */
 typedef struct PAstLoopStmt
 {
   PAstCommon common;
   PAstLoopCommon loop_common;
+  PAst* body_stmt;
 } PAstLoopStmt;
 
-/** @brief A `while (cond_expr) body_stmt`. */
+/** @brief A `while cond_expr { body_stmt }`. */
 typedef struct PAstWhileStmt
 {
   PAstCommon common;

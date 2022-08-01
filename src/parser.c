@@ -539,6 +539,38 @@ parse_if_stmt(struct PParser* p_parser)
 }
 
 /*
+ * loop_stmt:
+ *     "loop" compound_stmt
+ */
+static PAst*
+parse_loop_stmt(struct PParser* p_parser)
+{
+  assert(LOOKAHEAD_IS(P_TOK_KEY_loop));
+
+  PSourceLocation loc_begin = LOOKAHEAD_BEGIN_LOC;
+  consume_token(p_parser);
+
+  sema_push_scope(&p_parser->sema, P_SF_BREAK | P_SF_CONTINUE);
+
+  PAstLoopStmt* node = sema_act_on_loop_stmt(&p_parser->sema, p_parser->sema.current_scope);
+  if (node == NULL) {
+    parse_compound_stmt(p_parser);
+    sema_pop_scope(&p_parser->sema);
+    return NULL;
+  }
+
+  node->body_stmt = parse_compound_stmt(p_parser);
+  if (node->body_stmt == NULL) {
+    sema_pop_scope(&p_parser->sema);
+    return NULL;
+  }
+
+  SET_NODE_LOC_RANGE(node, loc_begin, P_AST_GET_SOURCE_RANGE(node->body_stmt).end);
+  sema_pop_scope(&p_parser->sema);
+  return (PAst*)node;
+}
+
+/*
  * while_stmt:
  *     "while" expr compound_stmt
  */
@@ -553,15 +585,21 @@ parse_while_stmt(struct PParser* p_parser)
   sema_push_scope(&p_parser->sema, P_SF_BREAK | P_SF_CONTINUE);
 
   PAst* cond_expr = parse_expr(p_parser);
-  PAst* body_stmt = parse_compound_stmt(p_parser);
 
-  PAstWhileStmt* node = sema_act_on_while_stmt(&p_parser->sema, cond_expr, body_stmt, p_parser->sema.current_scope);
+  PAstWhileStmt* node = sema_act_on_while_stmt(&p_parser->sema, cond_expr, p_parser->sema.current_scope);
   if (node == NULL) {
+    parse_compound_stmt(p_parser);
     sema_pop_scope(&p_parser->sema);
     return NULL;
   }
 
-  SET_NODE_LOC_RANGE(node, loc_begin, P_AST_GET_SOURCE_RANGE(body_stmt).end);
+  node->body_stmt = parse_compound_stmt(p_parser);
+  if (node->body_stmt == NULL) {
+    sema_pop_scope(&p_parser->sema);
+    return NULL;
+  }
+
+  SET_NODE_LOC_RANGE(node, loc_begin, P_AST_GET_SOURCE_RANGE(node->body_stmt).end);
   sema_pop_scope(&p_parser->sema);
   return (PAst*)node;
 }
@@ -587,6 +625,7 @@ parse_expr_stmt(struct PParser* p_parser)
  *     return_stmt
  *     if_stmt
  *     while_stmt
+ *     loop_stmt
  *     expr_stmt
  */
 static PAst*
@@ -607,6 +646,8 @@ parse_stmt(struct PParser* p_parser)
       return parse_if_stmt(p_parser);
     case P_TOK_KEY_while:
       return parse_while_stmt(p_parser);
+    case P_TOK_KEY_loop:
+      return parse_loop_stmt(p_parser);
     default:
       return parse_expr_stmt(p_parser);
   }

@@ -76,8 +76,11 @@ sema_act_on_return_stmt(PSema* p_s, PSourceLocation p_semi_loc, PAst* p_ret_expr
 PAstIfStmt*
 sema_act_on_if_stmt(PSema* p_s, PAst* p_cond_expr, PAst* p_then_stmt, PAst* p_else_stmt);
 
+PAstLoopStmt*
+sema_act_on_loop_stmt(PSema* p_s, PScope* p_scope);
+
 PAstWhileStmt*
-sema_act_on_while_stmt(PSema* p_s, PAst* p_cond_expr, PAst* p_body_stmt, PScope* p_scope);
+sema_act_on_while_stmt(PSema* p_s, PAst* p_cond_expr, PScope* p_scope);
 
 PAstBoolLiteral*
 sema_act_on_bool_literal(PSema* p_s, PSourceRange p_range, bool p_value);

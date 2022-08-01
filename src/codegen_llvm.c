@@ -222,6 +222,7 @@ cg_break_stmt(struct PCodegenLLVM* p_cg, PAstBreakStmt* p_node)
   assert(P_AST_GET_KIND(p_node) == P_AST_NODE_BREAK_STMT);
 
   PAstLoopStmt* target_loop = (PAstLoopStmt*)p_node->loop_target;
+  assert(target_loop != NULL);
   LLVMBuildBr(p_cg->builder, target_loop->loop_common._llvm_break_label);
   cg_insert_dummy_block(p_cg);
   return NULL;
@@ -233,6 +234,7 @@ cg_continue_stmt(struct PCodegenLLVM* p_cg, PAstContinueStmt* p_node)
   assert(P_AST_GET_KIND(p_node) == P_AST_NODE_CONTINUE_STMT);
 
   PAstLoopStmt* target_loop = (PAstLoopStmt*)p_node->loop_target;
+  assert(target_loop != NULL);
   LLVMBuildBr(p_cg->builder, target_loop->loop_common._llvm_continue_label);
   cg_insert_dummy_block(p_cg);
   return NULL;
@@ -252,6 +254,29 @@ cg_return_stmt(struct PCodegenLLVM* p_cg, PAstReturnStmt* p_node)
 
   cg_insert_dummy_block(p_cg);
 
+  return NULL;
+}
+
+static LLVMValueRef
+cg_loop_stmt(struct PCodegenLLVM* p_cg, PAstLoopStmt* p_node)
+{
+  assert(P_AST_GET_KIND(p_node) == P_AST_NODE_LOOP_STMT);
+
+  LLVMBasicBlockRef body_bb = LLVMAppendBasicBlock(p_cg->current_function, "");
+  LLVMBasicBlockRef cont_bb = LLVMAppendBasicBlock(p_cg->current_function, "");
+
+  p_node->loop_common._llvm_break_label = cont_bb;
+  p_node->loop_common._llvm_continue_label = body_bb;
+
+  LLVMBuildBr(p_cg->builder, body_bb);
+
+  /* Body block: */
+  LLVMPositionBuilderAtEnd(p_cg->builder, body_bb);
+  cg_visit(p_cg, p_node->body_stmt);
+  LLVMBuildBr(p_cg->builder, body_bb);
+
+  /* Cont block: */
+  LLVMPositionBuilderAtEnd(p_cg->builder, cont_bb);
   return NULL;
 }
 
@@ -685,6 +710,7 @@ cg_visit(struct PCodegenLLVM* p_cg, PAst* p_node)
     DISPATCH(P_AST_NODE_BREAK_STMT, PAstBreakStmt, cg_break_stmt);
     DISPATCH(P_AST_NODE_CONTINUE_STMT, PAstContinueStmt, cg_continue_stmt);
     DISPATCH(P_AST_NODE_RETURN_STMT, PAstReturnStmt, cg_return_stmt);
+    DISPATCH(P_AST_NODE_LOOP_STMT, PAstLoopStmt, cg_loop_stmt);
     DISPATCH(P_AST_NODE_WHILE_STMT, PAstWhileStmt, cg_while_stmt);
     DISPATCH(P_AST_NODE_IF_STMT, PAstIfStmt, cg_if_stmt);
     DISPATCH(P_AST_NODE_BOOL_LITERAL, PAstBoolLiteral, cg_bool_literal);
