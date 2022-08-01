@@ -61,7 +61,7 @@ compute_hash(const char* p_begin, const char* p_end)
 }
 
 static bool
-is_same_identifier(struct PIdentifierInfo* p_identifier_info,
+is_same_identifier(PIdentifierInfo* p_identifier_info,
                    const char* p_spelling_begin,
                    const char* p_spelling_end)
 {
@@ -75,20 +75,20 @@ is_same_identifier(struct PIdentifierInfo* p_identifier_info,
 }
 
 void
-p_identifier_table_init(struct PIdentifierTable* p_table)
+p_identifier_table_init(PIdentifierTable* p_table)
 {
   assert(p_table != NULL);
 
   p_table->bucket_count = p_get_new_hash_table_size(0);
   p_table->identifiers =
-    P_ALLOC_BUCKETS(p_table->bucket_count, struct PIdentifierInfo*);
+    P_ALLOC_BUCKETS(p_table->bucket_count, PIdentifierInfo*);
 
   p_table->item_count = 0;
   p_table->rehashing_count = 0;
 }
 
 void
-p_identifier_table_destroy(struct PIdentifierTable* p_table)
+p_identifier_table_destroy(PIdentifierTable* p_table)
 {
   assert(p_table != NULL);
 
@@ -96,7 +96,7 @@ p_identifier_table_destroy(struct PIdentifierTable* p_table)
 }
 
 void
-p_identifier_table_dump_stats(struct PIdentifierTable* p_table)
+p_identifier_table_dump_stats(PIdentifierTable* p_table)
 {
   assert(p_table != NULL);
 
@@ -113,8 +113,8 @@ p_identifier_table_dump_stats(struct PIdentifierTable* p_table)
  * that the given identifier info DOES NOT exist already in the table and
  * that the table has enough space (no rehashing is done). */
 static void
-insert_item(struct PIdentifierTable* p_table,
-            struct PIdentifierInfo* p_identifier_info)
+insert_item(PIdentifierTable* p_table,
+            PIdentifierInfo* p_identifier_info)
 {
   size_t bucket_idx = p_identifier_info->hash % p_table->bucket_count;
   /* This loop is guaranteed to terminate because the load factor < 1. */
@@ -125,14 +125,14 @@ insert_item(struct PIdentifierTable* p_table,
 }
 
 static void
-rehash_table(struct PIdentifierTable* p_table)
+rehash_table(PIdentifierTable* p_table)
 {
   const size_t old_bucket_count = p_table->bucket_count;
-  struct PIdentifierInfo** old_hash_table = p_table->identifiers;
+  PIdentifierInfo** old_hash_table = p_table->identifiers;
 
   p_table->bucket_count = p_get_new_hash_table_size(p_table->bucket_count);
   p_table->identifiers =
-    P_ALLOC_BUCKETS(p_table->bucket_count, struct PIdentifierInfo*);
+    P_ALLOC_BUCKETS(p_table->bucket_count, PIdentifierInfo*);
   for (size_t i = 0; i < old_bucket_count; ++i) {
     if (old_hash_table[i] != NULL)
       insert_item(p_table, old_hash_table[i]);
@@ -142,16 +142,16 @@ rehash_table(struct PIdentifierTable* p_table)
   p_table->rehashing_count++;
 }
 
-static struct PIdentifierInfo*
+static PIdentifierInfo*
 ident_info_new(const char* p_spelling_begin,
                const char* p_spelling_end,
                size_t p_hash)
 {
   const size_t spelling_len = p_spelling_end - p_spelling_begin;
-  struct PIdentifierInfo* identifier_info =
+  PIdentifierInfo* identifier_info =
     p_bump_alloc(&p_global_bump_allocator,
-                 sizeof(struct PIdentifierInfo) + sizeof(char) * spelling_len,
-                 P_ALIGNOF(struct PIdentifierInfo));
+                 sizeof(PIdentifierInfo) + sizeof(char) * spelling_len,
+                 P_ALIGNOF(PIdentifierInfo));
   identifier_info->hash = p_hash;
   identifier_info->token_kind = P_TOK_IDENTIFIER;
   identifier_info->spelling_len = spelling_len;
@@ -162,8 +162,8 @@ ident_info_new(const char* p_spelling_begin,
   return identifier_info;
 }
 
-struct PIdentifierInfo*
-p_identifier_table_get(struct PIdentifierTable* p_table,
+PIdentifierInfo*
+p_identifier_table_get(PIdentifierTable* p_table,
                        const char* p_spelling_begin,
                        const char* p_spelling_end)
 {
@@ -190,7 +190,7 @@ p_identifier_table_get(struct PIdentifierTable* p_table,
   }
 
   /* Otherwise, insert it: */
-  struct PIdentifierInfo* identifier_info =
+  PIdentifierInfo* identifier_info =
     ident_info_new(p_spelling_begin, p_spelling_end, hash);
 
   if (!P_NEEDS_REHASHING(p_table)) {
@@ -204,7 +204,7 @@ p_identifier_table_get(struct PIdentifierTable* p_table,
 }
 
 void
-p_identifier_table_register_keywords(struct PIdentifierTable* p_table)
+p_identifier_table_register_keywords(PIdentifierTable* p_table)
 {
   assert(p_table != NULL);
 

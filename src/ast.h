@@ -207,6 +207,9 @@ typedef enum PAstBinaryOp
 bool
 p_binop_is_assignment(PAstBinaryOp p_binop);
 
+const char*
+p_binop_get_spelling(PAstBinaryOp p_binop);
+
 /** @brief A binary expression (e.g. `a + b`). */
 typedef struct PAstBinaryExpr
 {

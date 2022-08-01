@@ -124,7 +124,10 @@ sema_check_pre_func_decl(PSema* p_s, PDeclFunction* p_node, PType* return_type)
   PIdentifierInfo* name = P_DECL_GET_NAME(p_node);
   PSymbol* symbol = sema_local_lookup(p_s, name);
   if (symbol != NULL) {
-    error("redeclaration of function '%i'", p_node);
+    // FIXME: provide better source location
+    PDiag* d = diag(P_DK_err_redeclaration_function);
+    diag_add_arg_ident(d, name);
+    diag_flush(d);
     p_s->error_count++;
     return true;
   }
@@ -146,7 +149,10 @@ sema_check_func_decl(PSema* p_s, PDeclFunction* p_node)
   for (int i = 0; i < p_node->param_count; ++i) {
     if (p_node->params[i]->default_expr == NULL) {
       if (found_first_default_arg) {
-        error("default argument missing for parameter %d of function '%i'", i + 1, name);
+        PDiag* d = diag_at(P_DK_err_missing_default_argument, P_AST_GET_SOURCE_RANGE(p_node->params).end);
+        diag_add_arg_int(d, i + 1);
+        diag_add_arg_ident(d, name);
+        diag_flush(d);
         has_error = true;
         p_s->error_count++;
       }
@@ -166,7 +172,10 @@ sema_check_param_decl(PSema* p_s, PDeclParam* p_node)
   PIdentifierInfo* name = P_DECL_GET_NAME(p_node);
   PSymbol* symbol = sema_local_lookup(p_s, name);
   if (symbol != NULL) {
-    error("redeclaration of parameter '%i'", p_node);
+    // FIXME: provide better source location
+    PDiag* d = diag(P_DK_err_parameter_name_already_used);
+    diag_add_arg_ident(d, name);
+    diag_flush(d);
     p_s->error_count++;
     return true;
   }
@@ -174,7 +183,10 @@ sema_check_param_decl(PSema* p_s, PDeclParam* p_node)
   bool has_error = false;
 
   if (p_node->default_expr != NULL && p_ast_get_type(p_node->default_expr) != P_DECL_GET_TYPE(p_node)) {
-    error("expected '%ty', found '%ty'", P_DECL_GET_TYPE(p_node), p_ast_get_type(p_node->default_expr));
+    PDiag* d = diag_at(P_DK_err_expected_type, P_AST_GET_SOURCE_RANGE(p_node->default_expr).begin);
+    diag_add_arg_type(d, P_DECL_GET_TYPE(p_node));
+    diag_add_arg_type(d, p_ast_get_type(p_node->default_expr));
+    diag_flush(d);
     has_error = true;
     p_s->error_count++;
   }
@@ -208,7 +220,9 @@ sema_check_break_stmt(PSema* p_s, PAstBreakStmt* p_node)
 
   PScope* break_scope = find_nearest_scope_with_flag(p_s, P_SF_BREAK);
   if (break_scope == NULL) {
-    error("'break' outside of a loop");
+    PDiag* d = diag_at(P_DK_err_break_or_continue_outside_of_loop, P_AST_GET_SOURCE_RANGE(p_node).begin);
+    diag_add_arg_str(d, "break");
+    diag_flush(d);
     p_s->error_count++;
     return true;
   } else {
@@ -227,7 +241,9 @@ sema_check_continue_stmt(PSema* p_s, PAstContinueStmt* p_node)
 
   PScope* continue_scope = find_nearest_scope_with_flag(p_s, P_SF_CONTINUE);
   if (continue_scope == NULL) {
-    error("'continue' outside of a loop");
+    PDiag* d = diag_at(P_DK_err_break_or_continue_outside_of_loop, P_AST_GET_SOURCE_RANGE(p_node).begin);
+    diag_add_arg_str(d, "continue");
+    diag_flush(d);
     p_s->error_count++;
     return true;
   } else {
@@ -247,7 +263,10 @@ sema_check_return_stmt(PSema* p_s, PAstReturnStmt* p_node)
   if (p_node->ret_expr != NULL) {
     PType* ret_type = p_ast_get_type(p_node->ret_expr);
     if (!are_types_compatible(ret_type, p_s->curr_func_type->ret_type)) {
-      error("expected '%ty', found '%ty'", p_s->curr_func_type->ret_type, ret_type);
+      PDiag* d = diag(P_DK_err_expected_type);
+      diag_add_arg_type(d, p_s->curr_func_type->ret_type);
+      diag_add_arg_type(d, ret_type);
+      diag_flush(d);
       has_error = true;
       p_s->error_count++;
     }
@@ -255,7 +274,10 @@ sema_check_return_stmt(PSema* p_s, PAstReturnStmt* p_node)
     p_node->ret_expr = convert_to_rvalue(p_node->ret_expr);
   } else {
     if (!p_type_is_void(p_s->curr_func_type->ret_type)) {
-      error("expected '%ty', found '%ty'", p_type_get_void(), p_ast_get_type(p_node->ret_expr));
+      PDiag* d = diag(P_DK_err_expected_type);
+      diag_add_arg_type(d, p_type_get_void());
+      diag_add_arg_type(d, p_ast_get_type(p_node->ret_expr));
+      diag_flush(d);
       has_error = true;
       p_s->error_count++;
     }
@@ -270,6 +292,8 @@ check_suspicious_condition_expr(PSema* p_s, PAst* p_cond_expr)
   if (P_AST_GET_KIND(p_cond_expr) != P_AST_NODE_BINARY_EXPR)
     return;
 
+    // TODO: reimplement this warning
+#if 0
   PAstBinaryExpr* bin_cond_expr = (PAstBinaryExpr*)p_cond_expr;
   bool has_warning = false;
   if (bin_cond_expr->opcode == P_BINARY_ASSIGN) {
@@ -285,6 +309,7 @@ check_suspicious_condition_expr(PSema* p_s, PAst* p_cond_expr)
   if (has_warning) {
     note("add parenthesis around condition to ignore above warning");
   }
+#endif
 }
 
 bool
@@ -299,7 +324,10 @@ sema_check_if_stmt(PSema* p_s, PAstIfStmt* p_node)
 
   PType* cond_type = p_ast_get_type(p_node->cond_expr);
   if (!p_type_is_bool(cond_type)) {
-    error("expected '%ty', found '%ty'", p_type_get_bool(), cond_type);
+    PDiag* d = diag_at(P_DK_err_expected_type, P_AST_GET_SOURCE_RANGE(p_node->cond_expr).begin);
+    diag_add_arg_type(d, p_type_get_bool());
+    diag_add_arg_type(d, cond_type);
+    diag_flush(d);
     has_error = true;
     p_s->error_count++;
   }
@@ -322,7 +350,10 @@ sema_check_while_stmt(PSema* p_s, PAstWhileStmt* p_node)
 
   PType* cond_type = p_ast_get_type(p_node->cond_expr);
   if (!p_type_is_bool(cond_type)) {
-    error("expected '%ty', found '%ty'", p_type_get_bool(), cond_type);
+    PDiag* d = diag_at(P_DK_err_expected_type, P_AST_GET_SOURCE_RANGE(p_node->cond_expr).begin);
+    diag_add_arg_type(d, p_type_get_bool());
+    diag_add_arg_type(d, cond_type);
+    diag_flush(d);
     has_error = true;
     p_s->error_count++;
   }
@@ -386,7 +417,8 @@ sema_check_int_literal(PSema* p_s, PAstIntLiteral* p_node)
   }
 
   if (value > max_value) {
-    error("integer literal too large for its type '%ty'", p_node->type);
+    PDiag* d = diag_at(P_DK_err_int_literal_too_large, P_AST_GET_SOURCE_RANGE(p_node).begin);
+    diag_flush(d);
     has_error = true;
     p_s->error_count++;
   }
@@ -416,7 +448,9 @@ sema_check_decl_ref_expr(PSema* p_s, PAstDeclRefExpr* p_node, PIdentifierInfo* p
   PDecl* decl = NULL;
   PSymbol* symbol = sema_lookup(p_s, p_name);
   if (symbol == NULL) {
-    error("use of undeclared variable '%i'", p_name);
+    PDiag* d = diag_at(P_DK_err_use_undeclared_variable, P_AST_GET_SOURCE_RANGE(p_node).begin);
+    diag_add_arg_ident(d, p_name);
+    diag_flush(d);
     has_error = true;
     p_s->error_count++;
   } else {
@@ -454,7 +488,10 @@ sema_check_unary_expr(PSema* p_s, PAstUnaryExpr* p_node)
   switch (p_node->opcode) {
     case P_UNARY_NEG:
       if (!p_type_is_float(type) && !p_type_is_signed(type)) {
-        error("cannot not apply unary operator '-' to type '%ty'", type);
+        PDiag* d = diag_at(P_DK_err_cannot_apply_unary_op, p_node->op_loc);
+        diag_add_arg_char(d, '-');
+        diag_add_arg_type(d, type);
+        diag_flush(d);
         p_s->error_count++;
         has_error = true;
       }
@@ -464,7 +501,10 @@ sema_check_unary_expr(PSema* p_s, PAstUnaryExpr* p_node)
       break;
     case P_UNARY_NOT:
       if (!p_type_is_bool(type) && !p_type_is_int(type)) {
-        error("cannot not apply unary operator '!' to type '%ty'", type);
+        PDiag* d = diag_at(P_DK_err_cannot_apply_unary_op, p_node->op_loc);
+        diag_add_arg_char(d, '!');
+        diag_add_arg_type(d, type);
+        diag_flush(d);
         p_s->error_count++;
         has_error = true;
       }
@@ -474,7 +514,9 @@ sema_check_unary_expr(PSema* p_s, PAstUnaryExpr* p_node)
       break;
     case P_UNARY_ADDRESS_OF:
       if (P_AST_EXPR_IS_RVALUE(p_node->sub_expr)) {
-        error("could not take address of an rvalue of type '%ty'", type);
+        PDiag* d = diag_at(P_DK_err_could_not_take_addr_rvalue, p_node->op_loc);
+        diag_add_arg_type(d, type);
+        diag_flush(d);
         p_s->error_count++;
         has_error = true;
       }
@@ -484,7 +526,9 @@ sema_check_unary_expr(PSema* p_s, PAstUnaryExpr* p_node)
       break;
     case P_UNARY_DEREF:
       if (!p_type_is_pointer(type)) {
-        error("indirection requires pointer operand ('%ty' invalid)", type);
+        PDiag* d = diag_at(P_DK_err_indirection_requires_ptr, p_node->op_loc);
+        diag_add_arg_type(d, type);
+        diag_flush(d);
         p_s->error_count++;
         has_error = true;
       } else {
@@ -517,13 +561,19 @@ sema_check_binary_expr(PSema* p_s, PAstBinaryExpr* p_node)
     case P_BINARY_LOG_AND:
     case P_BINARY_LOG_OR:
       if (!p_type_is_bool(lhs_type)) {
-        error("expected '%ty', found '%ty'", p_type_get_bool(), lhs_type);
+        PDiag* d = diag_at(P_DK_err_expected_type, P_AST_GET_SOURCE_RANGE(p_node->lhs).begin);
+        diag_add_arg_type(d, p_type_get_bool());
+        diag_add_arg_type(d, lhs_type);
+        diag_flush(d);
         has_error = true;
         p_s->error_count++;
       }
 
       if (!p_type_is_bool(rhs_type)) {
-        error("expected '%ty', found '%ty'", p_type_get_bool(), rhs_type);
+        PDiag* d = diag_at(P_DK_err_expected_type, P_AST_GET_SOURCE_RANGE(p_node->rhs).begin);
+        diag_add_arg_type(d, p_type_get_bool());
+        diag_add_arg_type(d, rhs_type);
+        diag_flush(d);
         has_error = true;
         p_s->error_count++;
       }
@@ -535,6 +585,16 @@ sema_check_binary_expr(PSema* p_s, PAstBinaryExpr* p_node)
     case P_BINARY_LE:
     case P_BINARY_GT:
     case P_BINARY_GE:
+      if (!are_types_compatible(lhs_type, rhs_type)) {
+        PDiag* d = diag_at(P_DK_err_cannot_bin_op_generic, p_node->op_loc);
+        diag_add_arg_str(d, p_binop_get_spelling(p_node->opcode));
+        diag_add_arg_type(d, lhs_type);
+        diag_add_arg_type(d, rhs_type);
+        diag_flush(d);
+        has_error = true;
+        p_s->error_count++;
+      }
+
       p_node->type = p_type_get_bool();
       break;
 
@@ -545,27 +605,54 @@ sema_check_binary_expr(PSema* p_s, PAstBinaryExpr* p_node)
     case P_BINARY_ASSIGN_BIT_XOR:
     case P_BINARY_ASSIGN_BIT_OR:
       if (!p_type_is_int(lhs_type)) {
-        error("expected integer type, found '%ty'", lhs_type);
+        PDiag* d = diag_at(P_DK_err_expected_type, P_AST_GET_SOURCE_RANGE(p_node->lhs).begin);
+        diag_add_arg_type(d, p_type_get_generic_int());
+        diag_add_arg_type(d, lhs_type);
+        diag_flush(d);
         has_error = true;
         p_s->error_count++;
       }
 
       if (!p_type_is_int(rhs_type)) {
-        error("expected integer type, found '%ty'", rhs_type);
+        PDiag* d = diag_at(P_DK_err_expected_type, P_AST_GET_SOURCE_RANGE(p_node->rhs).begin);
+        diag_add_arg_type(d, p_type_get_generic_int());
+        diag_add_arg_type(d, rhs_type);
+        diag_flush(d);
         has_error = true;
         p_s->error_count++;
       }
 
       HEDLEY_FALL_THROUGH;
     default:
-      if (!are_types_compatible(lhs_type, rhs_type)) {
-        error("type mismatch, got '%ty' for LHS and '%ty' for RHS", lhs_type, rhs_type);
-        has_error = true;
-        p_s->error_count++;
-      }
+      if (!are_types_compatible(lhs_type, rhs_type) || !p_type_is_arithmetic(lhs_type)) {
+        PDiagKind diag_kind = P_DK_err_cannot_bin_op_generic;
+        switch (p_node->opcode) {
+          case P_BINARY_ADD:
+            diag_kind = P_DK_err_cannot_add;
+            break;
+          case P_BINARY_SUB:
+            diag_kind = P_DK_err_cannot_sub;
+            break;
+          case P_BINARY_MUL:
+            diag_kind = P_DK_err_cannot_mul;
+            break;
+          case P_BINARY_DIV:
+            diag_kind = P_DK_err_cannot_div;
+            break;
+          default:
+            break;
+        }
 
-      if (!p_type_is_arithmetic(lhs_type)) {
-        error("expected arithmetic type (either integer or float), found '%ty'", rhs_type);
+        PDiag* d = diag_at(diag_kind, p_node->op_loc);
+        if (diag_kind == P_DK_err_cannot_bin_op_generic) {
+          const char* spelling = p_binop_get_spelling(p_node->opcode);
+          diag_add_arg_str(d, spelling);
+        }
+
+        diag_add_arg_type(d, lhs_type);
+        diag_add_arg_type(d, rhs_type);
+        diag_flush(d);
+
         has_error = true;
         p_s->error_count++;
       }
@@ -595,7 +682,10 @@ sema_check_call_expr(PSema* p_s, PAstCallExpr* p_node)
   PFunctionType* func_type = ((PFunctionType*)p_ast_get_type(p_node->callee));
 
   if (func_type->arg_count != p_node->arg_count) {
-    error("expected %d arguments, but got %d arguments", func_type->arg_count, p_node->arg_count);
+    PDiag* d = diag_at(P_DK_err_expected_argument_count, P_AST_GET_SOURCE_RANGE(p_node).begin);
+    diag_add_arg_int(d, func_type->arg_count);
+    diag_add_arg_int(d, p_node->arg_count);
+    diag_flush(d);
     p_s->error_count++;
     has_error = true;
   } else {
@@ -603,7 +693,10 @@ sema_check_call_expr(PSema* p_s, PAstCallExpr* p_node)
     for (int i = 0; i < p_node->arg_count; ++i) {
       PType* arg_type = p_ast_get_type(p_node->args[i]);
       if (!are_types_compatible(arg_type, func_type->args[i])) {
-        error("expected '%ty', found '%ty'", func_type->args[i], arg_type);
+        PDiag* d = diag_at(P_DK_err_expected_type, P_AST_GET_SOURCE_RANGE(p_node->args[i]).begin);
+        diag_add_arg_type(d, func_type->args[i]);
+        diag_add_arg_type(d, arg_type);
+        diag_flush(d);
         p_s->error_count++;
         has_error = true;
       }
@@ -626,12 +719,15 @@ sema_check_cast_expr(PSema* p_s, PAstCastExpr* p_node)
 
   P_AST_EXPR_GET_VALUE_CATEGORY(p_node) = P_AST_EXPR_GET_VALUE_CATEGORY(p_node->sub_expr);
 
+  // TODO: reimplement this warning
+#if 0
   if (from_ty == target_ty) {
     warning("no-op cast operator, expression already have type '%ty'", from_ty);
     p_s->warning_count++;
     p_node->cast_kind = P_CAST_NOOP;
     return false;
   }
+#endif
 
   bool valid_cast = true;
   if (p_type_is_int(from_ty)) {
@@ -662,7 +758,10 @@ sema_check_cast_expr(PSema* p_s, PAstCastExpr* p_node)
   }
 
   if (!valid_cast) {
-    error("invalid conversion from '%ty' to '%ty'", from_ty, target_ty);
+    PDiag* d = diag(P_DK_err_unsupported_conversion);
+    diag_add_arg_type(d, from_ty);
+    diag_add_arg_type(d, target_ty);
+    diag_flush(d);
     p_s->error_count++;
     return true;
   }

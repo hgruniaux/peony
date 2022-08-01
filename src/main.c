@@ -5,8 +5,8 @@
 
 #include <assert.h>
 #include <stdio.h>
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 
 void
 parse(PSourceFile* p_source_file)
@@ -38,6 +38,8 @@ parse(PSourceFile* p_source_file)
   p_identifier_table_destroy(&identifier_table);
 }
 
+#include "utils/diag_formatter.h"
+
 int
 main(int p_argc, char* p_argv[])
 {
@@ -50,12 +52,17 @@ main(int p_argc, char* p_argv[])
   for (int i = 1; i < p_argc; ++i) {
     if (strcmp(p_argv[i], "-verify") == 0) {
       g_verify_mode_enabled = true;
+      g_enable_ansi_colors = false;
+    } else if (strcmp(p_argv[i], "-Wfatal-errors") == 0) {
+      g_diag_context.fatal_errors = true;
     }
   }
 
   PSourceFile* source_file = p_source_file_open(p_argv[1]);
   if (source_file == NULL) {
-    error("failed to open file '%s'", p_argv[1]);
+    PDiag* d = diag(P_DK_err_fail_open_file);
+    diag_add_arg_str(d, p_argv[1]);
+    diag_flush(d);
     return EXIT_FAILURE;
   }
 

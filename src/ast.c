@@ -24,6 +24,19 @@ p_binop_is_assignment(PAstBinaryOp p_binop)
   }
 }
 
+const char*
+p_binop_get_spelling(PAstBinaryOp p_binop)
+{
+  switch (p_binop) {
+#define BINARY_OPERATOR(p_kind, p_tok, p_precedence)                                                                   \
+  case p_kind:                                                                                                         \
+    return p_token_kind_get_spelling(p_tok);
+#include "operator_kinds.def"
+    default:
+      HEDLEY_UNREACHABLE_RETURN(NULL);
+  }
+}
+
 #define CAST(p_node, p_type) ((p_type*)(p_node))
 
 PType*
@@ -62,6 +75,7 @@ p_ast_get_type(PAst* p_ast)
     }
 
     default: // This node has no concept of type.
+      assert(false && "p_node is not an expression node");
       return NULL;
   }
 #undef DUMMY_TYPE

@@ -1,7 +1,10 @@
 #pragma once
 
 #include "utils/hedley.h"
+
 #include <stdbool.h>
+
+HEDLEY_BEGIN_C_DECLS
 
 typedef enum PTypeKind
 {
@@ -168,3 +171,5 @@ p_type_get_function(PType* p_ret_ty, PType** p_args, int p_arg_count);
 
 PType*
 p_type_get_pointer(PType* p_element_ty);
+
+HEDLEY_END_C_DECLS

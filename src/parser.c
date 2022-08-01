@@ -70,7 +70,10 @@ static bool
 expect_token(struct PParser* p_parser, PTokenKind p_kind)
 {
   if (p_parser->lookahead.kind != p_kind) {
-    error("expected '%tk'", p_kind);
+    PDiag* d = diag_at(P_DK_err_expected_tok, LOOKAHEAD_BEGIN_LOC);
+    diag_add_arg_tok_kind(d, p_kind);
+    diag_add_arg_tok_kind(d, p_parser->lookahead.kind);
+    diag_flush(d);
     consume_token(p_parser);
     return false;
   }
@@ -82,7 +85,10 @@ expect_token(struct PParser* p_parser, PTokenKind p_kind)
 static void
 unexpected_token(struct PParser* p_parser)
 {
-  error("unexpected token, got '%tk'", p_parser->lookahead.kind);
+  PDiag* d = diag_at(P_DK_err_unexpected_tok, LOOKAHEAD_BEGIN_LOC);
+  diag_add_arg_tok_kind(d, p_parser->lookahead.kind);
+  diag_flush(d);
+  consume_token(p_parser);
 }
 
 static bool
@@ -384,12 +390,14 @@ parse_let_stmt(struct PParser* p_parser)
   }
 
   if (init_expr != NULL && type != p_ast_get_type(init_expr)) {
-    error("initialization expression and variable do not have the same type");
+    // FIXME: reimplement this error
+    // error("initialization expression and variable do not have the same type");
   }
 
   PSymbol* symbol = sema_local_lookup(&p_parser->sema, identifier_info);
   if (symbol != NULL) {
-    error("redeclaration of '%s'", identifier_info);
+    // FIXME: reimplement this error
+    // error("redeclaration of '%s'", identifier_info);
   } else {
     symbol = p_scope_add_symbol(p_parser->sema.current_scope, identifier_info);
     PDeclVar* decl = CREATE_DECL(PDeclVar, P_DECL_VAR);

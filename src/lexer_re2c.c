@@ -133,7 +133,9 @@ yy1:
 yy2:
     ++p_lexer->cursor;
     {
-                error("unknown character '%c'\n", p_lexer->cursor[-1]);
+                PDiag* d = diag_at(P_DK_err_unknown_character, p_lexer->marked_source_location);
+                diag_add_arg_char(d, p_lexer->cursor[-1]);
+                diag_flush(d);
                 continue;
             }
 yy3:
@@ -152,8 +154,6 @@ yy5:
 yy6:
     ++p_lexer->cursor;
     {
-                ++CURRENT_LINENO;
-
                 uint32_t line_pos = p_lexer->cursor - p_lexer->source_file->buffer;
                 p_line_map_add(&p_lexer->source_file->line_map, line_pos);
                 continue;

@@ -36,8 +36,6 @@ p_lex(PLexer* p_lexer, PToken* p_token)
             re2c:define:YYMARKER   = "p_lexer->marker";
 
             "\n"|"\r\n" {
-                ++CURRENT_LINENO;
-
                 uint32_t line_pos = p_lexer->cursor - p_lexer->source_file->buffer;
                 p_line_map_add(&p_lexer->source_file->line_map, line_pos);
                 continue;
@@ -120,7 +118,9 @@ p_lex(PLexer* p_lexer, PToken* p_token)
             }
 
             * {
-                error("unknown character '%c'\n", p_lexer->cursor[-1]);
+                PDiag* d = diag_at(P_DK_err_unknown_character, p_lexer->marked_source_location);
+                diag_add_arg_char(d, p_lexer->cursor[-1]);
+                diag_flush(d);
                 continue;
             }
         */

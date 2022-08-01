@@ -1,9 +1,12 @@
 #pragma once
 
-#include <stdbool.h>
+#include "hedley.h"
+
 #include <stddef.h>
 
 #define P_ENABLE_MEM_STATS 1
+
+HEDLEY_BEGIN_C_DECLS
 
 struct PBumpAllocatorSlab
 {
@@ -63,3 +66,5 @@ p_bump_alloc(struct PBumpAllocator* p_allocator, size_t p_size, size_t p_align);
 #define P_ARRAY_LENGTH(array) (sizeof(array) / sizeof((array)[0]))
 
 struct PBumpAllocator p_global_bump_allocator;
+
+HEDLEY_END_C_DECLS
