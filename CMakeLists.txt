@@ -47,6 +47,8 @@ add_library(peony_lib STATIC
     "src/type.c"
 )
 
+target_compile_definitions(peony_lib PUBLIC "-DP_DEBUG")
+
 add_executable(peony "src/main.c")
 target_link_libraries(peony PRIVATE peony_lib)
 
@@ -103,7 +105,10 @@ add_executable(peony_test
 
     "src/utils/line_map_test.cxx"
     "src/utils/diag_formatter_test.cxx"
- "src/utils/dynamic_array_test.cxx" "src/type_test.cxx" "src/identifier_table_test.cxx")
+    "src/utils/dynamic_array_test.cxx"
+    "src/type_test.cxx"
+    "src/identifier_table_test.cxx"
+)
 
 target_link_libraries(peony_test PRIVATE peony_lib)
 target_link_libraries(peony_test PRIVATE GTest::gtest)

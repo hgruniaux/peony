@@ -37,53 +37,76 @@ sema_local_lookup(PSema* p_s, PIdentifierInfo* p_name);
 PSymbol*
 sema_lookup(PSema* p_s, PIdentifierInfo* p_name);
 
-bool
-sema_check_pre_func_decl(PSema* p_s, PDeclFunction* p_node, PType* return_type);
+PDeclFunction*
+sema_act_on_func_decl(PSema* p_s,
+                      PSourceRange p_name_range,
+                      PIdentifierInfo* p_name,
+                      PType* p_ret_type,
+                      PDeclParam** p_params,
+                      size_t p_param_count);
 
-bool
-sema_check_func_decl(PSema* p_s, PDeclFunction* p_node);
+void
+sema_begin_func_decl_body_parsing(PSema* p_s, PDeclFunction* p_decl);
 
-bool
-sema_check_param_decl(PSema* p_s, PDeclParam* p_node);
+void
+sema_end_func_decl_body_parsing(PSema* p_s, PDeclFunction* p_decl);
 
-bool
-sema_check_break_stmt(PSema* p_s, PAstBreakStmt* p_node);
+PDeclParam*
+sema_act_on_param_decl(PSema* p_s,
+                       PSourceRange p_name_range,
+                       PIdentifierInfo* p_name,
+                       PType* p_type,
+                       PAst* p_default_expr);
 
-bool
-sema_check_continue_stmt(PSema* p_s, PAstContinueStmt* p_node);
+PDeclVar*
+sema_act_on_var_decl(PSema* p_s, PSourceRange p_name_range, PIdentifierInfo* p_name, PType* p_type, PAst* p_init_expr);
 
-bool
-sema_check_return_stmt(PSema* p_s, PAstReturnStmt* p_node);
+PAstLetStmt*
+sema_act_on_let_stmt(PSema* p_s, PDeclVar** p_decls, size_t p_decl_count);
 
-bool
-sema_check_if_stmt(PSema* p_s, PAstIfStmt* p_node);
+PAstBreakStmt*
+sema_act_on_break_stmt(PSema* p_s, PSourceRange p_range);
 
-bool
-sema_check_while_stmt(PSema* p_s, PAstWhileStmt* p_node);
+PAstContinueStmt*
+sema_act_on_continue_stmt(PSema* p_s, PSourceRange p_range);
 
-bool
-sema_check_bool_literal(PSema* p_s, PAstBoolLiteral* p_node);
+PAstReturnStmt*
+sema_act_on_return_stmt(PSema* p_s, PSourceLocation p_semi_loc, PAst* p_ret_expr);
 
-bool
-sema_check_int_literal(PSema* p_s, PAstIntLiteral* p_node);
+PAstIfStmt*
+sema_act_on_if_stmt(PSema* p_s, PAst* p_cond_expr, PAst* p_then_stmt, PAst* p_else_stmt);
 
-bool
-sema_check_float_literal(PSema* p_s, PAstFloatLiteral* p_node);
+PAstWhileStmt*
+sema_act_on_while_stmt(PSema* p_s, PAst* p_cond_expr, PAst* p_body_stmt, PScope* p_scope);
 
-bool
-sema_check_decl_ref_expr(PSema* p_s, PAstDeclRefExpr* p_node, PIdentifierInfo* p_name);
+PAstBoolLiteral*
+sema_act_on_bool_literal(PSema* p_s, PSourceRange p_range, bool p_value);
 
-bool
-sema_check_paren_expr(PSema* p_s, PAstParenExpr* p_node);
+PAstIntLiteral*
+sema_act_on_int_literal(PSema* p_s, PSourceRange p_range, PType* p_type, uintmax_t p_value);
 
-bool
-sema_check_unary_expr(PSema* p_s, PAstUnaryExpr* p_node);
+PAstFloatLiteral*
+sema_act_on_float_literal(PSema* p_s, PSourceRange p_range, PType* p_type, double p_value);
 
-bool
-sema_check_binary_expr(PSema* p_s, PAstBinaryExpr* p_node);
+PAstDeclRefExpr*
+sema_act_on_decl_ref_expr(PSema* p_s, PSourceRange p_range, PIdentifierInfo* p_name);
 
-bool
-sema_check_call_expr(PSema* p_s, PAstCallExpr* p_node);
+PAstParenExpr*
+sema_act_on_paren_expr(PSema* p_s, PSourceLocation p_lparen_loc, PSourceLocation p_rparen_loc, PAst* p_sub_expr);
 
-bool
-sema_check_cast_expr(PSema* p_s, PAstCastExpr* p_node);
+PAstCallExpr*
+sema_act_on_call_expr(PSema* p_s,
+                      PSourceLocation p_lparen_loc,
+                      PSourceLocation p_rparen_loc,
+                      PAst* p_callee,
+                      PAst** p_args,
+                      size_t p_arg_count);
+
+PAstBinaryExpr*
+sema_act_on_binary_expr(PSema* p_s, PAstBinaryOp p_opcode, PSourceLocation p_op_loc, PAst* p_lhs, PAst* p_rhs);
+
+PAstUnaryExpr*
+sema_act_on_unary_expr(PSema* p_s, PAstUnaryOp p_opcode, PSourceLocation p_op_loc, PAst* p_sub_expr);
+
+PAstCastExpr*
+sema_act_on_cast_expr(PSema* p_s, PSourceLocation p_as_loc, PType* p_to_type, PAst* p_sub_expr);

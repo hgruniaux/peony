@@ -7,7 +7,6 @@
 
 #include <assert.h>
 #include <stdarg.h>
-#include <stdlib.h>
 #include <string.h>
 
 #define LOOKAHEAD_IS(p_kind) ((p_parser)->lookahead.kind == (p_kind))
@@ -66,14 +65,20 @@ consume_token(struct PParser* p_parser)
   }
 }
 
+static void
+print_expect_tok_diag(struct PParser* p_parser, PTokenKind p_kind)
+{
+  PDiag* d = diag_at(P_DK_err_expected_tok, LOOKAHEAD_BEGIN_LOC);
+  diag_add_arg_tok_kind(d, p_kind);
+  diag_add_arg_tok_kind(d, p_parser->lookahead.kind);
+  diag_flush(d);
+}
+
 static bool
 expect_token(struct PParser* p_parser, PTokenKind p_kind)
 {
   if (p_parser->lookahead.kind != p_kind) {
-    PDiag* d = diag_at(P_DK_err_expected_tok, LOOKAHEAD_BEGIN_LOC);
-    diag_add_arg_tok_kind(d, p_kind);
-    diag_add_arg_tok_kind(d, p_parser->lookahead.kind);
-    diag_flush(d);
+    print_expect_tok_diag(p_parser, p_kind);
     consume_token(p_parser);
     return false;
   }
@@ -91,25 +96,36 @@ unexpected_token(struct PParser* p_parser)
   consume_token(p_parser);
 }
 
+static void
+skip_until_no_error(struct PParser* p_parser, PTokenKind p_kind)
+{
+  while (!LOOKAHEAD_IS(p_kind) && !LOOKAHEAD_IS(P_TOK_EOF))
+    consume_token(p_parser);
+}
+
 static bool
 skip_until(struct PParser* p_parser, PTokenKind p_kind)
 {
   if (expect_token(p_parser, p_kind))
     return true;
 
-  while (!LOOKAHEAD_IS(p_kind) && !LOOKAHEAD_IS(P_TOK_EOF)) {
-    consume_token(p_parser);
-  }
+  skip_until_no_error(p_parser, p_kind);
 
   return false;
 }
 
-static void
-skip_until_no_error(struct PParser* p_parser, PTokenKind p_kind)
+static bool
+skip_until_no_consume(struct PParser* p_parser, PTokenKind p_kind)
 {
-  while (!LOOKAHEAD_IS(p_kind) && !LOOKAHEAD_IS(P_TOK_EOF)) {
+  if (LOOKAHEAD_IS(p_kind))
+    return true;
+
+  print_expect_tok_diag(p_parser, p_kind);
+
+  while (!LOOKAHEAD_IS(p_kind) && !LOOKAHEAD_IS(P_TOK_EOF))
     consume_token(p_parser);
-  }
+
+  return false;
 }
 
 void
@@ -254,20 +270,82 @@ parse_compound_stmt(struct PParser* p_parser)
 }
 
 /*
+ * param_decl:
+ *     identifier "=" expr
+ *     identifier type_specifier ("=" expr)?
+ *
+ * var_decl:
+ *     identifier "=" expr
+ *     identifier type_specifier ("=" expr)?
+ *
+ * type_specifier:
+ *     ":" type
+ */
+static PDeclParam*
+parse_param_or_var_decl(struct PParser* p_parser, bool p_is_param)
+{
+  PIdentifierInfo* name = NULL;
+  PSourceRange name_range = { LOOKAHEAD_BEGIN_LOC, LOOKAHEAD_END_LOC };
+  if (!LOOKAHEAD_IS(P_TOK_IDENTIFIER)) {
+    PDiag* d = diag_at(p_is_param ? P_DK_err_expected_param_decl : P_DK_err_expected_var_decl, LOOKAHEAD_BEGIN_LOC);
+    diag_flush(d);
+    skip_until_no_consume(p_parser, P_TOK_RPAREN);
+    return NULL;
+  }
+
+  name = p_parser->lookahead.data.identifier_info;
+
+  expect_token(p_parser, P_TOK_IDENTIFIER);
+
+  PType* type = NULL;
+  if (LOOKAHEAD_IS(P_TOK_COLON)) {
+    consume_token(p_parser); // consume ':'
+    type = parse_type(p_parser);
+  }
+
+  PAst* default_expr = NULL;
+  if (LOOKAHEAD_IS(P_TOK_EQUAL)) {
+    consume_token(p_parser); // consume '='
+    default_expr = parse_expr(p_parser);
+  }
+
+  if (p_is_param)
+    return sema_act_on_param_decl(&p_parser->sema, name_range, name, type, default_expr);
+  else
+    return sema_act_on_var_decl(&p_parser->sema, name_range, name, type, default_expr);
+}
+
+/*
+ * param_decl_list:
+ *     param_decl
+ *     param_decl_list "," param_decl
+ *
+ * var_decl_list:
+ *     var_decl
+ *     var_decl_list "," var_decl
+ */
+static void
+parse_param_or_var_list(struct PParser* p_parser, PDynamicArray* p_param_list, bool p_is_param)
+{
+  while (true) {
+    PDeclParam* decl = parse_param_or_var_decl(p_parser, p_is_param);
+    if (decl != NULL)
+      p_dynamic_array_append(p_param_list, decl);
+
+    if (p_is_param ? LOOKAHEAD_IS(P_TOK_RPAREN) : LOOKAHEAD_IS(P_TOK_SEMI))
+      break;
+
+    expect_token(p_parser, P_TOK_COMMA);
+  }
+}
+
+/*
  * func_decl:
- *     "fn" identifier "(" param_list ")" func_type_specifier ";"
- *     "fn" identifier "(" param_list ")" func_type_specifier compound_stmt
+ *     "fn" identifier "(" param_decl_list? ")" func_type_specifier? ";"
+ *     "fn" identifier "(" param_decl_list? ")" func_type_specifier? compound_stmt
  *
  * func_type_specifier:
- *     ""
  *     "->" type
- *
- * param_list:
- *     param
- *     param_list param
- *
- * param:
- *     identifier ":" type
  */
 static PDecl*
 parse_func_decl(struct PParser* p_parser)
@@ -275,81 +353,51 @@ parse_func_decl(struct PParser* p_parser)
   assert(LOOKAHEAD_IS(P_TOK_KEY_fn));
   consume_token(p_parser);
 
-  PIdentifierInfo* identifier_info = NULL;
-  if (LOOKAHEAD_IS(P_TOK_IDENTIFIER))
-    identifier_info = p_parser->lookahead.data.identifier_info;
-
-  if (!expect_token(p_parser, P_TOK_IDENTIFIER)) {
-    skip_until_no_error(p_parser, P_TOK_SEMI);
-    return NULL;
+  PSourceRange name_range = { LOOKAHEAD_BEGIN_LOC, LOOKAHEAD_END_LOC };
+  PIdentifierInfo* name = NULL;
+  if (LOOKAHEAD_IS(P_TOK_IDENTIFIER)) {
+    name = p_parser->lookahead.data.identifier_info;
+    consume_token(p_parser); // consume identifier
+  } else {
+    // Act as if there was an identifier but emit a diagnostic.
+    print_expect_tok_diag(p_parser, P_TOK_IDENTIFIER);
   }
 
-  expect_token(p_parser, P_TOK_LPAREN);
-
-  /* Parse parameters: */
   PDynamicArray params;
   p_dynamic_array_init(&params);
-  while (!LOOKAHEAD_IS(P_TOK_RPAREN)) {
-    PIdentifierInfo* name = NULL;
-    if (LOOKAHEAD_IS(P_TOK_IDENTIFIER))
-      name = p_parser->lookahead.data.identifier_info;
 
-    expect_token(p_parser, P_TOK_IDENTIFIER);
-    expect_token(p_parser, P_TOK_COLON);
-    PType* type = parse_type(p_parser);
-
-    PDeclParam* param = CREATE_DECL(PDeclParam, P_DECL_PARAM);
-    P_DECL_GET_NAME(param) = name;
-    P_DECL_GET_TYPE(param) = type;
-    param->default_expr = NULL;
-    p_dynamic_array_append(&params, param);
-
-    if (!LOOKAHEAD_IS(P_TOK_COMMA))
-      break;
-  }
-
+  // Parse parameters
+  sema_push_scope(&p_parser->sema, P_SF_NONE);
+  expect_token(p_parser, P_TOK_LPAREN);
+  if (!LOOKAHEAD_IS(P_TOK_RPAREN))
+    parse_param_or_var_list(p_parser, &params, /* is_param */ true);
   expect_token(p_parser, P_TOK_RPAREN);
+  sema_pop_scope(&p_parser->sema);
 
+  // Parse return type specified (optional)
   PType* return_type = NULL;
   if (LOOKAHEAD_IS(P_TOK_ARROW)) {
-    consume_token(p_parser);
+    consume_token(p_parser); // consume '->'
     return_type = parse_type(p_parser);
   }
 
-  PDeclFunction* decl = CREATE_DECL_EXTRA_SIZE(PDeclFunction, sizeof(PDeclParam*) * (params.size - 1), P_DECL_FUNCTION);
-  P_DECL_GET_NAME(decl) = identifier_info;
-  decl->param_count = params.size;
-  memcpy(decl->params, params.buffer, sizeof(PDeclParam*) * params.size);
+  PDeclFunction* decl =
+    sema_act_on_func_decl(&p_parser->sema, name_range, name, return_type, (PDeclParam**)params.buffer, params.size);
   p_dynamic_array_destroy(&params);
 
-  if (sema_check_pre_func_decl(&p_parser->sema, decl, return_type)) {
-    expect_token(p_parser, P_TOK_LBRACE);
-    skip_until_no_error(p_parser, P_TOK_RBRACE);
-    sema_pop_scope(&p_parser->sema);
-    return (PDecl*)decl;
-  }
+  // Parse body
+  // TODO: lazy body parsing
+  sema_begin_func_decl_body_parsing(&p_parser->sema, decl);
+  PAst* body = parse_compound_stmt(p_parser);
+  sema_end_func_decl_body_parsing(&p_parser->sema, decl);
 
-  sema_push_scope(&p_parser->sema, P_SF_NONE);
-  /* Checks arguments: */
-  for (int i = 0; i < decl->param_count; ++i) {
-    sema_check_param_decl(&p_parser->sema, decl->params[i]);
-  }
-
-  decl->body = parse_compound_stmt(p_parser);
-
-  sema_pop_scope(&p_parser->sema);
-  sema_check_func_decl(&p_parser->sema, decl);
+  decl->body = body;
   return (PDecl*)decl;
 }
 
 /*
  * let_stmt:
- *     "let" identifier type_specifier ";"
- *     "let" identifier type_specifier "=" expr ";"
- *
- * type_specifier:
- *     ""
- *     ":" type
+ *     "let" var_decl_list ";"
  */
 static PAst*
 parse_let_stmt(struct PParser* p_parser)
@@ -359,55 +407,19 @@ parse_let_stmt(struct PParser* p_parser)
   PSourceLocation loc_begin = LOOKAHEAD_BEGIN_LOC;
   consume_token(p_parser);
 
-  PIdentifierInfo* identifier_info = NULL;
-  if (LOOKAHEAD_IS(P_TOK_IDENTIFIER))
-    identifier_info = p_parser->lookahead.data.identifier_info;
+  PDynamicArray var_decls;
+  p_dynamic_array_init(&var_decls);
+  parse_param_or_var_list(p_parser, &var_decls, /* is_param */ false);
 
-  if (!expect_token(p_parser, P_TOK_IDENTIFIER)) {
-    skip_until_no_error(p_parser, P_TOK_SEMI);
+  expect_token(p_parser, P_TOK_SEMI);
+
+  PAstLetStmt* node = sema_act_on_let_stmt(&p_parser->sema, (PDeclVar**)var_decls.buffer, var_decls.size);
+  p_dynamic_array_destroy(&var_decls);
+  if (node == NULL)
     return NULL;
-  }
 
-  PType* type = NULL;
-  if (LOOKAHEAD_IS(P_TOK_COLON)) {
-    consume_token(p_parser);
-    type = parse_type(p_parser);
-  }
-
-  PAst* init_expr = NULL;
-  if (LOOKAHEAD_IS(P_TOK_EQUAL)) {
-    consume_token(p_parser);
-    init_expr = parse_expr(p_parser);
-  }
-
-  PSourceLocation loc_end = LOOKAHEAD_END_LOC;
-  skip_until(p_parser, P_TOK_SEMI);
-
-  if (type == NULL && init_expr != NULL) {
-    type = p_ast_get_type(init_expr);
-  }
-
-  if (init_expr != NULL && type != p_ast_get_type(init_expr)) {
-    // FIXME: reimplement this error
-    // error("initialization expression and variable do not have the same type");
-  }
-
-  PSymbol* symbol = sema_local_lookup(&p_parser->sema, identifier_info);
-  if (symbol != NULL) {
-    // FIXME: reimplement this error
-    // error("redeclaration of '%s'", identifier_info);
-  } else {
-    symbol = p_scope_add_symbol(p_parser->sema.current_scope, identifier_info);
-    PDeclVar* decl = CREATE_DECL(PDeclVar, P_DECL_VAR);
-    symbol->decl = (PDecl*)decl;
-    P_DECL_GET_NAME(decl) = identifier_info;
-    P_DECL_GET_TYPE(decl) = type;
-    decl->init_expr = init_expr;
-  }
-
-  PAstLetStmt* node = CREATE_NODE(PAstLetStmt, P_AST_NODE_LET_STMT);
-  node->var_decl = symbol->decl;
-  SET_NODE_LOC_RANGE(node, loc_begin, loc_end);
+  // FIXME: incorrect end source location
+  SET_NODE_LOC_RANGE(node, loc_begin, LOOKAHEAD_BEGIN_LOC);
   return (PAst*)node;
 }
 
@@ -420,14 +432,17 @@ parse_break_stmt(struct PParser* p_parser)
 {
   assert(LOOKAHEAD_IS(P_TOK_KEY_break));
 
-  PSourceLocation loc_begin = LOOKAHEAD_BEGIN_LOC;
+  PSourceRange break_range = { LOOKAHEAD_BEGIN_LOC, LOOKAHEAD_END_LOC };
   consume_token(p_parser);
 
-  PAstBreakStmt* node = CREATE_NODE(PAstBreakStmt, P_AST_NODE_BREAK_STMT);
-  SET_NODE_LOC_RANGE(node, loc_begin, LOOKAHEAD_END_LOC);
+  PSourceLocation loc_end = LOOKAHEAD_END_LOC;
   expect_token(p_parser, P_TOK_SEMI);
 
-  sema_check_break_stmt(&p_parser->sema, node);
+  PAstBreakStmt* node = sema_act_on_break_stmt(&p_parser->sema, break_range);
+  if (node == NULL)
+    return NULL;
+
+  SET_NODE_LOC_RANGE(node, break_range.begin, loc_end);
   return (PAst*)node;
 }
 
@@ -440,14 +455,17 @@ parse_continue_stmt(struct PParser* p_parser)
 {
   assert(LOOKAHEAD_IS(P_TOK_KEY_continue));
 
-  PSourceLocation loc_begin = LOOKAHEAD_BEGIN_LOC;
+  PSourceRange continue_range = { LOOKAHEAD_BEGIN_LOC, LOOKAHEAD_END_LOC };
   consume_token(p_parser);
 
-  PAstContinueStmt* node = CREATE_NODE(PAstContinueStmt, P_AST_NODE_CONTINUE_STMT);
-  SET_NODE_LOC_RANGE(node, loc_begin, LOOKAHEAD_END_LOC);
+  PSourceLocation loc_end = LOOKAHEAD_END_LOC;
   expect_token(p_parser, P_TOK_SEMI);
 
-  sema_check_continue_stmt(&p_parser->sema, node);
+  PAstContinueStmt* node = sema_act_on_continue_stmt(&p_parser->sema, continue_range);
+  if (node == NULL)
+    return NULL;
+
+  SET_NODE_LOC_RANGE(node, continue_range.begin, loc_end);
   return (PAst*)node;
 }
 
@@ -465,17 +483,17 @@ parse_return_stmt(struct PParser* p_parser)
   consume_token(p_parser);
 
   PAst* ret_expr = NULL;
-  if (!LOOKAHEAD_IS(P_TOK_SEMI)) {
+  if (!LOOKAHEAD_IS(P_TOK_SEMI))
     ret_expr = parse_expr(p_parser);
-  }
 
-  PAstReturnStmt* node = CREATE_NODE(PAstReturnStmt, P_AST_NODE_RETURN_STMT);
-  node->ret_expr = ret_expr;
-
-  SET_NODE_LOC_RANGE(node, loc_begin, LOOKAHEAD_END_LOC);
+  PSourceLocation loc_end = LOOKAHEAD_END_LOC;
   expect_token(p_parser, P_TOK_SEMI);
 
-  sema_check_return_stmt(&p_parser->sema, node);
+  PAstReturnStmt* node = sema_act_on_return_stmt(&p_parser->sema, loc_end, ret_expr);
+  if (node == NULL)
+    return NULL;
+
+  SET_NODE_LOC_RANGE(node, loc_begin, loc_end);
   return (PAst*)node;
 }
 
@@ -506,18 +524,17 @@ parse_if_stmt(struct PParser* p_parser)
       else_stmt = parse_compound_stmt(p_parser);
     }
 
-    loc_end = P_AST_GET_SOURCE_RANGE(else_stmt).end;
-  } else {
+    if (else_stmt != NULL)
+      loc_end = P_AST_GET_SOURCE_RANGE(else_stmt).end;
+  } else if (then_stmt != NULL) {
     loc_end = P_AST_GET_SOURCE_RANGE(then_stmt).end;
   }
 
-  PAstIfStmt* node = CREATE_NODE(PAstIfStmt, P_AST_NODE_IF_STMT);
-  node->cond_expr = cond_expr;
-  node->then_stmt = then_stmt;
-  node->else_stmt = else_stmt;
+  PAstIfStmt* node = sema_act_on_if_stmt(&p_parser->sema, cond_expr, then_stmt, else_stmt);
+  if (node == NULL)
+    return NULL;
 
   SET_NODE_LOC_RANGE(node, loc_begin, loc_end);
-  sema_check_if_stmt(&p_parser->sema, node);
   return (PAst*)node;
 }
 
@@ -535,18 +552,16 @@ parse_while_stmt(struct PParser* p_parser)
 
   sema_push_scope(&p_parser->sema, P_SF_BREAK | P_SF_CONTINUE);
 
-  PAstWhileStmt* node = CREATE_NODE(PAstWhileStmt, P_AST_NODE_WHILE_STMT);
-  p_parser->sema.current_scope->statement = (PAst*)node;
-
   PAst* cond_expr = parse_expr(p_parser);
-
   PAst* body_stmt = parse_compound_stmt(p_parser);
 
-  node->cond_expr = cond_expr;
-  node->body_stmt = body_stmt;
+  PAstWhileStmt* node = sema_act_on_while_stmt(&p_parser->sema, cond_expr, body_stmt, p_parser->sema.current_scope);
+  if (node == NULL) {
+    sema_pop_scope(&p_parser->sema);
+    return NULL;
+  }
 
   SET_NODE_LOC_RANGE(node, loc_begin, P_AST_GET_SOURCE_RANGE(body_stmt).end);
-  sema_check_while_stmt(&p_parser->sema, node);
   sema_pop_scope(&p_parser->sema);
   return (PAst*)node;
 }
@@ -607,17 +622,16 @@ parse_bool_literal(struct PParser* p_parser)
 {
   assert(LOOKAHEAD_IS(P_TOK_KEY_true) || LOOKAHEAD_IS(P_TOK_KEY_false));
 
-  PSourceLocation loc_begin = LOOKAHEAD_BEGIN_LOC;
-  PSourceLocation loc_end = LOOKAHEAD_END_LOC;
+  PSourceRange range = { LOOKAHEAD_BEGIN_LOC, LOOKAHEAD_END_LOC };
 
   const bool value = LOOKAHEAD_IS(P_TOK_KEY_true);
   consume_token(p_parser);
 
-  PAstBoolLiteral* node = CREATE_NODE(PAstBoolLiteral, P_AST_NODE_BOOL_LITERAL);
-  node->value = value;
+  PAstBoolLiteral* node = sema_act_on_bool_literal(&p_parser->sema, range, value);
+  if (node == NULL)
+    return NULL;
 
-  SET_NODE_LOC_RANGE(node, loc_begin, loc_end);
-  sema_check_bool_literal(&p_parser->sema, node);
+  SET_NODE_LOC_RANGE(node, range.begin, range.end);
   return (PAst*)node;
 }
 
@@ -629,10 +643,9 @@ parse_int_literal(struct PParser* p_parser)
 {
   assert(LOOKAHEAD_IS(P_TOK_INT_LITERAL));
 
-  PSourceLocation loc_begin = LOOKAHEAD_BEGIN_LOC;
-  PSourceLocation loc_end = LOOKAHEAD_END_LOC;
+  PSourceRange range = { LOOKAHEAD_BEGIN_LOC, LOOKAHEAD_END_LOC };
 
-  unsigned long long value = 0;
+  uintmax_t value = 0;
   for (const char* it = p_parser->lookahead.data.literal_begin; it != p_parser->lookahead.data.literal_end; ++it) {
     value *= 10;
     value += *it - '0';
@@ -640,12 +653,11 @@ parse_int_literal(struct PParser* p_parser)
 
   consume_token(p_parser);
 
-  PAstIntLiteral* node = CREATE_NODE(PAstIntLiteral, P_AST_NODE_INT_LITERAL);
-  node->type = p_type_get_i32();
-  node->value = value;
+  PAstIntLiteral* node = sema_act_on_int_literal(&p_parser->sema, range, p_type_get_i32(), value);
+  if (node == NULL)
+    return NULL;
 
-  SET_NODE_LOC_RANGE(node, loc_begin, loc_end);
-  sema_check_int_literal(&p_parser->sema, node);
+  SET_NODE_LOC_RANGE(node, range.begin, range.end);
   return (PAst*)node;
 }
 
@@ -657,15 +669,15 @@ parse_float_literal(struct PParser* p_parser)
 {
   assert(LOOKAHEAD_IS(P_TOK_FLOAT_LITERAL));
 
-  PSourceLocation loc_begin = LOOKAHEAD_BEGIN_LOC;
-  PSourceLocation loc_end = LOOKAHEAD_END_LOC;
+  PSourceRange range = { LOOKAHEAD_BEGIN_LOC, LOOKAHEAD_END_LOC };
   consume_token(p_parser);
 
-  PAstFloatLiteral* node = CREATE_NODE(PAstFloatLiteral, P_AST_NODE_FLOAT_LITERAL);
-  node->type = p_type_get_f32();
+  PAstFloatLiteral* node = sema_act_on_float_literal(&p_parser->sema, range, p_type_get_f32(), 0.0);
+  if (node == NULL)
+    return NULL;
+
   // TODO: parse value of float literal
-  SET_NODE_LOC_RANGE(node, loc_begin, loc_end);
-  sema_check_float_literal(&p_parser->sema, node);
+  SET_NODE_LOC_RANGE(node, range.begin, range.end);
   return (PAst*)node;
 }
 
@@ -681,17 +693,16 @@ parse_paren_expr(struct PParser* p_parser)
   PSourceLocation lparen_loc = LOOKAHEAD_BEGIN_LOC;
   consume_token(p_parser);
 
-  PAstParenExpr* node = CREATE_NODE(PAstParenExpr, P_AST_NODE_PAREN_EXPR);
-  node->sub_expr = parse_expr(p_parser);
+  PAst* sub_expr = parse_expr(p_parser);
 
   PSourceLocation rparen_loc = LOOKAHEAD_BEGIN_LOC;
   expect_token(p_parser, P_TOK_RPAREN);
 
-  node->lparen_loc = lparen_loc;
-  node->rparen_loc = rparen_loc;
+  PAstParenExpr* node = sema_act_on_paren_expr(&p_parser->sema, lparen_loc, rparen_loc, sub_expr);
+  if (node == NULL)
+    return NULL;
 
   SET_NODE_LOC_RANGE(node, lparen_loc, rparen_loc + 1);
-  sema_check_paren_expr(&p_parser->sema, node);
   return (PAst*)node;
 }
 
@@ -704,13 +715,15 @@ parse_decl_ref_expr(struct PParser* p_parser)
 {
   assert(p_parser->lookahead.kind == P_TOK_IDENTIFIER);
 
-  PSourceLocation loc_begin = LOOKAHEAD_BEGIN_LOC;
-  PSourceLocation loc_end = LOOKAHEAD_END_LOC;
+  PSourceRange range = { LOOKAHEAD_BEGIN_LOC, LOOKAHEAD_END_LOC };
   PIdentifierInfo* name = p_parser->lookahead.data.identifier_info;
   consume_token(p_parser);
-  PAstDeclRefExpr* node = CREATE_NODE(PAstDeclRefExpr, P_AST_NODE_DECL_REF_EXPR);
-  SET_NODE_LOC_RANGE(node, loc_begin, loc_end);
-  sema_check_decl_ref_expr(&p_parser->sema, node, name);
+
+  PAstDeclRefExpr* node = sema_act_on_decl_ref_expr(&p_parser->sema, range, name);
+  if (node == NULL)
+    return NULL;
+
+  SET_NODE_LOC_RANGE(node, range.begin, range.end);
   return (PAst*)node;
 }
 
@@ -759,31 +772,32 @@ parse_call_expr(struct PParser* p_parser)
   if (!LOOKAHEAD_IS(P_TOK_LPAREN))
     return callee;
 
+  PSourceLocation lparen_loc = LOOKAHEAD_BEGIN_LOC;
   consume_token(p_parser); /* consume '(' */
 
   /* Parse arguments: */
   PDynamicArray args;
   p_dynamic_array_init(&args);
-
   while (!LOOKAHEAD_IS(P_TOK_RPAREN)) {
     PAst* arg = parse_expr(p_parser);
     p_dynamic_array_append(&args, arg);
 
     if (!LOOKAHEAD_IS(P_TOK_COMMA))
       break;
+
     consume_token(p_parser); /* consume ',' */
   }
 
-  PSourceLocation end_loc = LOOKAHEAD_END_LOC;
+  PSourceLocation rparen_loc = LOOKAHEAD_BEGIN_LOC;
   expect_token(p_parser, P_TOK_RPAREN);
 
-  PAstCallExpr* node = CREATE_NODE_EXTRA_SIZE(PAstCallExpr, sizeof(PAst*) * (args.size - 1), P_AST_NODE_CALL_EXPR);
-  node->callee = callee;
-  node->arg_count = args.size;
-  memcpy(node->args, args.buffer, sizeof(PAst*) * args.size);
+  PAstCallExpr* node =
+    sema_act_on_call_expr(&p_parser->sema, lparen_loc, rparen_loc, callee, (PAst**)args.buffer, args.size);
   p_dynamic_array_destroy(&args);
-  SET_NODE_LOC_RANGE(node, P_AST_GET_SOURCE_RANGE(callee).begin, end_loc);
-  sema_check_call_expr(&p_parser->sema, node);
+  if (node == NULL)
+    return NULL;
+
+  SET_NODE_LOC_RANGE(node, P_AST_GET_SOURCE_RANGE(callee).begin, rparen_loc + 1);
   return (PAst*)node;
 }
 
@@ -798,36 +812,33 @@ parse_call_expr(struct PParser* p_parser)
 static PAst*
 parse_unary_expr(struct PParser* p_parser)
 {
-  PAstUnaryOp op;
-  PSourceLocation op_loc = LOOKAHEAD_BEGIN_LOC;
+  PAstUnaryOp opcode;
   switch (p_parser->lookahead.kind) {
     case P_TOK_EXCLAIM:
-      consume_token(p_parser);
-      op = P_UNARY_NOT;
+      opcode = P_UNARY_NOT;
       break;
     case P_TOK_MINUS:
-      consume_token(p_parser);
-      op = P_UNARY_NEG;
+      opcode = P_UNARY_NEG;
       break;
     case P_TOK_AMP:
-      consume_token(p_parser);
-      op = P_UNARY_ADDRESS_OF;
+      opcode = P_UNARY_ADDRESS_OF;
       break;
     case P_TOK_STAR:
-      consume_token(p_parser);
-      op = P_UNARY_DEREF;
+      opcode = P_UNARY_DEREF;
       break;
     default:
       return parse_call_expr(p_parser);
   }
 
+  PSourceLocation op_loc = LOOKAHEAD_BEGIN_LOC;
+  consume_token(p_parser); // consume opcode
+
   PAst* sub_expr = parse_unary_expr(p_parser);
-  PAstUnaryExpr* node = CREATE_NODE(PAstUnaryExpr, P_AST_NODE_UNARY_EXPR);
-  node->op_loc = op_loc;
-  node->opcode = op;
-  node->sub_expr = sub_expr;
+  PAstUnaryExpr* node = sema_act_on_unary_expr(&p_parser->sema, opcode, op_loc, sub_expr);
+  if (node == NULL)
+    return NULL;
+
   SET_NODE_LOC_RANGE(node, op_loc, P_AST_GET_SOURCE_RANGE(sub_expr).end);
-  sema_check_unary_expr(&p_parser->sema, node);
   return (PAst*)node;
 }
 
@@ -842,16 +853,16 @@ parse_cast_expr(struct PParser* p_parser)
   PAst* sub_expr = parse_unary_expr(p_parser);
 
   if (LOOKAHEAD_IS(P_TOK_KEY_as)) {
+    PSourceLocation as_loc = LOOKAHEAD_BEGIN_LOC;
     consume_token(p_parser);
-    PType* type = parse_type(p_parser);
+    PType* to_type = parse_type(p_parser);
+    PAstCastExpr* node = sema_act_on_cast_expr(&p_parser->sema, as_loc, to_type, sub_expr);
+    if (node == NULL)
+      return NULL;
 
-    PAstCastExpr* node = CREATE_NODE(PAstCastExpr, P_AST_NODE_CAST_EXPR);
-    node->sub_expr = sub_expr;
-    node->type = type;
-    // FIXME: better end source location for cast expr instead of LOOKAHEAD_BEGIN_LOC
+    // FIXME: better end source location for cast expr instead of LOOKAHEAD_END_LOC
     //        probably use type->source_range.end when types have localizations.
-    SET_NODE_LOC_RANGE(node, P_AST_GET_SOURCE_RANGE(sub_expr).begin, LOOKAHEAD_BEGIN_LOC);
-    sema_check_cast_expr(&p_parser->sema, node);
+    SET_NODE_LOC_RANGE(node, P_AST_GET_SOURCE_RANGE(sub_expr).begin, LOOKAHEAD_END_LOC);
     return (PAst*)node;
   }
 
@@ -896,7 +907,7 @@ parse_binary_expr(struct PParser* p_parser, PAst* p_lhs, int p_expr_prec)
       return p_lhs;
 
     /* Okay, we know this is a binary_op. */
-    const PAstBinaryOp binary_op = get_binop_from_tok_kind(p_parser->lookahead.kind);
+    const PAstBinaryOp binary_opcode = get_binop_from_tok_kind(p_parser->lookahead.kind);
     const PSourceLocation op_loc = LOOKAHEAD_BEGIN_LOC;
     consume_token(p_parser);
 
@@ -915,13 +926,11 @@ parse_binary_expr(struct PParser* p_parser, PAst* p_lhs, int p_expr_prec)
     }
 
     /* Merge lhs / rhs. */
-    PAstBinaryExpr* new_lhs = CREATE_NODE(PAstBinaryExpr, P_AST_NODE_BINARY_EXPR);
-    new_lhs->lhs = p_lhs;
-    new_lhs->rhs = rhs;
-    new_lhs->opcode = binary_op;
-    new_lhs->op_loc = op_loc;
+    PAstBinaryExpr* new_lhs = sema_act_on_binary_expr(&p_parser->sema, binary_opcode, op_loc, p_lhs, rhs);
+    if (new_lhs == NULL)
+      return NULL;
+
     SET_NODE_LOC_RANGE(new_lhs, P_AST_GET_SOURCE_RANGE(p_lhs).begin, P_AST_GET_SOURCE_RANGE(rhs).end);
-    sema_check_binary_expr(&p_parser->sema, new_lhs);
     p_lhs = (PAst*)new_lhs;
   }
 }
@@ -953,6 +962,8 @@ parse_translation_unit(struct PParser* p_parser)
     PDecl* func = parse_func_decl(p_parser);
     p_dynamic_array_append(&decls, func);
   }
+
+  expect_token(p_parser, P_TOK_EOF);
 
   PAstTranslationUnit* node =
     CREATE_NODE_EXTRA_SIZE(PAstTranslationUnit, sizeof(PDecl*) * (decls.size - 1), P_AST_NODE_TRANSLATION_UNIT);
