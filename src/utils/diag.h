@@ -107,6 +107,9 @@ void
 diag_add_arg_type(PDiag* p_diag, struct PType* p_arg);
 
 void
+diag_add_source_range(PDiag* p_diag, PSourceRange p_range);
+
+void
 diag_flush(PDiag* p_diag);
 
 /* Verify mode interface (used for testsuite): */

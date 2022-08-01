@@ -130,6 +130,13 @@ diag_add_arg_type(PDiag* p_diag, struct PType* p_arg)
 }
 
 void
+diag_add_source_range(PDiag* p_diag, PSourceRange p_range)
+{
+  assert(p_diag->range_count < P_DIAG_MAX_RANGES);
+  p_diag->ranges[p_diag->range_count++] = p_range;
+}
+
+void
 diag_flush(PDiag* p_diag)
 {
   if (g_diag_context.ignore_notes && p_diag->severity == P_DIAG_NOTE)
@@ -174,6 +181,8 @@ diag_flush(PDiag* p_diag)
   } else {
     fputs(buffer.buffer, stdout);
     fputs("\n", stdout);
+    if (p_diag->range_count > 0)
+      p_diag_print_source_ranges(g_current_source_file, p_diag->ranges, p_diag->range_count);
   }
 
   if (g_diag_context.fatal_errors && p_diag->severity == P_DIAG_ERROR) {

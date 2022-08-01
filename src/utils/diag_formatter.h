@@ -16,7 +16,7 @@ typedef struct PMsgBuffer
   char* end;
 } PMsgBuffer;
 
-#define INIT_MSG_BUFFER(p_buffer)                                                                                          \
+#define INIT_MSG_BUFFER(p_buffer)                                                                                      \
   ((p_buffer).it = (p_buffer).buffer);                                                                                 \
   (p_buffer).end = (p_buffer).buffer + sizeof((p_buffer).buffer)
 
@@ -52,7 +52,16 @@ p_diag_format_arg(PMsgBuffer* p_buffer, PDiagArgument* p_arg);
 void
 p_diag_format_msg(PMsgBuffer* p_buffer, const char* p_msg, PDiagArgument* p_args, size_t p_arg_count);
 
+/* Prints the given set of source ranges along the source lines to stdout. */
 void
+p_diag_print_source_ranges(PSourceFile* p_file, PSourceRange* p_ranges, size_t p_range_count);
+
+/* Prints a source line from the given file into stdout in the form:
+ *     4 | fn foo() -> i32 {
+ *
+ * Returns the line length in bytes.
+ */
+size_t
 p_diag_print_source_line(PSourceFile* p_file, uint32_t p_lineno);
 
 HEDLEY_END_C_DECLS

@@ -6,6 +6,7 @@
 #include <assert.h>
 #include <ctype.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #define DIAG_MAX_LINE_LENGTH 5
 
@@ -114,7 +115,129 @@ p_diag_format_arg(PMsgBuffer* p_buffer, PDiagArgument* p_arg)
   }
 }
 
+// A source range which is spread out only on a single line.
+// A classic source range is decomposed into several partial source
+// ranges if it spans more than one line.
+struct PartialSourceRange
+{
+  uint32_t lineno;
+  uint32_t colno_begin;
+  uint32_t colno_end;
+};
+
+#define CREATE_PARTIAL_SRC_RANGE(p_lineno, p_colno_begin, p_colno_end)                                                 \
+  (struct PartialSourceRange) { .lineno = (p_lineno), .colno_begin = (p_colno_begin), .colno_end = (p_colno_end) }
+
+static int
+partial_src_range_cmp(const void* p_lhs, const void* p_rhs)
+{
+  struct PartialSourceRange lhs = *(const struct PartialSourceRange*)p_lhs;
+  struct PartialSourceRange rhs = *(const struct PartialSourceRange*)p_rhs;
+
+  if (lhs.lineno < rhs.lineno)
+    return -1;
+  if (lhs.lineno > rhs.lineno)
+    return 1;
+
+  if (lhs.colno_begin < rhs.colno_begin)
+    return -1;
+  if (lhs.colno_begin > rhs.colno_begin)
+    return 1;
+
+  if (lhs.colno_end < rhs.colno_end)
+    return -1;
+
+  // if (lhs.colno_end > rhs.colno_end)
+  return 1;
+}
+
+static void
+print_char_n_times(char p_c, int p_n)
+{
+  // FIXME: probably find a better way
+  while (p_n--)
+    fputc(p_c, stdout);
+}
+
+static void
+print_partial_src_range(struct PartialSourceRange* p_range, uint32_t p_current_colno)
+{
+  if (p_current_colno != p_range->colno_begin)
+    print_char_n_times(' ', p_range->colno_begin - p_current_colno);
+
+  if (p_range->colno_begin == p_range->colno_end)
+    fputs("^", stdout);
+  else
+    print_char_n_times('~', p_range->colno_end - p_range->colno_begin);
+}
+
 void
+p_diag_print_source_ranges(PSourceFile* p_file, PSourceRange* p_ranges, size_t p_range_count)
+{
+#define MAX_PARTIAL_SRC_RANGES 512
+  struct PartialSourceRange partial_source_ranges[MAX_PARTIAL_SRC_RANGES];
+  size_t partial_source_range_count = 0;
+
+  // Decompose input source ranges into partial source ranges which are more
+  // easier to handle.
+  for (size_t i = 0; i < p_range_count; ++i) {
+    assert(p_ranges[i].begin <= p_ranges[i].end);
+    uint32_t lineno_begin, colno_begin;
+    uint32_t lineno_end, colno_end;
+    p_source_location_get_lineno_and_colno(p_file, p_ranges[i].begin, &lineno_begin, &colno_begin);
+    p_source_location_get_lineno_and_colno(p_file, p_ranges[i].end, &lineno_end, &colno_end);
+
+    if (partial_source_range_count + (lineno_end - lineno_begin + 1) > MAX_PARTIAL_SRC_RANGES)
+      return;
+
+    if (lineno_begin == lineno_end) {
+      partial_source_ranges[partial_source_range_count++] =
+        CREATE_PARTIAL_SRC_RANGE(lineno_begin, colno_begin, colno_end);
+    } else {
+      partial_source_ranges[partial_source_range_count++] = CREATE_PARTIAL_SRC_RANGE(lineno_begin, colno_begin, 0);
+      partial_source_ranges[partial_source_range_count++] = CREATE_PARTIAL_SRC_RANGE(lineno_end, 1, colno_end);
+
+      for (uint32_t lineno = lineno_begin + 1; lineno < lineno_end; ++lineno) {
+        partial_source_ranges[partial_source_range_count++] = CREATE_PARTIAL_SRC_RANGE(lineno, 1, 0);
+      }
+    }
+  }
+
+  // Sort partial source ranges so the first (first in source code) source ranges appears first.
+  qsort(partial_source_ranges, partial_source_range_count, sizeof(struct PartialSourceRange), partial_src_range_cmp);
+
+  // Compress and display partial source ranges.
+  uint32_t prev_lineno = partial_source_range_count > 0 ? (partial_source_ranges[0].lineno - 1) : 0;
+  for (size_t i = 0; i < partial_source_range_count; ++i) {
+    uint32_t current_lineno = partial_source_ranges[i].lineno;
+    if (current_lineno != (prev_lineno + 1))
+      fputs("      | ...\n", stdout);
+    prev_lineno = current_lineno;
+
+    size_t line_length = p_diag_print_source_line(p_file, current_lineno);
+    fputs("      | ", stdout);
+
+    uint32_t current_colno = 1;
+    while (partial_source_ranges[i].lineno == current_lineno) {
+      if (partial_source_ranges[i].colno_begin < current_colno)
+        partial_source_ranges[i].colno_begin = current_colno;
+      if (partial_source_ranges[i].colno_end == 0)
+        partial_source_ranges[i].colno_end = line_length + 1;
+
+      print_partial_src_range(&partial_source_ranges[i], current_colno);
+      current_colno = partial_source_ranges[i].colno_end;
+
+      ++i;
+      if (i >= partial_source_range_count)
+        break;
+    }
+
+    --i;
+    fputs("\n", stdout);
+  }
+}
+
+size_t
 p_diag_print_source_line(PSourceFile* p_file, uint32_t p_lineno)
 {
   assert(p_file != NULL);
@@ -130,4 +253,6 @@ p_diag_print_source_line(PSourceFile* p_file, uint32_t p_lineno)
 
   fprintf(stdout, "%5d | ", p_lineno);
   fwrite(p_file->buffer + start_position, sizeof(char), line_length, stdout);
+  fputs("\n", stdout);
+  return line_length;
 }
