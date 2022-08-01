@@ -24,8 +24,8 @@ typedef struct PSema
   PFunctionType* curr_func_type;
 
   size_t current_scope_cache_idx;
-  struct PScope* scope_cache[P_MAX_SCOPE_CACHE];
-  struct PScope* current_scope;
+  PScope* scope_cache[P_MAX_SCOPE_CACHE];
+  PScope* current_scope;
 } PSema;
 
 void
@@ -34,10 +34,10 @@ sema_push_scope(PSema* p_s, PScopeFlags p_flags);
 void
 sema_pop_scope(PSema* p_s);
 
-struct PSymbol*
+PSymbol*
 sema_local_lookup(PSema* p_s, PIdentifierInfo* p_name);
 
-struct PSymbol*
+PSymbol*
 sema_lookup(PSema* p_s, PIdentifierInfo* p_name);
 
 bool

@@ -6,7 +6,7 @@
 
 typedef struct PLexer
 {
-  struct PIdentifierTable* identifier_table;
+  PIdentifierTable* identifier_table;
   PSourceFile* source_file;
 
   /* For re2c: */

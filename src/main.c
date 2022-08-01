@@ -11,7 +11,7 @@
 void
 parse(PSourceFile* p_source_file)
 {
-  struct PIdentifierTable identifier_table;
+  PIdentifierTable identifier_table;
   p_identifier_table_init(&identifier_table);
 
   PLexer lexer;
