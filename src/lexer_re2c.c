@@ -21,12 +21,18 @@ p_lex(PLexer* p_lexer, PToken* p_token)
 {
     assert(p_lexer != NULL && p_token != NULL);
 
+#define FILL_TOKEN(p_kind) (fill_token(p_lexer, p_token, p_kind))
+
+    if (*p_lexer->cursor == '\0') {
+        FILL_TOKEN(P_TOK_EOF);
+        return;
+    }
+
     for (;;) {
         p_lexer->marked_cursor = p_lexer->cursor;
         p_lexer->marked_source_location = p_lexer->marked_cursor - p_lexer->source_file->buffer;
         g_current_source_location = p_lexer->marked_source_location;
 
-        #define FILL_TOKEN(p_kind) (fill_token(p_lexer, p_token, p_kind))
 
         
 {
@@ -129,6 +135,7 @@ yy1:
     ++p_lexer->cursor;
     {
                 FILL_TOKEN(P_TOK_EOF);
+                p_lexer->cursor--;
                 break;
             }
 yy2:
@@ -478,4 +485,6 @@ yy65:
 }
 
     }
+
+#undef FILL_TOKEN
 }
