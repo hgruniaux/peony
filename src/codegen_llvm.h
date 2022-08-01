@@ -27,4 +27,4 @@ void
 p_cg_dump(struct PCodegenLLVM* p_cg);
 
 void
-p_cg_compile(struct PCodegenLLVM* p_cg, struct PAst* p_ast);
+p_cg_compile(struct PCodegenLLVM* p_cg, PAst* p_ast, const char* p_output_filename);

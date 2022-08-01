@@ -9,7 +9,7 @@
 #include <string.h>
 
 void
-parse(PSourceFile* p_source_file)
+compile_to(PSourceFile* p_source_file, const char* p_output_filename)
 {
   PIdentifierTable identifier_table;
   p_identifier_table_init(&identifier_table);
@@ -28,7 +28,7 @@ parse(PSourceFile* p_source_file)
     p_cg_init(&codegen);
     codegen.opt_level = 0;
 
-    p_cg_compile(&codegen, ast);
+    p_cg_compile(&codegen, ast, p_output_filename);
 
     p_cg_dump(&codegen);
     p_cg_destroy(&codegen);
@@ -49,12 +49,16 @@ main(int p_argc, char* p_argv[])
     return EXIT_FAILURE;
   }
 
+  const char* output_filename = NULL;
   for (int i = 1; i < p_argc; ++i) {
     if (strcmp(p_argv[i], "-verify") == 0) {
       g_verify_mode_enabled = true;
       g_enable_ansi_colors = false;
     } else if (strcmp(p_argv[i], "-Wfatal-errors") == 0) {
       g_diag_context.fatal_errors = true;
+    } else if (strcmp(p_argv[i], "-o") == 0) {
+      if (i + 1 < p_argc)
+        output_filename = p_argv[i + 1];
     }
   }
 
@@ -69,7 +73,7 @@ main(int p_argc, char* p_argv[])
   p_bump_init(&p_global_bump_allocator);
   p_init_types();
 
-  parse(source_file);
+  compile_to(source_file, output_filename);
 
   if (g_verify_mode_enabled)
     verify_finalize();

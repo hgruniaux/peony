@@ -706,6 +706,7 @@ p_cg_init(struct PCodegenLLVM* p_cg)
   assert(p_cg != NULL);
 
   LLVMInitializeNativeTarget();
+  LLVMInitializeNativeAsmPrinter();
 
   p_cg->module = LLVMModuleCreateWithName("");
   p_cg->builder = LLVMCreateBuilder();
@@ -745,11 +746,15 @@ p_cg_dump(struct PCodegenLLVM* p_cg)
 }
 
 void
-p_cg_compile(struct PCodegenLLVM* p_cg, PAst* p_ast)
+p_cg_compile(struct PCodegenLLVM* p_cg, PAst* p_ast, const char* p_output_filename)
 {
   assert(p_cg != NULL);
 
   cg_visit(p_cg, p_ast);
+
+  char* msg = NULL;
+  LLVMVerifyModule(p_cg->module, LLVMAbortProcessAction, &msg);
+  LLVMDisposeMessage(msg);
 
   /* Optimize: */
   LLVMPassBuilderOptionsRef options = LLVMCreatePassBuilderOptions();
@@ -758,7 +763,11 @@ p_cg_compile(struct PCodegenLLVM* p_cg, PAst* p_ast)
   LLVMRunPasses(p_cg->module, buffer, p_cg->target_machine, options);
   LLVMDisposePassBuilderOptions(options);
 
-  char* msg = NULL;
-  LLVMVerifyModule(p_cg->module, LLVMAbortProcessAction, &msg);
+  msg = NULL;
+  if (LLVMTargetMachineEmitToFile(p_cg->target_machine, p_cg->module, p_output_filename, LLVMObjectFile, &msg)) {
+    // TODO: use diag interface
+    abort();
+  }
+
   LLVMDisposeMessage(msg);
 }
