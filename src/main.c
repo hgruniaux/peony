@@ -23,7 +23,7 @@ compile_to(PSourceFile* p_source_file, const char* p_output_filename)
   p_parser_init(&parser);
 
   PAst* ast = p_parse(&parser);
-  if (parser.sema.error_count == 0) {
+  if (g_diag_context.diagnostic_count[P_DIAG_ERROR] == 0) {
     struct PCodegenLLVM codegen;
     p_cg_init(&codegen);
     codegen.opt_level = 0;

@@ -117,8 +117,6 @@ p_parser_init(struct PParser* p_parser)
 {
   assert(p_parser != NULL);
 
-  p_parser->sema.warning_count = 0;
-  p_parser->sema.error_count = 0;
   p_parser->sema.current_scope_cache_idx = 0;
   p_parser->sema.current_scope = NULL;
   memset(p_parser->sema.scope_cache, 0, sizeof(p_parser->sema.scope_cache));

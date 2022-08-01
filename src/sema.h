@@ -18,9 +18,6 @@
 
 typedef struct PSema
 {
-  int warning_count;
-  int error_count;
-
   PFunctionType* curr_func_type;
 
   size_t current_scope_cache_idx;
