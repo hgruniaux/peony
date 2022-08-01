@@ -1,5 +1,6 @@
 #pragma once
 
+#include "utils/hedley.h"
 #include <stdbool.h>
 
 typedef enum PTypeKind
@@ -28,6 +29,7 @@ typedef enum PTypeKind
 typedef struct PTypeCommon
 {
   PTypeKind kind;
+  struct PType* canonical_type;
   void* _llvm_cached_type;
 } PTypeCommon;
 
@@ -61,13 +63,53 @@ typedef struct PPointerType
 void
 p_init_types(void);
 
-#define p_type_is_bool(p_type) (P_TYPE_GET_KIND(p_type_get_canonical(p_type)) == P_TYPE_BOOL)
-#define p_type_is_void(p_type) (P_TYPE_GET_KIND(p_type_get_canonical(p_type)) == P_TYPE_VOID)
-#define p_type_is_char(p_type) (P_TYPE_GET_KIND(p_type_get_canonical(p_type)) == P_TYPE_CHAR)
-#define p_type_is_pointer(p_type) (P_TYPE_GET_KIND(p_type_get_canonical(p_type)) == P_TYPE_POINTER)
-#define p_type_is_function(p_type) (P_TYPE_GET_KIND(p_type_get_canonical(p_type)) == P_TYPE_FUNCTION)
-#define p_type_is_generic_int(p_type) (P_TYPE_GET_KIND(p_type_get_canonical(p_type)) == P_TYPE_GENERIC_INT)
-#define p_type_is_generic_float(p_type) (P_TYPE_GET_KIND(p_type_get_canonical(p_type)) == P_TYPE_GENERIC_FLOAT)
+HEDLEY_ALWAYS_INLINE static PType*
+p_type_get_canonical(PType* p_type)
+{
+  return p_type->common.canonical_type;
+}
+
+HEDLEY_ALWAYS_INLINE static bool
+p_type_is_bool(PType* p_type)
+{
+  return P_TYPE_GET_KIND(p_type_get_canonical(p_type)) == P_TYPE_BOOL;
+}
+
+HEDLEY_ALWAYS_INLINE static bool
+p_type_is_void(PType* p_type)
+{
+  return P_TYPE_GET_KIND(p_type_get_canonical(p_type)) == P_TYPE_VOID;
+}
+
+HEDLEY_ALWAYS_INLINE static bool
+p_type_is_char(PType* p_type)
+{
+  return P_TYPE_GET_KIND(p_type_get_canonical(p_type)) == P_TYPE_CHAR;
+}
+
+HEDLEY_ALWAYS_INLINE static bool
+p_type_is_pointer(PType* p_type)
+{
+  return P_TYPE_GET_KIND(p_type_get_canonical(p_type)) == P_TYPE_POINTER;
+}
+
+HEDLEY_ALWAYS_INLINE static bool
+p_type_is_function(PType* p_type)
+{
+  return P_TYPE_GET_KIND(p_type_get_canonical(p_type)) == P_TYPE_FUNCTION;
+}
+
+HEDLEY_ALWAYS_INLINE static bool
+p_type_is_generic_int(PType* p_type)
+{
+  return P_TYPE_GET_KIND(p_type_get_canonical(p_type)) == P_TYPE_GENERIC_INT;
+}
+
+HEDLEY_ALWAYS_INLINE static bool
+p_type_is_generic_float(PType* p_type)
+{
+  return P_TYPE_GET_KIND(p_type_get_canonical(p_type)) == P_TYPE_GENERIC_FLOAT;
+}
 
 bool
 p_type_is_int(PType* p_type);
@@ -126,6 +168,3 @@ p_type_get_function(PType* p_ret_ty, PType** p_args, int p_arg_count);
 
 PType*
 p_type_get_pointer(PType* p_element_ty);
-
-PType*
-p_type_get_canonical(PType* p_type);

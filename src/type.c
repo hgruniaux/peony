@@ -31,6 +31,7 @@ static void
 init_type(PType* p_type, PTypeKind p_kind)
 {
   P_TYPE_GET_KIND(p_type) = p_kind;
+  p_type->common.canonical_type = p_type;
   p_type->common._llvm_cached_type = NULL;
 }
 
@@ -241,6 +242,7 @@ p_type_get_paren(PType* p_sub_type)
   PParenType* type = P_BUMP_ALLOC(&p_global_bump_allocator, PParenType);
   init_type((PType*)type, P_TYPE_PAREN);
   type->sub_type = p_sub_type;
+  type->common.canonical_type = p_sub_type;
   return (PType*)type;
 }
 
@@ -286,17 +288,4 @@ p_type_get_pointer(PType* p_element_ty)
 
   p_dynamic_array_append(&g_pointer_types, ptr_type);
   return (PType*)ptr_type;
-}
-
-PType*
-p_type_get_canonical(PType* p_type)
-{
-  assert(p_type != NULL);
-
-  switch (P_TYPE_GET_KIND(p_type)) {
-    case P_TYPE_PAREN:
-      return p_type_get_canonical(((PParenType*)p_type)->sub_type);
-    default:
-      return p_type;
-  }
 }
