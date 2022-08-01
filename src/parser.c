@@ -385,11 +385,8 @@ parse_let_stmt(struct PParser* p_parser)
   PSourceLocation loc_end = LOOKAHEAD_END_LOC;
   skip_until(p_parser, P_TOK_SEMI);
 
-  if (type == NULL) {
-    if (init_expr != NULL)
-      type = p_ast_get_type(init_expr);
-    else
-      type = p_type_get_undef();
+  if (type == NULL && init_expr != NULL) {
+    type = p_ast_get_type(init_expr);
   }
 
   if (init_expr != NULL && type != p_ast_get_type(init_expr)) {

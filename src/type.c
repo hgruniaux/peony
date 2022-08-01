@@ -8,7 +8,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-PType g_type_undef;
 PType g_type_void;
 PType g_type_char;
 PType g_type_i8;
@@ -27,6 +26,7 @@ PType g_type_bool;
 
 PDynamicArray g_func_types;
 PDynamicArray g_pointer_types;
+PDynamicArray g_array_types;
 
 static void
 init_type(PType* p_type, PTypeKind p_kind)
@@ -39,7 +39,6 @@ init_type(PType* p_type, PTypeKind p_kind)
 void
 p_init_types(void)
 {
-  init_type(&g_type_undef, P_TYPE_UNDEF);
   init_type(&g_type_void, P_TYPE_VOID);
   init_type(&g_type_char, P_TYPE_CHAR);
   init_type(&g_type_i8, P_TYPE_I8);
@@ -58,6 +57,7 @@ p_init_types(void)
 
   p_dynamic_array_init(&g_func_types);
   p_dynamic_array_init(&g_pointer_types);
+  p_dynamic_array_init(&g_array_types);
 }
 
 bool
@@ -155,11 +155,6 @@ p_type_get_bitwidth(PType* p_type)
 }
 
 PType*
-p_type_get_undef(void)
-{
-  return &g_type_undef;
-}
-PType*
 p_type_get_void()
 {
   return &g_type_void;
@@ -253,7 +248,7 @@ p_type_get_function(PType* p_ret_ty, PType** p_args, int p_arg_count)
   assert(p_ret_ty != NULL && (p_arg_count == 0 || p_args != NULL));
 
   /* If the type already exists returns it (one unique instance per type). */
-  for (int i = 0; i < g_func_types.size; ++i) {
+  for (size_t i = 0; i < g_func_types.size; ++i) {
     PFunctionType* func_type = g_func_types.buffer[i];
     if (func_type->ret_type == p_ret_ty && func_type->arg_count == p_arg_count &&
         memcmp(func_type->args, p_args, sizeof(PType*) * p_arg_count) == 0)
@@ -271,7 +266,7 @@ p_type_get_function(PType* p_ret_ty, PType** p_args, int p_arg_count)
   // its arguments are all canonicals).
   bool is_canonical = p_type_is_canonical(p_ret_ty);
   if (is_canonical) {
-    for (int i = 0; i < p_arg_count; ++i) {
+    for (size_t i = 0; i < p_arg_count; ++i) {
       if (!p_type_is_canonical(p_args[i])) {
         is_canonical = false;
         break;
@@ -284,7 +279,7 @@ p_type_get_function(PType* p_ret_ty, PType** p_args, int p_arg_count)
     PType** canonical_args = malloc(sizeof(PType*) * p_arg_count);
     assert(canonical_args != NULL);
 
-    for (int i = 0; i < p_arg_count; ++i) {
+    for (size_t i = 0; i < p_arg_count; ++i) {
       canonical_args[i] = p_type_get_canonical(p_args[i]);
     }
 
@@ -303,7 +298,7 @@ p_type_get_pointer(PType* p_element_ty)
   assert(p_element_ty != NULL);
 
   /* If the type already exists returns it (one unique instance per type). */
-  for (int i = 0; i < g_pointer_types.size; ++i) {
+  for (size_t i = 0; i < g_pointer_types.size; ++i) {
     PPointerType* ptr_type = g_pointer_types.buffer[i];
     if (ptr_type->element_type == p_element_ty)
       return (PType*)ptr_type;
@@ -313,6 +308,33 @@ p_type_get_pointer(PType* p_element_ty)
   init_type((PType*)ptr_type, P_TYPE_POINTER);
   ptr_type->element_type = p_element_ty;
 
+  if (!p_type_is_canonical(p_element_ty))
+    ptr_type->common.canonical_type = p_type_get_pointer(p_type_get_canonical(p_element_ty));
+
   p_dynamic_array_append(&g_pointer_types, ptr_type);
   return (PType*)ptr_type;
+}
+
+PType*
+p_type_get_array(PType* p_element_ty, int p_num_elements)
+{
+  assert(p_element_ty != NULL && p_num_elements > 0);
+
+  /* If the type already exists returns it (one unique instance per type). */
+  for (size_t i = 0; i < g_array_types.size; ++i) {
+    PArrayType* array_type = g_array_types.buffer[i];
+    if (array_type->element_type == p_element_ty && array_type->num_elements == p_num_elements)
+      return (PType*)array_type;
+  }
+
+  PArrayType* array_type = P_BUMP_ALLOC(&p_global_bump_allocator, PArrayType);
+  init_type((PType*)array_type, P_TYPE_ARRAY);
+  array_type->element_type = p_element_ty;
+  array_type->num_elements = p_num_elements;
+
+   if (!p_type_is_canonical(p_element_ty))
+    array_type->common.canonical_type = p_type_get_array(p_type_get_canonical(p_element_ty), p_num_elements);
+
+  p_dynamic_array_append(&g_array_types, array_type);
+  return (PType*)array_type;
 }

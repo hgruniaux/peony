@@ -9,7 +9,6 @@ HEDLEY_BEGIN_C_DECLS
 typedef enum PTypeKind
 {
   P_TYPE_VOID,
-  P_TYPE_UNDEF,
   P_TYPE_CHAR, /** @brief Unicode scalar value. */
   P_TYPE_I8,
   P_TYPE_I16,
@@ -26,7 +25,8 @@ typedef enum PTypeKind
   P_TYPE_BOOL,
   P_TYPE_PAREN, /** @brief Parenthesized type (e.g. `(i32)`), unlike other types they are not unique. */
   P_TYPE_FUNCTION,
-  P_TYPE_POINTER
+  P_TYPE_POINTER,
+  P_TYPE_ARRAY,
 } PTypeKind;
 
 typedef struct PTypeCommon
@@ -60,6 +60,13 @@ typedef struct PPointerType
   PTypeCommon common;
   PType* element_type;
 } PPointerType;
+
+typedef struct PArrayType
+{
+  PTypeCommon common;
+  PType* element_type;
+  int num_elements;
+} PArrayType;
 
 #define P_TYPE_GET_KIND(p_type) (((PType*)(p_type))->common.kind)
 
@@ -106,6 +113,12 @@ p_type_is_pointer(PType* p_type)
 }
 
 HEDLEY_ALWAYS_INLINE static bool
+p_type_is_array(PType* p_type)
+{
+  return P_TYPE_GET_KIND(p_type_get_canonical(p_type)) == P_TYPE_ARRAY;
+}
+
+HEDLEY_ALWAYS_INLINE static bool
 p_type_is_function(PType* p_type)
 {
   return P_TYPE_GET_KIND(p_type_get_canonical(p_type)) == P_TYPE_FUNCTION;
@@ -139,8 +152,6 @@ p_type_is_generic(PType* p_type);
 int
 p_type_get_bitwidth(PType* p_type);
 
-PType*
-p_type_get_undef(void);
 PType*
 p_type_get_void(void);
 PType*
@@ -180,5 +191,8 @@ p_type_get_function(PType* p_ret_ty, PType** p_args, int p_arg_count);
 
 PType*
 p_type_get_pointer(PType* p_element_ty);
+
+PType*
+p_type_get_array(PType* p_element_ty, int p_num_elements);
 
 HEDLEY_END_C_DECLS

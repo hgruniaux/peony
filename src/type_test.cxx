@@ -66,12 +66,50 @@ TEST(type, pointer_type)
   ASSERT_NE(pointer_ty, nullptr);
 
   EXPECT_EQ(pointer_ty->element_type, f32_ty);
-  // Pointer types are already canonical.
   EXPECT_TRUE(p_type_is_canonical((PType*)pointer_ty));
   EXPECT_EQ(p_type_get_canonical((PType*)pointer_ty), (PType*)pointer_ty);
 
-  PPointerType* pointer_bis_ty = (PPointerType*)p_type_get_pointer(f32_ty);
-  ASSERT_NE(pointer_bis_ty, nullptr);
   // There must be only one instance of each pointer type.
+  PPointerType* pointer_bis_ty = (PPointerType*)p_type_get_pointer(f32_ty);
   EXPECT_EQ(pointer_ty, pointer_bis_ty);
+
+  // Non canonical pointer type
+  PType* paren_ty = p_type_get_paren(f32_ty);
+  ASSERT_NE(paren_ty, nullptr);
+  PPointerType* non_canonical_pointer_ty = (PPointerType*)p_type_get_pointer(paren_ty);
+  ASSERT_NE(non_canonical_pointer_ty, nullptr);
+  EXPECT_EQ(non_canonical_pointer_ty->element_type, paren_ty);
+  EXPECT_NE(non_canonical_pointer_ty, pointer_ty);
+  EXPECT_FALSE(p_type_is_canonical((PType*)non_canonical_pointer_ty));
+  EXPECT_EQ(p_type_get_canonical((PType*)non_canonical_pointer_ty), (PType*)pointer_ty);
+}
+
+TEST(type, array_type)
+{
+  PType* f32_ty = p_type_get_f32();
+  ASSERT_NE(f32_ty, nullptr);
+  PArrayType* array_ty = (PArrayType*)p_type_get_array(f32_ty, 3);
+  ASSERT_NE(array_ty, nullptr);
+
+  EXPECT_EQ(array_ty->element_type, f32_ty);
+  EXPECT_EQ(array_ty->num_elements, 3);
+  EXPECT_TRUE(p_type_is_canonical((PType*)array_ty));
+  EXPECT_EQ(p_type_get_canonical((PType*)array_ty), (PType*)array_ty);
+
+  // There must be only one instance of each array type.
+  PArrayType* pointer_bis_ty = (PArrayType*)p_type_get_array(f32_ty, 3);
+  PArrayType* pointer_bis2_ty = (PArrayType*)p_type_get_array(f32_ty, 4);
+  EXPECT_EQ(array_ty, pointer_bis_ty);
+  EXPECT_NE(array_ty, pointer_bis2_ty); // however, array of different sizes are different types
+
+  // Non canonical array type
+  PType* paren_ty = p_type_get_paren(f32_ty);
+  ASSERT_NE(paren_ty, nullptr);
+  PArrayType* non_canonical_array_ty = (PArrayType*)p_type_get_array(paren_ty, 3);
+  ASSERT_NE(non_canonical_array_ty, nullptr);
+  EXPECT_EQ(non_canonical_array_ty->element_type, paren_ty);
+  EXPECT_EQ(non_canonical_array_ty->num_elements, 3);
+  EXPECT_NE(non_canonical_array_ty, array_ty);
+  EXPECT_FALSE(p_type_is_canonical((PType*)non_canonical_array_ty));
+  EXPECT_EQ(p_type_get_canonical((PType*)non_canonical_array_ty), (PType*)array_ty);
 }

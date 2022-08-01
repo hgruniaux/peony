@@ -69,7 +69,6 @@ cg_to_llvm_type(PType* p_type)
       type = LLVMPointerType(cg_to_llvm_type(ptr_type->element_type), 0);
       break;
     }
-    case P_TYPE_UNDEF:
     default:
       HEDLEY_UNREACHABLE_RETURN(NULL);
   }
