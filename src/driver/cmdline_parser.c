@@ -98,11 +98,11 @@ parse_optimization_level(const char* p_arg)
 void
 cmdline_parser(int p_argc, char* p_argv[])
 {
-  p_dynamic_array_init(&g_options.input_files);
+  DYN_ARRAY_INIT(const char*, &g_options.input_files);
   for (int i = 1; i < p_argc; ++i) {
     const char* arg = p_argv[i];
     if (*arg != '-') {
-      p_dynamic_array_append(&g_options.input_files, (PDynamicArrayItem)arg);
+      DYN_ARRAY_APPEND(const char*, &g_options.input_files, arg);
       continue;
     }
 

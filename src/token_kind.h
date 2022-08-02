@@ -1,24 +1,34 @@
 #pragma once
 
 #include <hedley.h>
-
 #include <stdbool.h>
 
+HEDLEY_BEGIN_C_DECLS
+
+// All the supported token kinds.
 typedef enum PTokenKind
 {
 #define TOKEN(kind) P_TOK_##kind,
 #include "token_kinds.def"
 } PTokenKind;
 
-/* Returns the token name suitable for debugging display. */
+// Returns a debug suitable string representation of the given token kind.
 const char*
-p_token_kind_get_name(PTokenKind p_token_kind);
+token_kind_get_name(PTokenKind p_token_kind);
 
-/* Returns the canonical spelling of the requested token or NULL
- * if there is no canonical spelling (e.g. TOK_IDENTIFIER). */
+// Gets the spelling of the given token kind if it can be determined.
+// For tokens that are specials or do not have a dynamic spelling (e.g.
+// literals, identifiers, EOF, etc.) this will returns NULL.
 const char*
-p_token_kind_get_spelling(PTokenKind p_token_kind);
+token_kind_get_spelling(PTokenKind p_token_kind);
 
-/* Returns true if p_token_kind corresponds to a keyword. */
+// Checks if the token kind corresponds to a keyword (P_TOK_KEY_*).
 bool
-p_token_kind_is_keyword(PTokenKind p_token_kind);
+token_kind_is_keyword(PTokenKind p_token_kind);
+
+// Checks if the token kind corresponds to a punctuactor or operator
+// (e.g. `+` or `(`).
+bool
+token_kind_is_punctuactor(PTokenKind p_token_kind);
+
+HEDLEY_END_C_DECLS

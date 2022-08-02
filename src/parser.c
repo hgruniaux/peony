@@ -19,6 +19,16 @@
   (P_AST_GET_SOURCE_RANGE(p_node).begin = (p_loc_beg));                                                                \
   (P_AST_GET_SOURCE_RANGE(p_node).end = (p_loc_end))
 
+#define AST_LIST_INIT(p_array) DYN_ARRAY_INIT(PAst*, p_array)
+#define AST_LIST_DESTROY(p_array) DYN_ARRAY_DESTROY(PAst*, p_array)
+#define AST_LIST_APPEND(p_array, p_item) DYN_ARRAY_APPEND(PAst*, p_array, p_item)
+#define AST_LIST_AT(p_array, p_idx) DYN_ARRAY_AT(PAst*, p_array, p_idx)
+
+#define DECL_LIST_INIT(p_array) DYN_ARRAY_INIT(PDecl*, p_array)
+#define DECL_LIST_DESTROY(p_array) DYN_ARRAY_DESTROY(PDecl*, p_array)
+#define DECL_LIST_APPEND(p_array, p_item) DYN_ARRAY_APPEND(PDecl*, p_array, p_item)
+#define DECL_LIST_AT(p_array, p_idx) DYN_ARRAY_AT(PDecl*, p_array, p_idx)
+
 static const char*
 trim_whitespace_left(const char* p_it)
 {
@@ -242,10 +252,10 @@ parse_compound_stmt(struct PParser* p_parser)
   expect_token(p_parser, P_TOK_LBRACE);
 
   PDynamicArray stmts;
-  p_dynamic_array_init(&stmts);
+  AST_LIST_INIT(&stmts);
   while (!LOOKAHEAD_IS(P_TOK_RBRACE) && !LOOKAHEAD_IS(P_TOK_EOF)) {
     PAst* stmt = parse_stmt(p_parser);
-    p_dynamic_array_append(&stmts, stmt);
+    AST_LIST_APPEND(&stmts, stmt);
   }
 
   PSourceLocation rbrace_loc = LOOKAHEAD_BEGIN_LOC;
@@ -255,7 +265,7 @@ parse_compound_stmt(struct PParser* p_parser)
     CREATE_NODE_EXTRA_SIZE(PAstCompoundStmt, sizeof(PAst*) * (stmts.size - 1), P_AST_NODE_COMPOUND_STMT);
   node->stmt_count = stmts.size;
   memcpy(node->stmts, stmts.buffer, sizeof(PAst*) * stmts.size);
-  p_dynamic_array_destroy(&stmts);
+  AST_LIST_DESTROY(&stmts);
   SET_NODE_LOC_RANGE(node, lbrace_loc, rbrace_loc + 1);
   sema_pop_scope(&p_parser->sema);
   return (PAst*)node;
@@ -324,7 +334,7 @@ parse_param_or_var_list(struct PParser* p_parser, PDynamicArray* p_param_list, b
   while (true) {
     PDecl* decl = parse_param_or_var_decl(p_parser, p_is_param);
     if (decl != NULL)
-      p_dynamic_array_append(p_param_list, decl);
+      DECL_LIST_APPEND(p_param_list, decl);
 
     if (p_is_param ? LOOKAHEAD_IS(P_TOK_RPAREN) : LOOKAHEAD_IS(P_TOK_SEMI))
       break;
@@ -360,7 +370,7 @@ parse_func_decl(struct PParser* p_parser)
   }
 
   PDynamicArray params;
-  p_dynamic_array_init(&params);
+  DECL_LIST_INIT(&params);
 
   // Parse parameters
   sema_push_scope(&p_parser->sema, P_SF_NONE);
@@ -379,7 +389,7 @@ parse_func_decl(struct PParser* p_parser)
 
   PDeclFunction* decl =
     sema_act_on_func_decl(&p_parser->sema, name_range, name, return_type, (PDeclParam**)params.buffer, params.size);
-  p_dynamic_array_destroy(&params);
+  DECL_LIST_DESTROY(&params);
 
   // Parse body
   // TODO: lazy body parsing
@@ -412,13 +422,13 @@ parse_let_stmt(struct PParser* p_parser)
   consume_token(p_parser);
 
   PDynamicArray var_decls;
-  p_dynamic_array_init(&var_decls);
+  DECL_LIST_INIT(&var_decls);
   parse_param_or_var_list(p_parser, &var_decls, /* is_param */ false);
 
   expect_token(p_parser, P_TOK_SEMI);
 
   PAstLetStmt* node = sema_act_on_let_stmt(&p_parser->sema, (PDeclVar**)var_decls.buffer, var_decls.size);
-  p_dynamic_array_destroy(&var_decls);
+  DECL_LIST_DESTROY(&var_decls);
   if (node == NULL)
     return NULL;
 
@@ -892,10 +902,10 @@ parse_call_expr(struct PParser* p_parser)
 
   /* Parse arguments: */
   PDynamicArray args;
-  p_dynamic_array_init(&args);
+  AST_LIST_INIT(&args);
   while (!LOOKAHEAD_IS(P_TOK_RPAREN)) {
     PAst* arg = parse_expr(p_parser);
-    p_dynamic_array_append(&args, arg);
+    AST_LIST_APPEND(&args, arg);
 
     if (!LOOKAHEAD_IS(P_TOK_COMMA))
       break;
@@ -908,7 +918,7 @@ parse_call_expr(struct PParser* p_parser)
 
   PAstCallExpr* node =
     sema_act_on_call_expr(&p_parser->sema, lparen_loc, rparen_loc, callee, (PAst**)args.buffer, args.size);
-  p_dynamic_array_destroy(&args);
+  AST_LIST_DESTROY(&args);
   if (node == NULL)
     return NULL;
 
@@ -1072,11 +1082,11 @@ parse_translation_unit(struct PParser* p_parser)
   sema_push_scope(&p_parser->sema, P_SF_NONE);
 
   PDynamicArray decls;
-  p_dynamic_array_init(&decls);
+  DECL_LIST_INIT(&decls);
   while (!LOOKAHEAD_IS(P_TOK_EOF)) {
     if (LOOKAHEAD_IS(P_TOK_KEY_fn)) {
       PDecl* func = parse_func_decl(p_parser);
-      p_dynamic_array_append(&decls, func);
+      DECL_LIST_APPEND(&decls, func);
     } else {
       unexpected_token(p_parser);
     }
@@ -1089,7 +1099,7 @@ parse_translation_unit(struct PParser* p_parser)
   node->decl_count = decls.size;
   memcpy(node->decls, decls.buffer, sizeof(PDecl*) * decls.size);
 
-  p_dynamic_array_destroy(&decls);
+  DECL_LIST_DESTROY(&decls);
   sema_pop_scope(&p_parser->sema);
   SET_NODE_LOC_RANGE(node, loc_begin, LOOKAHEAD_END_LOC);
   return (PAst*)node;
