@@ -6,21 +6,21 @@
 
 #define INITIAL_CAPACITY 16
 #define GROWTH_FACTOR 2
-#define ALLOC_BUFFER(p_size) (malloc(sizeof(PDynamicArrayItem) * (p_size)))
+#define ALLOC_BUFFER(p_size, p_item_size) (malloc((p_size) * (p_item_size)))
 
 void
-p_dynamic_array_init(PDynamicArray* p_array)
+dyn_array_init_impl(PDynamicArray* p_array, size_t p_item_size)
 {
   assert(p_array != NULL);
 
   p_array->size = 0;
   p_array->capacity = INITIAL_CAPACITY;
-  p_array->buffer = ALLOC_BUFFER(p_array->capacity);
+  p_array->buffer = ALLOC_BUFFER(p_array->capacity, p_item_size);
   assert(p_array->buffer != NULL);
 }
 
 void
-p_dynamic_array_destroy(PDynamicArray* p_array)
+dyn_array_destroy_impl(PDynamicArray* p_array)
 {
   assert(p_array != NULL);
 
@@ -31,19 +31,16 @@ p_dynamic_array_destroy(PDynamicArray* p_array)
 }
 
 void
-p_dynamic_array_append(PDynamicArray* p_array, PDynamicArrayItem p_item)
+dyn_array_append_impl(PDynamicArray* p_array, size_t p_item_size, void* p_item)
 {
-  assert(p_array != NULL);
-
   if (p_array->size >= p_array->capacity) {
     p_array->capacity *= GROWTH_FACTOR;
-    PDynamicArrayItem* new_buffer = ALLOC_BUFFER(p_array->capacity);
+    PDynamicArrayItem* new_buffer = ALLOC_BUFFER(p_array->capacity, p_item_size);
     assert(new_buffer != NULL);
-    memcpy(
-      new_buffer, p_array->buffer, sizeof(PDynamicArrayItem) * p_array->size);
+    memcpy(new_buffer, p_array->buffer, p_item_size * p_array->size);
     free(p_array->buffer);
     p_array->buffer = new_buffer;
   }
 
-  p_array->buffer[p_array->size++] = p_item;
+  memcpy(p_array->buffer + p_array->size++ * p_item_size, p_item, p_item_size);
 }

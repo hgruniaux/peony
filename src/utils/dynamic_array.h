@@ -14,16 +14,21 @@ typedef void* PDynamicArrayItem;
 
 typedef struct PDynamicArray
 {
-  PDynamicArrayItem* buffer;
+  char* buffer;
   size_t size;
   size_t capacity;
 } PDynamicArray;
 
 void
-p_dynamic_array_init(PDynamicArray* p_array);
+dyn_array_init_impl(PDynamicArray* p_array, size_t p_item_size);
 void
-p_dynamic_array_destroy(PDynamicArray* p_array);
+dyn_array_destroy_impl(PDynamicArray* p_array);
 void
-p_dynamic_array_append(PDynamicArray* p_array, PDynamicArrayItem p_item);
+dyn_array_append_impl(PDynamicArray* p_array, size_t p_item_size, void* p_item);
+
+#define DYN_ARRAY_INIT(p_type, p_array) (dyn_array_init_impl((p_array), sizeof(p_type)))
+#define DYN_ARRAY_DESTROY(p_type, p_array) (dyn_array_destroy_impl((p_array)))
+#define DYN_ARRAY_APPEND(p_type, p_array, p_item) (dyn_array_append_impl((p_array), sizeof(p_type), (p_type*)&(p_item)))
+#define DYN_ARRAY_AT(p_type, p_array, p_idx) (*((p_type*)((p_array)->buffer + sizeof(p_type) * (p_idx))))
 
 HEDLEY_END_C_DECLS

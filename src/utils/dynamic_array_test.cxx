@@ -5,34 +5,34 @@
 TEST(dynamic_array, append)
 {
   PDynamicArray array;
-  p_dynamic_array_init(&array);
+  DYN_ARRAY_INIT(int, &array);
   ASSERT_EQ(array.size, 0);
 
   const char* item = "foo";
-  p_dynamic_array_append(&array, (PDynamicArrayItem)item);
+  DYN_ARRAY_APPEND(const char*, &array, item);
   EXPECT_EQ(array.size, 1);
   EXPECT_GE(array.capacity, 1);
   ASSERT_NE(array.buffer, nullptr);
-  EXPECT_EQ(array.buffer[0], item);
+  EXPECT_EQ(DYN_ARRAY_AT(const char*, &array, 0), item);
 
-  p_dynamic_array_destroy(&array);
+  DYN_ARRAY_DESTROY(int, &array);
 }
 
 TEST(dynamic_array, many_appends)
 {
   PDynamicArray array;
-  p_dynamic_array_init(&array);
+  DYN_ARRAY_INIT(int, &array);
 
   for (int i = 0; i < 100; ++i) {
-    p_dynamic_array_append(&array, (PDynamicArrayItem)i);
+    DYN_ARRAY_APPEND(int, &array, i);
     EXPECT_EQ(array.size, i + 1);
     EXPECT_GE(array.capacity, i + 1);
     ASSERT_NE(array.buffer, nullptr);
   }
 
   for (int i = 0; i < 100; ++i) {
-    EXPECT_EQ(array.buffer[i], (PDynamicArrayItem)i);
+    EXPECT_EQ(DYN_ARRAY_AT(int, &array, i), i);
   }
 
-  p_dynamic_array_destroy(&array);
+  DYN_ARRAY_DESTROY(int, &array);
 }

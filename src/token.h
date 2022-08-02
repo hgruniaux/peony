@@ -48,7 +48,7 @@ typedef struct PTokenLiteralData
 union PTokenData
 {
   // This field is only valid for P_TOK_IDENTIFIER and P_TOK_KEY_* tokens.
-  struct PIdentifierInfo* identifier;
+  PIdentifierInfo* identifier;
   // This field is only valid for P_TOK_*_LITERAL and P_TOK_COMMENT tokens.
   // P_TOK_COMMENT tokens use literal.begin and literal.end to store the
   // comment content.
@@ -69,11 +69,6 @@ typedef struct PToken
   union PTokenData data;
 } PToken;
 
-const char*
-p_get_token_spelling(PToken* p_token);
 
-/* Dumps token info to stdout for debugging purposes. */
-void
-p_token_dump(PToken* p_token);
 
 HEDLEY_END_C_DECLS

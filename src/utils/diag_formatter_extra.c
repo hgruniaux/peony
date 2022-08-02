@@ -41,9 +41,9 @@ format_arg_str(PMsgBuffer* p_buffer, const char* p_str)
 static void
 format_arg_tok_kind(PMsgBuffer* p_buffer, PTokenKind p_token_kind)
 {
-  const char* spelling = p_token_kind_get_spelling(p_token_kind);
+  const char* spelling = token_kind_get_spelling(p_token_kind);
   if (spelling == NULL)
-    spelling = p_token_kind_get_name(p_token_kind);
+    spelling = token_kind_get_name(p_token_kind);
   write_buffer_str(p_buffer, spelling);
 }
 
@@ -62,8 +62,8 @@ format_arg_type(PMsgBuffer* p_buffer, PType* p_type, PIdentifierInfo* p_name_hin
   assert(p_type != NULL);
 
   /* WARNING: Must have the same layout as PTypeKind. */
-  static const char* builtin_types[] = { "void", "char", "i8",        "i16", "i32", "i64",     "u8",  "u16",
-                                         "u32",  "u64",  "{integer}", "f32", "f64", "{float}", "bool" };
+  static const char* builtin_types[] = { "void", "char", "i8", "i16", "i32", "i64", "u8", "u16",
+                                         "u32", "u64", "{integer}", "f32", "f64", "{float}", "bool" };
 
   if (P_TYPE_GET_KIND(p_type) == P_TYPE_FUNCTION) {
     PFunctionType* func_type = (PFunctionType*)p_type;

@@ -38,7 +38,7 @@ add_library(peony_lib STATIC
     "src/scope.c"
     "src/sema.h"
     "src/sema.c"
-    "src/token.c"
+    
     "src/token.h"
     "src/token_kind.c"
     "src/token_kind.h"

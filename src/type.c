@@ -27,6 +27,11 @@ PDynamicArray g_func_types;
 PDynamicArray g_pointer_types;
 PDynamicArray g_array_types;
 
+#define TYPE_LIST_INIT(p_array) DYN_ARRAY_INIT(PType*, p_array)
+#define TYPE_LIST_DESTROY(p_array) DYN_ARRAY_DESTROY(PType*, p_array)
+#define TYPE_LIST_APPEND(p_array, p_item) DYN_ARRAY_APPEND(PType*, p_array, p_item)
+#define TYPE_LIST_AT(p_array, p_idx) DYN_ARRAY_AT(PType*, p_array, p_idx)
+
 static void
 init_type(PType* p_type, PTypeKind p_kind)
 {
@@ -54,9 +59,9 @@ p_init_types(void)
   init_type(&g_type_generic_float, P_TYPE_GENERIC_FLOAT);
   init_type(&g_type_bool, P_TYPE_BOOL);
 
-  p_dynamic_array_init(&g_func_types);
-  p_dynamic_array_init(&g_pointer_types);
-  p_dynamic_array_init(&g_array_types);
+  TYPE_LIST_INIT(&g_func_types);
+  TYPE_LIST_INIT(&g_pointer_types);
+  TYPE_LIST_INIT(&g_array_types);
 }
 
 bool
@@ -248,7 +253,7 @@ p_type_get_function(PType* p_ret_ty, PType** p_args, int p_arg_count)
 
   /* If the type already exists returns it (one unique instance per type). */
   for (size_t i = 0; i < g_func_types.size; ++i) {
-    PFunctionType* func_type = g_func_types.buffer[i];
+    PFunctionType* func_type = (PFunctionType*)TYPE_LIST_AT(&g_func_types, i);
     if (func_type->ret_type == p_ret_ty && func_type->arg_count == p_arg_count &&
         memcmp(func_type->args, p_args, sizeof(PType*) * p_arg_count) == 0)
       return (PType*)func_type;
@@ -287,7 +292,7 @@ p_type_get_function(PType* p_ret_ty, PType** p_args, int p_arg_count)
     free(canonical_args);
   }
 
-  p_dynamic_array_append(&g_func_types, func_type);
+  TYPE_LIST_APPEND(&g_func_types, func_type);
   return (PType*)func_type;
 }
 
@@ -298,7 +303,7 @@ p_type_get_pointer(PType* p_element_ty)
 
   /* If the type already exists returns it (one unique instance per type). */
   for (size_t i = 0; i < g_pointer_types.size; ++i) {
-    PPointerType* ptr_type = g_pointer_types.buffer[i];
+    PPointerType* ptr_type = (PPointerType*)TYPE_LIST_AT(&g_pointer_types, i);
     if (ptr_type->element_type == p_element_ty)
       return (PType*)ptr_type;
   }
@@ -310,7 +315,7 @@ p_type_get_pointer(PType* p_element_ty)
   if (!p_type_is_canonical(p_element_ty))
     ptr_type->common.canonical_type = p_type_get_pointer(p_type_get_canonical(p_element_ty));
 
-  p_dynamic_array_append(&g_pointer_types, ptr_type);
+  TYPE_LIST_APPEND(&g_pointer_types, ptr_type);
   return (PType*)ptr_type;
 }
 
@@ -321,7 +326,7 @@ p_type_get_array(PType* p_element_ty, int p_num_elements)
 
   /* If the type already exists returns it (one unique instance per type). */
   for (size_t i = 0; i < g_array_types.size; ++i) {
-    PArrayType* array_type = g_array_types.buffer[i];
+    PArrayType* array_type = (PArrayType*)TYPE_LIST_AT(&g_array_types, i);
     if (array_type->element_type == p_element_ty && array_type->num_elements == p_num_elements)
       return (PType*)array_type;
   }
@@ -334,6 +339,6 @@ p_type_get_array(PType* p_element_ty, int p_num_elements)
    if (!p_type_is_canonical(p_element_ty))
     array_type->common.canonical_type = p_type_get_array(p_type_get_canonical(p_element_ty), p_num_elements);
 
-  p_dynamic_array_append(&g_array_types, array_type);
+  TYPE_LIST_APPEND(&g_array_types, array_type);
   return (PType*)array_type;
 }

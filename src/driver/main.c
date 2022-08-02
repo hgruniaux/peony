@@ -61,7 +61,7 @@ main(int p_argc, char* p_argv[])
   p_init_types();
 
   for (size_t i = 0; i < g_options.input_files.size; ++i) {
-    const char* filename = g_options.input_files.buffer[i];
+    const char* filename = DYN_ARRAY_AT(const char*, &g_options.input_files, i);
     PSourceFile* source_file = p_source_file_open(filename);
     if (source_file == NULL) {
       PDiag* d = diag(P_DK_err_fail_open_file);

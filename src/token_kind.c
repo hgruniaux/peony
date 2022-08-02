@@ -3,14 +3,14 @@
 #include <stddef.h>
 
 const char*
-p_token_kind_get_name(PTokenKind p_token_kind)
+token_kind_get_name(PTokenKind p_token_kind)
 {
   switch (p_token_kind) {
-#define TOKEN(kind)                                                            \
-  case P_TOK_##kind:                                                           \
+#define TOKEN(kind)                                                                                                    \
+  case P_TOK_##kind:                                                                                                   \
     return #kind;
-#define KEYWORD(spelling)                                                      \
-  case P_TOK_KEY_##spelling:                                                   \
+#define KEYWORD(spelling)                                                                                              \
+  case P_TOK_KEY_##spelling:                                                                                           \
     return "KEY_" #spelling;
 #include "token_kinds.def"
     default:
@@ -19,32 +19,44 @@ p_token_kind_get_name(PTokenKind p_token_kind)
 }
 
 const char*
-p_token_kind_get_spelling(PTokenKind p_token_kind)
+token_kind_get_spelling(PTokenKind p_token_kind)
 {
   switch (p_token_kind) {
-#define TOKEN(kind)                                                            \
-  case P_TOK_##kind:                                                           \
-    return NULL;
-#define PUNCTUACTOR(kind, spelling)                                            \
-  case P_TOK_##kind:                                                           \
-    return spelling;
-#define KEYWORD(spelling)                                                      \
-  case P_TOK_KEY_##spelling:                                                   \
-    return #spelling;
+#define TOKEN(p_kind)
+#define PUNCTUACTOR(p_kind, p_spelling)                                                                                \
+  case P_TOK_##p_kind:                                                                                                 \
+    return p_spelling;
+#define KEYWORD(p_spelling)                                                                                            \
+  case P_TOK_KEY_##p_spelling:                                                                                         \
+    return #p_spelling;
 #include "token_kinds.def"
     default:
-      HEDLEY_UNREACHABLE_RETURN(NULL);
+      return NULL;
   }
 }
 
 bool
-p_token_kind_is_keyword(PTokenKind p_token_kind)
+token_kind_is_keyword(PTokenKind p_token_kind)
 {
   switch (p_token_kind) {
-#define TOKEN(kind)
-#define KEYWORD(spelling) case P_TOK_KEY_##spelling:
+#define TOKEN(p_kind)
+#define KEYWORD(p_spelling) case P_TOK_KEY_##p_spelling:
 #include "token_kinds.def"
     return true;
+    default:
+      return false;
+  }
+}
+
+bool
+token_kind_is_punctuactor(PTokenKind p_token_kind)
+{
+  switch (p_token_kind) {
+#define TOKEN(p_kind)
+#define PUNCTUACTOR(p_kind, p_spelling)                                                                                \
+  case P_TOK_##p_kind:                                                                                                 \
+    return true;
+#include "token_kinds.def"
     default:
       return false;
   }

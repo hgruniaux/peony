@@ -30,7 +30,7 @@ p_binop_get_spelling(PAstBinaryOp p_binop)
   switch (p_binop) {
 #define BINARY_OPERATOR(p_kind, p_tok, p_precedence)                                                                   \
   case p_kind:                                                                                                         \
-    return p_token_kind_get_spelling(p_tok);
+    return token_kind_get_spelling(p_tok);
 #include "operator_kinds.def"
     default:
       HEDLEY_UNREACHABLE_RETURN(NULL);
@@ -84,7 +84,6 @@ p_ast_get_type(PAst* p_ast)
 PAst*
 p_ast_ignore_parens(PAst* p_ast)
 {
-
   while (true) {
     switch (P_AST_GET_KIND(p_ast)) {
       case P_AST_NODE_PAREN_EXPR:
