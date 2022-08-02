@@ -8,6 +8,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+bool opt_f_syntax_only = false;
+
 void
 compile_to(PSourceFile* p_source_file, const char* p_output_filename)
 {
@@ -23,7 +25,7 @@ compile_to(PSourceFile* p_source_file, const char* p_output_filename)
   p_parser_init(&parser);
 
   PAst* ast = p_parse(&parser);
-  if (g_diag_context.diagnostic_count[P_DIAG_ERROR] == 0) {
+  if (g_diag_context.diagnostic_count[P_DIAG_ERROR] == 0 && !opt_f_syntax_only) {
     struct PCodegenLLVM codegen;
     p_cg_init(&codegen);
     codegen.opt_level = 0;
@@ -59,6 +61,8 @@ main(int p_argc, char* p_argv[])
     } else if (strcmp(p_argv[i], "-o") == 0) {
       if (i + 1 < p_argc)
         output_filename = p_argv[i + 1];
+    } else if (strcmp(p_argv[i], "-fsyntax-only") == 0) {
+      opt_f_syntax_only = true;
     }
   }
 
