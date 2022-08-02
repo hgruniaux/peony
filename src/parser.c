@@ -389,6 +389,14 @@ parse_func_decl(struct PParser* p_parser)
 
   // Parse body
   // TODO: lazy body parsing
+  if (decl == NULL) {
+    // Skip body
+    expect_token(p_parser, P_TOK_LBRACE);
+    skip_until_no_error(p_parser, P_TOK_RBRACE);
+    consume_token(p_parser); // consume '}'
+    return NULL;
+  }
+
   sema_begin_func_decl_body_parsing(&p_parser->sema, decl);
   PAst* body = parse_compound_stmt(p_parser);
   sema_end_func_decl_body_parsing(&p_parser->sema, decl);
@@ -1002,8 +1010,12 @@ parse_translation_unit(struct PParser* p_parser)
   PDynamicArray decls;
   p_dynamic_array_init(&decls);
   while (!LOOKAHEAD_IS(P_TOK_EOF)) {
-    PDecl* func = parse_func_decl(p_parser);
-    p_dynamic_array_append(&decls, func);
+    if (LOOKAHEAD_IS(P_TOK_KEY_fn)) {
+      PDecl* func = parse_func_decl(p_parser);
+      p_dynamic_array_append(&decls, func);
+    } else {
+      unexpected_token(p_parser);
+    }
   }
 
   expect_token(p_parser, P_TOK_EOF);
