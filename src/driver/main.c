@@ -31,7 +31,6 @@ compile_to(PSourceFile* p_source_file, const char* p_output_filename)
 
     p_cg_compile(&codegen, ast, p_output_filename);
 
-    p_cg_dump(&codegen);
     p_cg_destroy(&codegen);
   }
 

@@ -190,6 +190,7 @@ p_lex(PLexer* p_lexer, PToken* p_token)
             ","   { FILL_TOKEN(P_TOK_COMMA); break; }
             ":"   { FILL_TOKEN(P_TOK_COLON); break; }
             ";"   { FILL_TOKEN(P_TOK_SEMI); break; }
+            "."   { FILL_TOKEN(P_TOK_DOT); break; }
             "->"  { FILL_TOKEN(P_TOK_ARROW); break; }
             "="   { FILL_TOKEN(P_TOK_EQUAL); break; }
             "=="  { FILL_TOKEN(P_TOK_EQUAL_EQUAL); break; }

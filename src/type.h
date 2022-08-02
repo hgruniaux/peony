@@ -27,6 +27,7 @@ typedef enum PTypeKind
   P_TYPE_FUNCTION,
   P_TYPE_POINTER,
   P_TYPE_ARRAY,
+  P_TYPE_TAG,
 } PTypeKind;
 
 typedef struct PTypeCommon
@@ -67,6 +68,14 @@ typedef struct PArrayType
   PType* element_type;
   int num_elements;
 } PArrayType;
+
+// Type that is intimately linked to a statement. The type
+// itself is defined implicitly by the attached declaration.
+typedef struct PTagType
+{
+  PTypeCommon common;
+  struct PDecl* decl;
+} PTagType;
 
 #define P_TYPE_GET_KIND(p_type) (((PType*)(p_type))->common.kind)
 
@@ -194,5 +203,8 @@ p_type_get_pointer(PType* p_element_ty);
 
 PType*
 p_type_get_array(PType* p_element_ty, int p_num_elements);
+
+PType*
+p_type_get_tag(struct PDecl* p_decl);
 
 HEDLEY_END_C_DECLS

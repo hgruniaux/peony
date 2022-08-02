@@ -25,6 +25,7 @@ typedef enum PAstKind
   P_AST_NODE_DECL_REF_EXPR,
   P_AST_NODE_UNARY_EXPR,
   P_AST_NODE_BINARY_EXPR,
+  P_AST_NODE_MEMBER_EXPR,
   P_AST_NODE_CALL_EXPR,
   P_AST_NODE_CAST_EXPR,
   P_AST_NODE_LVALUE_TO_RVALUE_EXPR
@@ -32,12 +33,9 @@ typedef enum PAstKind
 
 typedef struct PDecl PDecl;
 
-/** @brief A value category (either lvalue or rvalue). */
-typedef enum PValueCategory
-{
-  P_VC_LVALUE,
-  P_VC_RVALUE
-} PValueCategory;
+/* --------------------------------------------------------
+ * Statements
+ */
 
 typedef struct PAstCommon
 {
@@ -126,6 +124,17 @@ typedef struct PAstWhileStmt
   PAst* cond_expr;
   PAst* body_stmt;
 } PAstWhileStmt;
+
+/* --------------------------------------------------------
+ * Expressions
+ */
+
+/** @brief A value category (either lvalue or rvalue). */
+typedef enum PValueCategory
+{
+  P_VC_LVALUE,
+  P_VC_RVALUE
+} PValueCategory;
 
 typedef struct PAstExprCommon
 {
@@ -225,6 +234,17 @@ typedef struct PAstBinaryExpr
   PAst* rhs;
 } PAstBinaryExpr;
 
+struct PDeclStructField;
+
+/** @brief A member access expression (e.g. `base_expr.member`). */
+typedef struct PAstMemberExpr
+{
+  PAstCommon common;
+  PAstExprCommon expr_common;
+  PAst* base_expr;
+  struct PDeclStructField* member;
+} PAstMemberExpr;
+
 /** @brief A function call. */
 typedef struct PAstCallExpr
 {
@@ -273,19 +293,30 @@ p_ast_ignore_parens(PAst* p_ast);
 #define P_AST_EXPR_IS_LVALUE(p_node) (P_AST_EXPR_GET_VALUE_CATEGORY(p_node) == P_VC_LVALUE)
 #define P_AST_EXPR_IS_RVALUE(p_node) (P_AST_EXPR_GET_VALUE_CATEGORY(p_node) == P_VC_RVALUE)
 
+/* --------------------------------------------------------
+ * Declarations
+ */
+
 typedef enum PDeclKind
 {
   P_DECL_FUNCTION,
   P_DECL_VAR,
-  P_DECL_PARAM
+  P_DECL_PARAM,
+  P_DECL_STRUCT_FIELD,
+  P_DECL_STRUCT
 } PDeclKind;
 
 typedef struct PDeclCommon
 {
   PDeclKind kind;
+  // Some declarations may be unnamed, in that case this is NULL.
   PIdentifierInfo* name;
   PType* type;
-  void* _llvm_address; /* used by the LLVM backend */
+  // Private field used by the LLVM codegen backend to store the address
+  // of the declaration instance (for variables and instances).
+  // This is a LLVMValueRef (e.g. returned by LLVMBuildAlloca()).
+  void* _llvm_address;
+  // Is there at least one reference to this type?
   bool used;
 } PDeclCommon;
 
@@ -316,8 +347,26 @@ typedef struct PDeclFunction
   PDeclCommon common;
   PAst* body;
   int param_count;
-  PDeclParam* params[1]; /* tail-allocated */
+  PDeclParam* params[1]; // tail-allocated
 } PDeclFunction;
+
+/** @brief A structure field declaration. */
+typedef struct PDeclStructField
+{
+  PDeclCommon common;
+  // To whom does this field belong.
+  struct PDeclStruct* parent;
+  // This is the position in parent->fields where this field belong in.
+  int idx_in_parent_fields;
+} PDeclStructField;
+
+/** @brief A structure declaration. */
+typedef struct PDeclStruct
+{
+  PDeclCommon common;
+  int field_count;
+  PDeclStructField* fields[1]; // tail-allocated
+} PDeclStruct;
 
 #define P_DECL_GET_KIND(p_node) (((PDecl*)(p_node))->common.kind)
 #define P_DECL_GET_NAME(p_node) (((PDecl*)(p_node))->common.name)

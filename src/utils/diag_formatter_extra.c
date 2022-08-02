@@ -1,3 +1,4 @@
+#include "ast.h"
 #include "diag_formatter.h"
 
 #include "../identifier_table.h"
@@ -62,8 +63,8 @@ format_arg_type(PMsgBuffer* p_buffer, PType* p_type, PIdentifierInfo* p_name_hin
   assert(p_type != NULL);
 
   /* WARNING: Must have the same layout as PTypeKind. */
-  static const char* builtin_types[] = { "void", "char", "i8", "i16", "i32", "i64", "u8", "u16",
-                                         "u32", "u64", "{integer}", "f32", "f64", "{float}", "bool" };
+  static const char* builtin_types[] = { "void", "char", "i8",        "i16", "i32", "i64",     "u8",  "u16",
+                                         "u32",  "u64",  "{integer}", "f32", "f64", "{float}", "bool" };
 
   if (P_TYPE_GET_KIND(p_type) == P_TYPE_FUNCTION) {
     PFunctionType* func_type = (PFunctionType*)p_type;
@@ -85,6 +86,16 @@ format_arg_type(PMsgBuffer* p_buffer, PType* p_type, PIdentifierInfo* p_name_hin
   } else if (P_TYPE_GET_KIND(p_type) == P_TYPE_PAREN) {
     PParenType* paren_type = (PParenType*)p_type;
     format_arg_type(p_buffer, paren_type->sub_type, p_name_hint);
+  } else if (P_TYPE_GET_KIND(p_type) == P_TYPE_TAG) {
+    PDecl* decl = ((PTagType*)p_type)->decl;
+    switch (P_DECL_GET_KIND(decl)) {
+      case P_DECL_STRUCT:
+        write_buffer_str(p_buffer, "struct ");
+        format_arg_ident(p_buffer, P_DECL_GET_NAME(decl));
+        break;
+      default:
+        HEDLEY_UNREACHABLE();
+    }
   } else {
     write_buffer_str(p_buffer, builtin_types[(int)P_TYPE_GET_KIND(p_type)]);
   }

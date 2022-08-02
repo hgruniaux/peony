@@ -8,6 +8,7 @@ bool
 p_binop_is_assignment(PAstBinaryOp p_binop)
 {
   switch (p_binop) {
+    case P_BINARY_ASSIGN:
     case P_BINARY_ASSIGN_MUL:
     case P_BINARY_ASSIGN_DIV:
     case P_BINARY_ASSIGN_MOD:
@@ -72,6 +73,9 @@ p_ast_get_type(PAst* p_ast)
         return DUMMY_TYPE;
 
       return CAST(callee_type, PFunctionType)->ret_type;
+    }
+    case P_AST_NODE_MEMBER_EXPR: {
+      return P_DECL_GET_TYPE(CAST(p_ast, PAstMemberExpr)->member);
     }
 
     default: // This node has no concept of type.

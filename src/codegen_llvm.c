@@ -11,6 +11,53 @@
 #include <llvm-c/Transforms/PassBuilder.h>
 
 static LLVMTypeRef
+cg_to_llvm_type(PType* p_type);
+
+// Creates a LLVM type for a given function type.
+// You should call cg_to_llvm_type() as it does caching of LLVM types.
+static LLVMTypeRef
+cg_llvm_type_of_func_type(PFunctionType* p_type)
+{
+  LLVMTypeRef* args = malloc(sizeof(LLVMTypeRef) * p_type->arg_count);
+  assert(args != NULL);
+
+  for (int i = 0; i < p_type->arg_count; ++i) {
+    args[i] = cg_to_llvm_type(p_type->args[i]);
+  }
+
+  LLVMTypeRef llvm_type = LLVMFunctionType(cg_to_llvm_type(p_type->ret_type), args, p_type->arg_count, false);
+  free(args);
+  return llvm_type;
+}
+
+// Creates a LLVM type for a given tag type.
+// You should call cg_to_llvm_type() as it does caching of LLVM types.
+static LLVMTypeRef
+cg_llvm_type_of_tag_type(PTagType* p_type)
+{
+  if (P_DECL_GET_KIND(p_type->decl) == P_DECL_STRUCT) {
+    PDeclStruct* decl = (PDeclStruct*)p_type->decl;
+    // FIXME: prefix name with 'struct.' to avoid conflicts
+    const char* name = P_DECL_GET_NAME(decl)->spelling;
+    int field_count = decl->field_count;
+    LLVMTypeRef* field_types = malloc(sizeof(LLVMTypeRef) * field_count);
+    assert(field_types != NULL);
+
+    for (int i = 0; i < field_count; ++i) {
+      field_types[i] = cg_to_llvm_type(P_DECL_GET_TYPE(decl->fields[i]));
+    }
+
+    LLVMTypeRef llvm_type = LLVMStructCreateNamed(LLVMGetGlobalContext(), name);
+    LLVMStructSetBody(llvm_type, field_types, field_count, /* packed */ false);
+
+    free(field_types);
+    return llvm_type;
+  } else {
+    HEDLEY_UNREACHABLE_RETURN(NULL);
+  }
+}
+
+static LLVMTypeRef
 cg_to_llvm_type(PType* p_type)
 {
   assert(p_type != NULL);
@@ -52,19 +99,9 @@ cg_to_llvm_type(PType* p_type)
     case P_TYPE_F64:
       type = LLVMDoubleType();
       break;
-    case P_TYPE_FUNCTION: {
-      PFunctionType* func_type = (PFunctionType*)p_type;
-      LLVMTypeRef* args = malloc(sizeof(LLVMTypeRef) * func_type->arg_count);
-      assert(args != NULL);
-
-      for (int i = 0; i < func_type->arg_count; ++i) {
-        args[i] = cg_to_llvm_type(func_type->args[i]);
-      }
-
-      type = LLVMFunctionType(cg_to_llvm_type(func_type->ret_type), args, func_type->arg_count, false);
-      free(args);
+    case P_TYPE_FUNCTION:
+      type = cg_llvm_type_of_func_type((PFunctionType*)p_type);
       break;
-    }
     case P_TYPE_POINTER: {
       PPointerType* ptr_type = (PPointerType*)p_type;
       type = LLVMPointerType(cg_to_llvm_type(ptr_type->element_type), 0);
@@ -73,6 +110,12 @@ cg_to_llvm_type(PType* p_type)
     case P_TYPE_ARRAY: {
       PArrayType* array_type = (PArrayType*)p_type;
       type = LLVMArrayType(cg_to_llvm_type(array_type->element_type), array_type->num_elements);
+      break;
+    }
+    case P_TYPE_TAG: {
+      PTagType* tag_type = (PTagType*)p_type;
+      assert(tag_type->decl != NULL);
+      type = cg_llvm_type_of_tag_type(tag_type);
       break;
     }
     default:
@@ -189,6 +232,9 @@ cg_visit_decl(struct PCodegenLLVM* p_cg, PDecl* p_decl)
       break;
     case P_DECL_VAR:
       cg_var_decl(p_cg, (PDeclVar*)p_decl);
+      break;
+    case P_DECL_STRUCT:
+    case P_DECL_STRUCT_FIELD:
       break;
     default:
       HEDLEY_UNREACHABLE();
@@ -621,6 +667,16 @@ cg_call_expr(struct PCodegenLLVM* p_cg, PAstCallExpr* p_node)
 }
 
 static LLVMValueRef
+cg_member_expr(struct PCodegenLLVM* p_cg, PAstMemberExpr* p_node)
+{
+  assert(P_AST_GET_KIND(p_node) == P_AST_NODE_MEMBER_EXPR);
+
+  LLVMValueRef base_expr = cg_visit(p_cg, p_node->base_expr);
+  LLVMTypeRef struct_type = cg_to_llvm_type(P_DECL_GET_TYPE(p_node->member->parent));
+  return LLVMBuildStructGEP2(p_cg->builder, struct_type, base_expr, p_node->member->idx_in_parent_fields, "");
+}
+
+static LLVMValueRef
 cg_cast_expr(struct PCodegenLLVM* p_cg, PAstCastExpr* p_node)
 {
   assert(P_AST_GET_KIND(p_node) == P_AST_NODE_CAST_EXPR);
@@ -722,6 +778,7 @@ cg_visit(struct PCodegenLLVM* p_cg, PAst* p_node)
     DISPATCH(P_AST_NODE_UNARY_EXPR, PAstUnaryExpr, cg_unary_expr);
     DISPATCH(P_AST_NODE_BINARY_EXPR, PAstBinaryExpr, cg_binary_expr);
     DISPATCH(P_AST_NODE_CALL_EXPR, PAstCallExpr, cg_call_expr);
+    DISPATCH(P_AST_NODE_MEMBER_EXPR, PAstMemberExpr, cg_member_expr);
     DISPATCH(P_AST_NODE_CAST_EXPR, PAstCastExpr, cg_cast_expr);
     DISPATCH(P_AST_NODE_LVALUE_TO_RVALUE_EXPR, PAstLValueToRValueExpr, cg_lvalue_to_rvalue_expr);
 #undef DISPATCH
@@ -769,19 +826,13 @@ p_cg_destroy(struct PCodegenLLVM* p_cg)
 }
 
 void
-p_cg_dump(struct PCodegenLLVM* p_cg)
-{
-  assert(p_cg != NULL);
-
-  LLVMDumpModule(p_cg->module);
-}
-
-void
 p_cg_compile(struct PCodegenLLVM* p_cg, PAst* p_ast, const char* p_output_filename)
 {
   assert(p_cg != NULL);
 
   cg_visit(p_cg, p_ast);
+
+  LLVMDumpModule(p_cg->module);
 
   char* msg = NULL;
   LLVMVerifyModule(p_cg->module, LLVMAbortProcessAction, &msg);

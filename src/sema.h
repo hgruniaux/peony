@@ -51,6 +51,16 @@ sema_begin_func_decl_body_parsing(PSema* p_s, PDeclFunction* p_decl);
 void
 sema_end_func_decl_body_parsing(PSema* p_s, PDeclFunction* p_decl);
 
+PDeclStruct*
+sema_act_on_struct_decl(PSema* p_s,
+                        PSourceRange p_name_range,
+                        PIdentifierInfo* p_name,
+                        PDeclStructField** p_fields,
+                        size_t p_field_count);
+
+PDeclStructField*
+sema_act_on_struct_field_decl(PSema* p_s, PSourceRange p_name_range, PIdentifierInfo* p_name, PType* p_type);
+
 PDeclParam*
 sema_act_on_param_decl(PSema* p_s,
                        PSourceRange p_name_range,
@@ -104,6 +114,13 @@ sema_act_on_call_expr(PSema* p_s,
                       PAst* p_callee,
                       PAst** p_args,
                       size_t p_arg_count);
+
+PAstMemberExpr*
+sema_act_on_member_expr(PSema* p_s,
+                        PSourceLocation p_dot_loc,
+                        PAst* p_base_expr,
+                        PSourceRange p_name_range,
+                        PIdentifierInfo* p_name);
 
 PAstBinaryExpr*
 sema_act_on_binary_expr(PSema* p_s, PAstBinaryOp p_opcode, PSourceLocation p_op_loc, PAst* p_lhs, PAst* p_rhs);

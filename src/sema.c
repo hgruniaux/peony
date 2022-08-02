@@ -204,6 +204,58 @@ sema_end_func_decl_body_parsing(PSema* p_s, PDeclFunction* p_decl)
   sema_pop_scope(p_s);
 }
 
+PDeclStruct*
+sema_act_on_struct_decl(PSema* p_s,
+                        PSourceRange p_name_range,
+                        PIdentifierInfo* p_name,
+                        PDeclStructField** p_fields,
+                        size_t p_field_count)
+{
+  if (p_name == NULL)
+    return NULL;
+
+  PSymbol* symbol = sema_local_lookup(p_s, p_name);
+  if (symbol != NULL) {
+    PDiag* d = diag_at(P_DK_err_redeclaration_struct, p_name_range.begin);
+    diag_add_arg_ident(d, p_name);
+    diag_add_source_range(d, p_name_range);
+    diag_flush(d);
+    return NULL;
+  }
+
+  PDeclStruct* decl =
+    CREATE_DECL_EXTRA_SIZE(PDeclStruct, sizeof(PDeclStructField*) * (p_field_count - 1), P_DECL_STRUCT);
+  P_DECL_GET_NAME(decl) = p_name;
+  P_DECL_GET_TYPE(decl) = p_type_get_tag((PDecl*)decl);
+  decl->field_count = p_field_count;
+  memcpy(decl->fields, p_fields, sizeof(PDeclStructField*) * p_field_count);
+
+  for (int i = 0; i < decl->field_count; ++i) {
+    decl->fields[i]->parent = decl;
+    decl->fields[i]->idx_in_parent_fields = i;
+  }
+
+  symbol = p_scope_add_symbol(p_s->current_scope, p_name);
+  symbol->decl = (PDecl*)decl;
+
+  return decl;
+}
+
+PDeclStructField*
+sema_act_on_struct_field_decl(PSema* p_s, PSourceRange p_name_range, PIdentifierInfo* p_name, PType* p_type)
+{
+  if (p_name == NULL)
+    return NULL;
+
+  // FIXME: check for field name duplicates
+
+  PDeclStructField* node = CREATE_DECL(PDeclStructField, P_DECL_STRUCT_FIELD);
+  P_DECL_GET_NAME(node) = p_name;
+  P_DECL_GET_TYPE(node) = p_type;
+
+  return node;
+}
+
 PDeclParam*
 sema_act_on_param_decl(PSema* p_s,
                        PSourceRange p_name_range,
@@ -852,6 +904,52 @@ sema_act_on_call_expr(PSema* p_s,
   node->callee = p_callee;
   node->arg_count = p_arg_count;
   memcpy(node->args, p_args, sizeof(PAst*) * p_arg_count);
+  return node;
+}
+
+PAstMemberExpr*
+sema_act_on_member_expr(PSema* p_s,
+                        PSourceLocation p_dot_loc,
+                        PAst* p_base_expr,
+                        PSourceRange p_name_range,
+                        PIdentifierInfo* p_name)
+{
+  if (p_base_expr == NULL || p_name == NULL)
+    return NULL;
+
+  PType* base_type = p_ast_get_type(p_base_expr);
+  if (P_TYPE_GET_KIND(base_type) != P_TYPE_TAG || P_DECL_GET_KIND(((PTagType*)base_type)->decl) != P_DECL_STRUCT) {
+    PDiag* d = diag_at(P_DK_err_member_not_struct, p_dot_loc);
+    diag_add_arg_ident(d, p_name);
+
+    PSourceRange dot_range = { p_dot_loc, p_dot_loc };
+    diag_add_source_range(d, dot_range);
+    diag_flush(d);
+    return NULL;
+  }
+
+  PDeclStructField* field_decl = NULL;
+  PDeclStruct* base_decl = (PDeclStruct*)((PTagType*)base_type)->decl;
+  for (int i = 0; i < base_decl->field_count; ++i) {
+    if (P_DECL_GET_NAME(base_decl->fields[i]) == p_name) {
+      field_decl = base_decl->fields[i];
+      break;
+    }
+  }
+
+  if (field_decl == NULL) {
+    PDiag* d = diag_at(P_DK_err_no_member_named, p_dot_loc);
+    diag_add_arg_type(d, base_type);
+    diag_add_arg_ident(d, p_name);
+    diag_add_source_range(d, p_name_range);
+    diag_flush(d);
+    return NULL;
+  }
+
+  PAstMemberExpr* node = CREATE_NODE(PAstMemberExpr, P_AST_NODE_MEMBER_EXPR);
+  P_AST_EXPR_GET_VALUE_CATEGORY(node) = P_VC_LVALUE;
+  node->base_expr = p_base_expr;
+  node->member = field_decl;
   return node;
 }
 

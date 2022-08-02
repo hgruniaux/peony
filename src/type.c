@@ -342,3 +342,12 @@ p_type_get_array(PType* p_element_ty, int p_num_elements)
   TYPE_LIST_APPEND(&g_array_types, array_type);
   return (PType*)array_type;
 }
+
+PType*
+p_type_get_tag(struct PDecl* p_decl)
+{
+  PTagType* type = P_BUMP_ALLOC(&p_global_bump_allocator, PTagType);
+  init_type(type, P_TYPE_TAG);
+  type->decl = p_decl;
+  return type;
+}
