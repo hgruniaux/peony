@@ -1,6 +1,7 @@
 #include "lexer.h"
 
 #include "utils/diag.h"
+#include "options.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -46,7 +47,7 @@ p_lex(PLexer* p_lexer, PToken* p_token)
             [ \t\v\f\r]+ { continue; }
 
             "#"[^\x00\n\r]* {
-                if (!g_verify_mode_enabled)
+                if (!g_options.opt_verify_mode)
                     continue;
 
                 FILL_TOKEN(P_TOK_COMMENT);

@@ -45,11 +45,14 @@ add_library(peony_lib STATIC
     "src/token_kinds.def"
     "src/type.h"
     "src/type.c"
+
+    "src/options.h"
+    "src/options.c"
 )
 
 target_compile_definitions(peony_lib PUBLIC "-DP_DEBUG")
 
-add_executable(peony "src/main.c")
+add_executable(peony "src/driver/main.c" "src/driver/cmdline_parser.c")
 target_link_libraries(peony PRIVATE peony_lib)
 
 if(MSCV)
@@ -106,8 +109,8 @@ add_executable(peony_test
     "src/utils/line_map_test.cxx"
     "src/utils/diag_formatter_test.cxx"
     "src/utils/dynamic_array_test.cxx"
-    "src/type_test.cxx"
     "src/identifier_table_test.cxx"
+    "src/type_test.cxx"
 )
 
 target_link_libraries(peony_test PRIVATE peony_lib)

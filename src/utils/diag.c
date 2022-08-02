@@ -1,8 +1,8 @@
 #include "diag.h"
 
-#include "hedley.h"
-
+#include "../options.h"
 #include "diag_formatter.h"
+#include "hedley.h"
 
 #include <assert.h>
 #include <ctype.h>
@@ -19,7 +19,6 @@ PDiagContext g_diag_context = { .diagnostic_count = { 0 },
                                 .ignore_notes = false,
                                 .ignore_warnings = false };
 
-
 #ifdef P_DEBUG
 static PDiag g_current_diag = { .debug_was_flushed = true };
 #else
@@ -28,8 +27,6 @@ static PDiag g_current_diag;
 
 PSourceLocation g_current_source_location = 0;
 PSourceFile* g_current_source_file = NULL;
-bool g_verify_mode_enabled = false;
-bool g_enable_ansi_colors = true;
 
 static PDiagSeverity g_verify_last_diag_severity = P_DIAG_UNSPECIFIED;
 static const char* g_verify_last_diag_message = NULL;
@@ -68,8 +65,10 @@ diag(PDiagKind p_kind)
 {
 #ifdef P_DEBUG
   if (!g_current_diag.debug_was_flushed) {
-    fprintf(stderr, "internal compiler error: diag_flush() was not called for diagnostic generated at %s:%d\n",
-        g_current_diag.debug_source_filename, g_current_diag.debug_source_line);
+    fprintf(stderr,
+            "internal compiler error: diag_flush() was not called for diagnostic generated at %s:%d\n",
+            g_current_diag.debug_source_filename,
+            g_current_diag.debug_source_line);
     abort();
   }
 #endif
@@ -192,20 +191,28 @@ diag_flush(PDiag* p_diag)
   p_diag->debug_was_flushed = true;
 #endif
 
-  if (!g_verify_mode_enabled) {
+  if (!g_options.opt_verify_mode) {
     // Print source location:
     if (g_current_source_file != NULL) {
       uint32_t lineno, colno;
       p_source_location_get_lineno_and_colno(g_current_source_file, p_diag->caret_location, &lineno, &colno);
-      fprintf(stdout, "%s:%d:%d: ", g_current_source_file->filename, lineno, colno);
+
+      colno -= 1;
+      colno += g_options.opt_diagnostics_column_origin;
+
+      if (g_options.opt_diagnostics_show_column) {
+        fprintf(stdout, "%s:%d:%d: ", g_current_source_file->filename, lineno, colno);
+      } else {
+        fprintf(stdout, "%s:%d: ", g_current_source_file->filename, lineno);
+      }
     }
 
     // Print severity:
-    if (g_enable_ansi_colors)
+    if (g_options.opt_diagnostics_color)
       fputs(g_diag_severity_colors[p_diag->severity], stdout);
     fputs(g_diag_severity_names[p_diag->severity], stdout);
     fputs(": ", stdout);
-    if (g_enable_ansi_colors)
+    if (g_options.opt_diagnostics_color)
       fputs("\x1b[0m", stdout);
   }
 
@@ -213,7 +220,7 @@ diag_flush(PDiag* p_diag)
   INIT_MSG_BUFFER(buffer);
   p_diag_format_msg(&buffer, p_diag->message, p_diag->args, p_diag->arg_count);
 
-  if (g_verify_mode_enabled) {
+  if (g_options.opt_verify_mode) {
     if (g_verify_last_diag_severity != P_DIAG_UNSPECIFIED)
       verify_unexpected();
 
@@ -274,7 +281,7 @@ verify_clean_last_diag(void)
 static void
 verify_unexpected(void)
 {
-  assert(g_verify_mode_enabled);
+  assert(g_options.opt_verify_mode);
 
   ++g_verify_fail_count;
 
@@ -287,7 +294,7 @@ verify_unexpected(void)
 static void
 verify_expect(PDiagSeverity p_severity, const char* p_msg_begin, const char* p_msg_end)
 {
-  assert(g_verify_mode_enabled);
+  assert(g_options.opt_verify_mode);
 
   if (g_verify_last_diag_severity != p_severity) {
     ++g_verify_fail_count;
@@ -328,16 +335,14 @@ verify_expect_error(const char* p_msg_begin, const char* p_msg_end)
   verify_expect(P_DIAG_ERROR, p_msg_begin, p_msg_end);
 }
 
-void
+bool
 verify_finalize(void)
 {
-  assert(g_verify_mode_enabled);
+  assert(g_options.opt_verify_mode);
 
   if (g_verify_last_diag_severity != P_DIAG_UNSPECIFIED) {
     verify_unexpected();
   }
 
-  if (g_verify_fail_count == 0) {
-    fputs("SUCCESS\n", stdout);
-  }
+  return g_verify_fail_count == 0;
 }

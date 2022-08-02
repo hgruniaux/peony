@@ -1,4 +1,6 @@
 #include "parser.h"
+
+#include "options.h"
 #include "scope.h"
 
 #include "utils/bump_allocator.h"
@@ -39,7 +41,7 @@ consume_token(struct PParser* p_parser)
 {
   p_lex(p_parser->lexer, &p_parser->lookahead);
 
-  if (LOOKAHEAD_IS(P_TOK_COMMENT) && g_verify_mode_enabled) {
+  if (LOOKAHEAD_IS(P_TOK_COMMENT) && g_options.opt_verify_mode) {
     const char* it = p_parser->lookahead.data.literal_begin;
     while (*it == ' ' || *it == '\t')
       ++it;
@@ -281,7 +283,7 @@ parse_compound_stmt(struct PParser* p_parser)
  * type_specifier:
  *     ":" type
  */
-static PDeclParam*
+static PDecl*
 parse_param_or_var_decl(struct PParser* p_parser, bool p_is_param)
 {
   PIdentifierInfo* name = NULL;
@@ -310,9 +312,9 @@ parse_param_or_var_decl(struct PParser* p_parser, bool p_is_param)
   }
 
   if (p_is_param)
-    return sema_act_on_param_decl(&p_parser->sema, name_range, name, type, default_expr);
+    return (PDecl*)sema_act_on_param_decl(&p_parser->sema, name_range, name, type, default_expr);
   else
-    return sema_act_on_var_decl(&p_parser->sema, name_range, name, type, default_expr);
+    return (PDecl*)sema_act_on_var_decl(&p_parser->sema, name_range, name, type, default_expr);
 }
 
 /*
@@ -328,7 +330,7 @@ static void
 parse_param_or_var_list(struct PParser* p_parser, PDynamicArray* p_param_list, bool p_is_param)
 {
   while (true) {
-    PDeclParam* decl = parse_param_or_var_decl(p_parser, p_is_param);
+    PDecl* decl = parse_param_or_var_decl(p_parser, p_is_param);
     if (decl != NULL)
       p_dynamic_array_append(p_param_list, decl);
 

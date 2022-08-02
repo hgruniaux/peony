@@ -8,6 +8,10 @@
 
 /* Driver errors */
 ERROR(fail_open_file, "failed to open file <%{0}%>")
+ERROR(cmdline_opt_expect_int, "argument to <%{0}%> should be an integer")
+ERROR(missing_argument_cmdline_opt, "missing argument to <%{0}%>")
+ERROR(unknown_cmdline_opt, "unknown command-line option <%{0}%>")
+ERROR(no_input_files, "no input files")
 
 ERROR(unknown_character, "unknown character <%{0}%>")
 ERROR(unexpected_tok, "unexpected token, found <%{0}%>")

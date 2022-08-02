@@ -1,6 +1,7 @@
 #include "diag_formatter.h"
 
 #include "../identifier_table.h"
+#include "../options.h"
 #include "../type.h"
 
 #include <assert.h>
@@ -171,6 +172,28 @@ print_partial_src_range(struct PartialSourceRange* p_range, uint32_t p_current_c
     print_char_n_times('~', p_range->colno_end - p_range->colno_begin);
 }
 
+/* Print a line margin in stdout of the form:
+ * "    5 | "
+ * If p_lineno is set to 0, no line number will be printed.
+ * This function follows the formatting options given by user (cmd line options). */
+static void
+print_line_margin(uint32_t p_lineno)
+{
+  if (!g_options.opt_diagnostics_show_line_numbers)
+    return;
+
+  int margin_width = g_options.opt_diagnostics_minimum_margin_width;
+  if (margin_width < 2)
+    margin_width = 2;
+  if (p_lineno == 0) {
+    print_char_n_times(' ', margin_width - 1);
+  } else {
+    char format[] = { '%', '0' + (margin_width - 1), 'd', '\0' };
+    fprintf(stdout, format, p_lineno);
+  }
+  fputs(" | ", stdout);
+}
+
 void
 p_diag_print_source_ranges(PSourceFile* p_file, PSourceRange* p_ranges, size_t p_range_count)
 {
@@ -210,12 +233,15 @@ p_diag_print_source_ranges(PSourceFile* p_file, PSourceRange* p_ranges, size_t p
   uint32_t prev_lineno = partial_source_range_count > 0 ? (partial_source_ranges[0].lineno - 1) : 0;
   for (size_t i = 0; i < partial_source_range_count; ++i) {
     uint32_t current_lineno = partial_source_ranges[i].lineno;
-    if (current_lineno != (prev_lineno + 1))
-      fputs("      | ...\n", stdout);
+    if (current_lineno != (prev_lineno + 1)) {
+      print_line_margin(0);
+      fputs("...\n", stdout);
+    }
+
     prev_lineno = current_lineno;
 
     size_t line_length = p_diag_print_source_line(p_file, current_lineno);
-    fputs("      | ", stdout);
+    print_line_margin(0);
 
     uint32_t current_colno = 1;
     while (partial_source_ranges[i].lineno == current_lineno) {
@@ -251,7 +277,7 @@ p_diag_print_source_line(PSourceFile* p_file, uint32_t p_lineno)
     ++it;
   }
 
-  fprintf(stdout, "%5d | ", p_lineno);
+  print_line_margin(p_lineno);
   fwrite(p_file->buffer + start_position, sizeof(char), line_length, stdout);
   fputs("\n", stdout);
   return line_length;

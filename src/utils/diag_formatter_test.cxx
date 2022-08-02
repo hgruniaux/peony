@@ -2,6 +2,7 @@
 
 #include "../identifier_table.h"
 #include "../type.h"
+#include "../options.h"
 
 #include <gtest/gtest.h>
 
@@ -135,14 +136,14 @@ TEST(diag_formatter, plural_s)
 
 TEST(diag_formatter, quote)
 {
-  const bool enable_ansi_color_save = g_enable_ansi_colors;
+  const bool enable_ansi_color_save = g_options.opt_diagnostics_color;
 
-  g_enable_ansi_colors = true;
+  g_options.opt_diagnostics_color = true;
   check_format("<%foo%>", NULL, 0, "\x1b[1m'foo'\x1b[0m");
-  g_enable_ansi_colors = false;
+  g_options.opt_diagnostics_color = false;
   check_format("<%foo%>", NULL, 0, "'foo'");
 
-  g_enable_ansi_colors = enable_ansi_color_save;
+  g_options.opt_diagnostics_color = enable_ansi_color_save;
 }
 
 TEST(diag_formatter, args)

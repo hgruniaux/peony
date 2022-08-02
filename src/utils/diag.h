@@ -85,8 +85,6 @@ extern PDiagContext g_diag_context;
 
 extern PSourceLocation g_current_source_location;
 extern PSourceFile* g_current_source_file;
-extern bool g_verify_mode_enabled;
-extern bool g_enable_ansi_colors;
 
 #ifdef P_DEBUG
 PDiag*
@@ -137,7 +135,7 @@ verify_expect_warning(const char* p_msg_begin, const char* p_msg_end);
 void
 verify_expect_error(const char* p_msg_begin, const char* p_msg_end);
 
-void
+bool
 verify_finalize(void);
 
 HEDLEY_END_C_DECLS

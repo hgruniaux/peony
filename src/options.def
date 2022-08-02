@@ -1,0 +1,39 @@
+#ifndef OPTION
+#define OPTION(p_name, p_var)
+#endif
+
+OPTION("-verify", opt_verify_mode)
+
+#ifndef FEATURE_OPTION
+#define FEATURE_OPTION(p_name, p_var) OPTION("-f" p_name, p_var)
+#endif
+
+#ifndef FEATURE_OPTION_SWITCH
+#define FEATURE_OPTION_SWITCH(p_name, p_var, p_default) FEATURE_OPTION(p_name, p_var)
+#endif
+
+#ifndef FEATURE_OPTION_INT
+#define FEATURE_OPTION_SWITCH(p_name, p_var, p_default) FEATURE_OPTION(p_name, p_var)
+#endif
+
+FEATURE_OPTION_SWITCH("syntax-only", opt_syntax_only, false)
+FEATURE_OPTION_SWITCH("diagnostics-color", opt_diagnostics_color, true)
+FEATURE_OPTION_SWITCH("diagnostics-show-line-numbers", opt_diagnostics_show_line_numbers, true)
+FEATURE_OPTION_INT("diagnostics-minimum-margin-width", opt_diagnostics_minimum_margin_width, 6)
+FEATURE_OPTION_SWITCH("show-column", opt_diagnostics_show_column, true)
+FEATURE_OPTION_INT("diagnostics-column-origin", opt_diagnostics_column_origin, 1)
+FEATURE_OPTION_INT("max_errors", opt_diagnostics_max_errors, 0)
+
+#undef FEATURE_OPTION_SWITCH
+#undef FEATURE_OPTION_INT
+#undef FEATURE_OPTION
+
+#ifndef WARNING_OPTION
+#define WARNING_OPTION(p_name, p_var) OPTION("-W" p_name, p_var)
+#endif
+
+WARNING_OPTION("fatal-errors", opt_w_fatal_erros)
+
+#undef WARNING_OPTION
+
+#undef OPTION

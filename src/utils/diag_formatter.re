@@ -1,4 +1,5 @@
 #include "diag_formatter.h"
+#include "../options.h"
 
 static size_t
 parse_integer(const char* p_begin, const char* p_end)
@@ -50,7 +51,7 @@ p_diag_format_msg(struct PMsgBuffer* p_buffer, const char* p_msg, PDiagArgument*
             }
 
             "<%" {
-                if (g_enable_ansi_colors)
+                if (g_options.opt_diagnostics_color)
                     write_buffer_str(p_buffer, "\x1b[1m");
                 write_buffer_str(p_buffer, "'");
                 continue;
@@ -58,7 +59,7 @@ p_diag_format_msg(struct PMsgBuffer* p_buffer, const char* p_msg, PDiagArgument*
 
             "%>" {
                 write_buffer_str(p_buffer, "'");
-                if (g_enable_ansi_colors)
+                if (g_options.opt_diagnostics_color)
                     write_buffer_str(p_buffer, "\x1b[0m");
                 continue;
             }
