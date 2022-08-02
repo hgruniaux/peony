@@ -21,6 +21,51 @@ fill_token(PLexer* p_lexer, PToken* p_token, PTokenKind p_kind)
     p_token->token_length = p_lexer->cursor - p_lexer->marked_cursor;
 }
 
+static void
+parse_int_suffix(PToken* p_token) {
+    PIntLiteralSuffix suffix = P_ILS_NO_SUFFIX;
+
+    if (p_token->data.literal.end - p_token->data.literal.begin >= 2) {
+        const char* suffix_start = p_token->data.literal.end - 2;
+        if (*suffix_start == 'i' || *suffix_start == 'u') {
+            bool is_unsigned = *suffix_start == 'u';
+            ++suffix_start;
+            assert(*suffix_start == '8');
+            p_token->data.literal.end -= 2;
+            if (is_unsigned)
+                suffix = P_ILS_U8;
+            else
+                suffix = P_ILS_I8;
+        }
+    }
+
+    if (p_token->data.literal.end - p_token->data.literal.begin >= 3) {
+        const char* suffix_start = p_token->data.literal.end - 2;
+        if (*suffix_start == 'i' || *suffix_start == 'u') {
+            bool is_unsigned = *suffix_start == 'u';
+            ++suffix_start;
+            assert(*suffix_start == '3' || *suffix_start == '6');
+            ++suffix_start;
+
+            if (*suffix_start == '2') {
+                if (is_unsigned)
+                    suffix = P_ILS_U32;
+                else
+                    suffix = P_ILS_I32;
+            } else { // *suffix_start == '4'
+                if (is_unsigned)
+                    suffix = P_ILS_U64;
+                else
+                    suffix = P_ILS_I64;
+            }
+
+            p_token->data.literal.end -= 3;
+        }
+    }
+
+    p_token->data.literal.suffix_kind = suffix;
+}
+
 void
 p_lex(PLexer* p_lexer, PToken* p_token)
 {
@@ -51,8 +96,8 @@ p_lex(PLexer* p_lexer, PToken* p_token)
                     continue;
 
                 FILL_TOKEN(P_TOK_COMMENT);
-                p_token->data.literal_begin = p_lexer->marked_cursor + 1;
-                p_token->data.literal_end = p_lexer->cursor;
+                p_token->data.literal.begin = p_lexer->marked_cursor + 1;
+                p_token->data.literal.end = p_lexer->cursor;
                 break;
             }
 
@@ -65,14 +110,66 @@ p_lex(PLexer* p_lexer, PToken* p_token)
 
                 assert(ident != NULL);
                 FILL_TOKEN(ident->token_kind);
-                p_token->data.identifier_info = ident;
+                p_token->data.identifier = ident;
                 break;
             }
 
-            [0-9]+ {
+            int_suffix = [iu] ("8"|"16"|"32"|"64");
+
+            bin_digit = "0"|"1";
+            '0b' (bin_digit|"_")* bin_digit (bin_digit|"_")* int_suffix? {
                 FILL_TOKEN(P_TOK_INT_LITERAL);
-                p_token->data.literal_begin = p_lexer->marked_cursor;
-                p_token->data.literal_end = p_lexer->cursor;
+                p_token->data.literal.int_radix = 2;
+                p_token->data.literal.begin = p_lexer->marked_cursor;
+                p_token->data.literal.end = p_lexer->cursor;
+                parse_int_suffix(p_token);
+                break;
+            }
+
+            hex_digit = [0-9a-fA-F];
+            '0x' (hex_digit|"_")* hex_digit (hex_digit|"_")* int_suffix? {
+                FILL_TOKEN(P_TOK_INT_LITERAL);
+                p_token->data.literal.int_radix = 16;
+                p_token->data.literal.begin = p_lexer->marked_cursor;
+                p_token->data.literal.end = p_lexer->cursor;
+                parse_int_suffix(p_token);
+                break;
+            }
+
+            dec_digit = [0-9];
+            dec_literal = dec_digit (dec_digit|"_")*;
+            dec_literal int_suffix? {
+                FILL_TOKEN(P_TOK_INT_LITERAL);
+                p_token->data.literal.int_radix = 10;
+                p_token->data.literal.begin = p_lexer->marked_cursor;
+                p_token->data.literal.end = p_lexer->cursor;
+                parse_int_suffix(p_token);
+                break;
+            }
+
+            float_exp = 'e' [+-]? (dec_digit|"_")* dec_digit (dec_digit|"_")*;
+            float_suffix = "f32" | "f64";
+            dec_literal float_exp
+            | dec_literal "." dec_literal float_exp?
+            | dec_literal ("." dec_literal)? float_exp? float_suffix {
+                FILL_TOKEN(P_TOK_FLOAT_LITERAL);
+                p_token->data.literal.begin = p_lexer->marked_cursor;
+                p_token->data.literal.end = p_lexer->cursor;
+
+                PFloatLiteralSuffix suffix = P_FLS_NO_SUFFIX;
+                if (p_token->data.literal.end - p_token->data.literal.begin >= 3) {
+                    const char* suffix_start = p_token->data.literal.end - 3;
+                    if (memcmp(suffix_start, "f32", 3) == 0) {
+                        suffix = P_FLS_F32;
+                        p_token->data.literal.end -= 3;
+                    } else if (memcmp(suffix_start, "f64", 3) == 0) {
+                        suffix = P_FLS_F64;
+                        p_token->data.literal.end -= 3;
+                    }
+                }
+
+                p_token->data.literal.suffix_kind = suffix;
+
                 break;
             }
 

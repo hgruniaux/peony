@@ -494,7 +494,8 @@ sema_act_on_bool_literal(PSema* p_s, PSourceRange p_range, bool p_value)
 PAstIntLiteral*
 sema_act_on_int_literal(PSema* p_s, PSourceRange p_range, PType* p_type, uintmax_t p_value)
 {
-  assert(p_type != NULL);
+  if (p_type == NULL)
+    p_type = p_type_get_i32();
 
   uintmax_t max_value = UINTMAX_MAX;
   switch (P_TYPE_GET_KIND(p_type)) {
@@ -532,9 +533,10 @@ sema_act_on_int_literal(PSema* p_s, PSourceRange p_range, PType* p_type, uintmax
 
   if (p_value > max_value) {
     PDiag* d = diag_at(P_DK_err_int_literal_too_large, p_range.begin);
+    diag_add_arg_type(d, p_type);
     diag_add_source_range(d, p_range);
     diag_flush(d);
-    return NULL;
+    p_value = 0; // set a value to recover
   }
 
   PAstIntLiteral* node = CREATE_NODE(PAstIntLiteral, P_AST_NODE_INT_LITERAL);
@@ -547,9 +549,13 @@ sema_act_on_int_literal(PSema* p_s, PSourceRange p_range, PType* p_type, uintmax
 PAstFloatLiteral*
 sema_act_on_float_literal(PSema* p_s, PSourceRange p_range, PType* p_type, double p_value)
 {
+  if (p_type == NULL)
+    p_type = p_type_get_f32();
+
   PAstFloatLiteral* node = CREATE_NODE(PAstFloatLiteral, P_AST_NODE_FLOAT_LITERAL);
   P_AST_EXPR_GET_VALUE_CATEGORY(node) = P_VC_RVALUE;
   node->type = p_type;
+  node->value = p_value;
   return node;
 }
 

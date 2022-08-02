@@ -1,5 +1,6 @@
 #include "parser.h"
 
+#include "literal_parser.h"
 #include "options.h"
 #include "scope.h"
 
@@ -42,7 +43,7 @@ consume_token(struct PParser* p_parser)
   p_lex(p_parser->lexer, &p_parser->lookahead);
 
   if (LOOKAHEAD_IS(P_TOK_COMMENT) && g_options.opt_verify_mode) {
-    const char* it = p_parser->lookahead.data.literal_begin;
+    const char* it = p_parser->lookahead.data.literal.begin;
     while (*it == ' ' || *it == '\t')
       ++it;
 
@@ -52,13 +53,13 @@ consume_token(struct PParser* p_parser)
     if (memcmp(it, expect_error_marker, strlen(expect_error_marker)) == 0) {
       it += strlen(expect_error_marker);
       it = trim_whitespace_left(it);
-      const char* end = p_parser->lookahead.data.literal_end;
+      const char* end = p_parser->lookahead.data.literal.end;
       end = trim_whitespace_right(end);
       verify_expect_error(it, end);
     } else if (memcmp(it, expect_warning_marker, strlen(expect_warning_marker)) == 0) {
       it += strlen(expect_warning_marker);
       it = trim_whitespace_left(it);
-      const char* end = p_parser->lookahead.data.literal_end;
+      const char* end = p_parser->lookahead.data.literal.end;
       end = trim_whitespace_right(end);
       verify_expect_warning(it, end);
     }
@@ -103,17 +104,6 @@ skip_until_no_error(struct PParser* p_parser, PTokenKind p_kind)
 {
   while (!LOOKAHEAD_IS(p_kind) && !LOOKAHEAD_IS(P_TOK_EOF))
     consume_token(p_parser);
-}
-
-static bool
-skip_until(struct PParser* p_parser, PTokenKind p_kind)
-{
-  if (expect_token(p_parser, p_kind))
-    return true;
-
-  skip_until_no_error(p_parser, p_kind);
-
-  return false;
 }
 
 static bool
@@ -286,16 +276,18 @@ parse_compound_stmt(struct PParser* p_parser)
 static PDecl*
 parse_param_or_var_decl(struct PParser* p_parser, bool p_is_param)
 {
-  PIdentifierInfo* name = NULL;
   PSourceRange name_range = { LOOKAHEAD_BEGIN_LOC, LOOKAHEAD_END_LOC };
   if (!LOOKAHEAD_IS(P_TOK_IDENTIFIER)) {
     PDiag* d = diag_at(p_is_param ? P_DK_err_expected_param_decl : P_DK_err_expected_var_decl, LOOKAHEAD_BEGIN_LOC);
     diag_flush(d);
-    skip_until_no_consume(p_parser, P_TOK_RPAREN);
+    if (p_is_param)
+      skip_until_no_consume(p_parser, P_TOK_RPAREN);
+    else
+      skip_until_no_consume(p_parser, P_TOK_SEMI);
     return NULL;
   }
 
-  name = p_parser->lookahead.data.identifier_info;
+  PIdentifierInfo* name = name = p_parser->lookahead.data.identifier;
 
   expect_token(p_parser, P_TOK_IDENTIFIER);
 
@@ -338,6 +330,8 @@ parse_param_or_var_list(struct PParser* p_parser, PDynamicArray* p_param_list, b
       break;
 
     expect_token(p_parser, P_TOK_COMMA);
+    if (LOOKAHEAD_IS(P_TOK_EOF))
+      break;
   }
 }
 
@@ -358,7 +352,7 @@ parse_func_decl(struct PParser* p_parser)
   PSourceRange name_range = { LOOKAHEAD_BEGIN_LOC, LOOKAHEAD_END_LOC };
   PIdentifierInfo* name = NULL;
   if (LOOKAHEAD_IS(P_TOK_IDENTIFIER)) {
-    name = p_parser->lookahead.data.identifier_info;
+    name = p_parser->lookahead.data.identifier;
     consume_token(p_parser); // consume identifier
   } else {
     // Act as if there was an identifier but emit a diagnostic.
@@ -686,6 +680,33 @@ parse_bool_literal(struct PParser* p_parser)
   return (PAst*)node;
 }
 
+static PType*
+get_type_for_int_literal_suffix(PIntLiteralSuffix p_suffix_kind)
+{
+  switch (p_suffix_kind) {
+    case P_ILS_NO_SUFFIX:
+      return NULL; // let semantic analyzer choose
+    case P_ILS_I8:
+      return p_type_get_i8();
+    case P_ILS_I16:
+      return p_type_get_i16();
+    case P_ILS_I32:
+      return p_type_get_i32();
+    case P_ILS_I64:
+      return p_type_get_i64();
+    case P_ILS_U8:
+      return p_type_get_u8();
+    case P_ILS_U16:
+      return p_type_get_u16();
+    case P_ILS_U32:
+      return p_type_get_u32();
+    case P_ILS_U64:
+      return p_type_get_u64();
+    default:
+      HEDLEY_UNREACHABLE_RETURN(NULL);
+  }
+}
+
 /*
  * int_literal
  */
@@ -696,20 +717,51 @@ parse_int_literal(struct PParser* p_parser)
 
   PSourceRange range = { LOOKAHEAD_BEGIN_LOC, LOOKAHEAD_END_LOC };
 
-  uintmax_t value = 0;
-  for (const char* it = p_parser->lookahead.data.literal_begin; it != p_parser->lookahead.data.literal_end; ++it) {
-    value *= 10;
-    value += *it - '0';
+  const char* literal_begin = p_parser->lookahead.data.literal.begin;
+  const char* literal_end = p_parser->lookahead.data.literal.end;
+
+  uintmax_t value;
+
+  bool overflow;
+  if (p_parser->lookahead.data.literal.int_radix == 10) {
+    overflow = parse_dec_int_literal_token(literal_begin, literal_end, &value);
+  } else if (p_parser->lookahead.data.literal.int_radix == 2) {
+    overflow = parse_bin_int_literal_token(literal_begin, literal_end, &value);
+  } else { // p_parser->lookahead.data.literal.int_radix == 16
+    overflow = parse_hex_int_literal_token(literal_begin, literal_end, &value);
   }
+
+  if (overflow) {
+    PDiag* d = diag_at(P_DK_err_generic_int_literal_too_large, range.begin);
+    diag_add_source_range(d, range);
+    diag_flush(d);
+    value = 0; // set a default value to recover
+  }
+
+  PType* type = get_type_for_int_literal_suffix(p_parser->lookahead.data.literal.suffix_kind);
 
   consume_token(p_parser);
 
-  PAstIntLiteral* node = sema_act_on_int_literal(&p_parser->sema, range, p_type_get_i32(), value);
-  if (node == NULL)
-    return NULL;
+  PAstIntLiteral* node = sema_act_on_int_literal(&p_parser->sema, range, type, value);
+  assert(node != NULL);
 
   SET_NODE_LOC_RANGE(node, range.begin, range.end);
   return (PAst*)node;
+}
+
+static PType*
+get_type_for_float_literal_suffix(PFloatLiteralSuffix p_suffix_kind)
+{
+  switch (p_suffix_kind) {
+    case P_FLS_NO_SUFFIX:
+      return NULL; // let semantic analyzer choose
+    case P_FLS_F32:
+      return p_type_get_f32();
+    case P_FLS_F64:
+      return p_type_get_f64();
+    default:
+      HEDLEY_UNREACHABLE_RETURN(NULL);
+  }
 }
 
 /*
@@ -721,13 +773,25 @@ parse_float_literal(struct PParser* p_parser)
   assert(LOOKAHEAD_IS(P_TOK_FLOAT_LITERAL));
 
   PSourceRange range = { LOOKAHEAD_BEGIN_LOC, LOOKAHEAD_END_LOC };
+
+  const char* literal_begin = p_parser->lookahead.data.literal.begin;
+  const char* literal_end = p_parser->lookahead.data.literal.end;
+
+  double value;
+  if (parse_float_literal_token(literal_begin, literal_end, &value)) {
+    PDiag* d = diag_at(P_DK_err_generic_float_literal_too_large, range.begin);
+    diag_add_source_range(d, range);
+    diag_flush(d);
+    value = 0.0; // set a default value to recover
+  }
+
+  PType* type = get_type_for_float_literal_suffix(p_parser->lookahead.data.literal.suffix_kind);
+
   consume_token(p_parser);
 
-  PAstFloatLiteral* node = sema_act_on_float_literal(&p_parser->sema, range, p_type_get_f32(), 0.0);
-  if (node == NULL)
-    return NULL;
+  PAstFloatLiteral* node = sema_act_on_float_literal(&p_parser->sema, range, type, value);
+  assert(node != NULL);
 
-  // TODO: parse value of float literal
   SET_NODE_LOC_RANGE(node, range.begin, range.end);
   return (PAst*)node;
 }
@@ -767,7 +831,7 @@ parse_decl_ref_expr(struct PParser* p_parser)
   assert(p_parser->lookahead.kind == P_TOK_IDENTIFIER);
 
   PSourceRange range = { LOOKAHEAD_BEGIN_LOC, LOOKAHEAD_END_LOC };
-  PIdentifierInfo* name = p_parser->lookahead.data.identifier_info;
+  PIdentifierInfo* name = p_parser->lookahead.data.identifier;
   consume_token(p_parser);
 
   PAstDeclRefExpr* node = sema_act_on_decl_ref_expr(&p_parser->sema, range, name);

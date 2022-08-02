@@ -8,7 +8,7 @@ const char*
 p_get_token_spelling(PToken* p_token)
 {
   if (p_token->kind == P_TOK_IDENTIFIER) {
-    return p_token->data.identifier_info->spelling;
+    return p_token->data.identifier->spelling;
   } else {
     return p_token_kind_get_spelling(p_token->kind);
   }

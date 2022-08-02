@@ -6,6 +6,7 @@
 #include "../options.h"
 
 #include <assert.h>
+#include <locale.h>
 #include <stdlib.h>
 
 void
@@ -46,6 +47,8 @@ int
 main(int p_argc, char* p_argv[])
 {
   p_bump_init(&p_global_bump_allocator);
+
+  setlocale(LC_ALL, "C");
 
   cmdline_parser(p_argc, p_argv);
   if (g_diag_context.diagnostic_count[P_DIAG_ERROR] > 0)

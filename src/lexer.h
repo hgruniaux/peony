@@ -11,6 +11,7 @@ typedef struct PLexer
 
   /* For re2c: */
   const char* cursor;
+  const char* marker;
   const char* marked_cursor;
   PSourceLocation marked_source_location;
 } PLexer;

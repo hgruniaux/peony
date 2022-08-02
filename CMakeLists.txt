@@ -3,7 +3,7 @@ cmake_minimum_required (VERSION 3.8)
 project("peony")
 
 add_library(peony_lib STATIC
-    "src/utils/hedley.h"
+    "thirdparty/hedley/hedley.h"
 
     "src/utils/bump_allocator.c"
     "src/utils/bump_allocator.h"
@@ -48,9 +48,11 @@ add_library(peony_lib STATIC
 
     "src/options.h"
     "src/options.c"
-)
+ "src/literal_parser.h" "src/literal_parser.c")
 
 target_compile_definitions(peony_lib PUBLIC "-DP_DEBUG")
+target_include_directories(peony_lib PUBLIC "thirdparty/hedley")
+target_include_directories(peony_lib PUBLIC "src")
 
 add_executable(peony "src/driver/main.c" "src/driver/cmdline_parser.c")
 target_link_libraries(peony PRIVATE peony_lib)
@@ -111,7 +113,7 @@ add_executable(peony_test
     "src/utils/dynamic_array_test.cxx"
     "src/identifier_table_test.cxx"
     "src/type_test.cxx"
-)
+ "src/literal_parser_test.cxx")
 
 target_link_libraries(peony_test PRIVATE peony_lib)
 target_link_libraries(peony_test PRIVATE GTest::gtest)
