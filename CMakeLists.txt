@@ -114,3 +114,5 @@ target_link_libraries(peony_test PRIVATE peony_lib)
 target_link_libraries(peony_test PRIVATE GTest::gtest)
 gtest_discover_tests(peony_test)
 
+add_subdirectory(test)
+

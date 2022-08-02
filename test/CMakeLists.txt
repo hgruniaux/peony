@@ -1,0 +1,10 @@
+find_package(Python REQUIRED COMPONENTS Interpreter)
+
+file(GLOB_RECURSE TESTSUITE_SOURCES "*.p")
+foreach(TESTSUITE_FILE ${TESTSUITE_SOURCES})
+    file(RELATIVE_PATH TEST_NAME ${CMAKE_CURRENT_SOURCE_DIR} ${TESTSUITE_FILE})
+    string(REPLACE "/" "-" TEST_NAME ${TEST_NAME})
+    add_test(NAME test-${TEST_NAME}
+         COMMAND ${Python_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_runner.py --peony-exe "$<TARGET_FILE:peony>" --name "${TEST_NAME}" --file "${TESTSUITE_FILE}"
+         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+endforeach()
