@@ -82,16 +82,13 @@ p_ast_get_type(PAst* p_ast)
 }
 
 PAst*
-p_ast_ignore_parens_and_casts(PAst* p_ast)
+p_ast_ignore_parens(PAst* p_ast)
 {
 
   while (true) {
     switch (P_AST_GET_KIND(p_ast)) {
       case P_AST_NODE_PAREN_EXPR:
         p_ast = ((PAstParenExpr*)p_ast)->sub_expr;
-        continue;
-      case P_AST_NODE_CAST_EXPR:
-        p_ast = ((PAstCastExpr*)p_ast)->sub_expr;
         continue;
       default:
         return p_ast;

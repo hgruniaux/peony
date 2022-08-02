@@ -265,7 +265,7 @@ PType*
 p_ast_get_type(PAst* p_ast);
 
 PAst*
-p_ast_ignore_parens_and_casts(PAst* p_ast);
+p_ast_ignore_parens(PAst* p_ast);
 
 #define P_AST_GET_KIND(p_node) (((PAst*)(p_node))->common.kind)
 #define P_AST_GET_SOURCE_RANGE(p_node) (((PAst*)(p_node))->common.source_range)

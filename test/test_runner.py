@@ -76,18 +76,20 @@ class Test:
                 status = TestStatus.TIMEOUT
             except FileNotFoundError:
                 self.fail_reason = "Could not launch test '{}'".format(self.name)
-                print("The command:", splitted_cmd)
                 status = TestStatus.UNRESOLVED
             print("{}: {} ({} of {})".format(status.name, self.name, i + 1, len(self.commands)))
             if status.is_fail():
-                self.print_fail_details()
+                self.print_fail_details(i, splitted_cmd if status == TestStatus.UNRESOLVED else None)
                 exit_code = 1
         return exit_code
 
-    def print_fail_details(self) -> None:
-        print("{0} TEST {1} {0}".format("*" * 18, self.name))
+    def print_fail_details(self, command_i: int, command) -> None:
+        header = "{0} COMMAND {1} of {2} {0}".format("*" * 18, command_i, self.name)
+        print(header)
         print(self.fail_reason)
-        print("*" * (18 * 2 + 7) + str(len(self.name)))
+        if command is not None:
+            print("The command:", command)
+        print("*" * len(header))
 
 import argparse
 

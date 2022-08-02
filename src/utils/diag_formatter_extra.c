@@ -55,9 +55,9 @@ format_arg_ident(PMsgBuffer* p_buffer, PIdentifierInfo* p_ident)
   write_buffer(p_buffer, p_ident->spelling, p_ident->spelling_len);
 }
 
-/* Format function for P_DAT_TYPE. */
+/* Format function for P_DAT_TYPE and P_DAT_TYPE_WITH_NAME_HINT. */
 static void
-format_arg_type(PMsgBuffer* p_buffer, PType* p_type)
+format_arg_type(PMsgBuffer* p_buffer, PType* p_type, PIdentifierInfo* p_name_hint)
 {
   assert(p_type != NULL);
 
@@ -67,21 +67,24 @@ format_arg_type(PMsgBuffer* p_buffer, PType* p_type)
 
   if (P_TYPE_GET_KIND(p_type) == P_TYPE_FUNCTION) {
     PFunctionType* func_type = (PFunctionType*)p_type;
-    write_buffer_str(p_buffer, "fn (");
+    write_buffer_str(p_buffer, "fn ");
+    if (p_name_hint != NULL)
+      write_buffer_str(p_buffer, p_name_hint->spelling);
+    write_buffer_str(p_buffer, "(");
     for (int i = 0; i < func_type->arg_count; ++i) {
-      format_arg_type(p_buffer, func_type->args[i]);
+      format_arg_type(p_buffer, func_type->args[i], NULL); // do not propagate the hint
       if ((i + 1) != func_type->arg_count)
         write_buffer_str(p_buffer, ", ");
     }
     write_buffer_str(p_buffer, ") -> ");
-    format_arg_type(p_buffer, func_type->ret_type);
+    format_arg_type(p_buffer, func_type->ret_type, NULL);
   } else if (P_TYPE_GET_KIND(p_type) == P_TYPE_POINTER) {
     PPointerType* ptr_type = (PPointerType*)p_type;
     write_buffer_str(p_buffer, "*");
-    format_arg_type(p_buffer, ptr_type->element_type);
+    format_arg_type(p_buffer, ptr_type->element_type, NULL); // do not propagate the hint
   } else if (P_TYPE_GET_KIND(p_type) == P_TYPE_PAREN) {
     PParenType* paren_type = (PParenType*)p_type;
-    format_arg_type(p_buffer, paren_type->sub_type);
+    format_arg_type(p_buffer, paren_type->sub_type, p_name_hint);
   } else {
     write_buffer_str(p_buffer, builtin_types[(int)P_TYPE_GET_KIND(p_type)]);
   }
@@ -109,7 +112,10 @@ p_diag_format_arg(PMsgBuffer* p_buffer, PDiagArgument* p_arg)
       format_arg_ident(p_buffer, p_arg->value_ident);
       break;
     case P_DAT_TYPE:
-      format_arg_type(p_buffer, p_arg->value_type);
+      format_arg_type(p_buffer, p_arg->value_type, /* no hint */ NULL);
+      break;
+    case P_DAT_TYPE_WITH_NAME_HINT:
+      format_arg_type(p_buffer, p_arg->value_type_with_name_hint.type, p_arg->value_type_with_name_hint.name);
       break;
     default:
       HEDLEY_UNREACHABLE();

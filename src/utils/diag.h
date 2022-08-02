@@ -28,12 +28,13 @@ typedef enum PDiagKind
 
 typedef enum PDiagArgumentType
 {
-  P_DAT_CHAR,     /** @brief `char` */
-  P_DAT_INT,      /** @brief `int` */
-  P_DAT_STR,      /** @brief `const char*` (NUL-terminated) */
-  P_DAT_TOK_KIND, /** @brief `PTokenKind` */
-  P_DAT_IDENT,    /** @brief `PIdentifierInfo*` */
-  P_DAT_TYPE,     /** @brief `PType*` */
+  P_DAT_CHAR,                /** @brief `char` */
+  P_DAT_INT,                 /** @brief `int` */
+  P_DAT_STR,                 /** @brief `const char*` (NUL-terminated) */
+  P_DAT_TOK_KIND,            /** @brief `PTokenKind` */
+  P_DAT_IDENT,               /** @brief `PIdentifierInfo*` */
+  P_DAT_TYPE,                /** @brief `PType*` */
+  P_DAT_TYPE_WITH_NAME_HINT, /** @brief `PType*` and 'PIdentifierInfo*' */
 } PDiagArgumentType;
 
 typedef struct PDiagArgument
@@ -47,6 +48,11 @@ typedef struct PDiagArgument
     PTokenKind value_token_kind;
     struct PIdentifierInfo* value_ident;
     struct PType* value_type;
+    struct
+    {
+      struct PType* type;
+      struct PIdentifierInfo* name;
+    } value_type_with_name_hint;
   };
 } PDiagArgument;
 
@@ -120,6 +126,9 @@ diag_add_arg_ident(PDiag* p_diag, struct PIdentifierInfo* p_arg);
 
 void
 diag_add_arg_type(PDiag* p_diag, struct PType* p_arg);
+
+void
+diag_add_arg_type_with_name_hint(PDiag* p_diag, struct PType* p_type, struct PIdentifierInfo* p_name);
 
 void
 diag_add_source_range(PDiag* p_diag, PSourceRange p_range);

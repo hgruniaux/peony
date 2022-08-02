@@ -167,6 +167,16 @@ diag_add_arg_type(PDiag* p_diag, struct PType* p_arg)
 }
 
 void
+diag_add_arg_type_with_name_hint(PDiag* p_diag, struct PType* p_type, struct PIdentifierInfo* p_name)
+{
+  assert(p_diag->arg_count < P_DIAG_MAX_ARGUMENTS);
+  int arg_idx = p_diag->arg_count++;
+  p_diag->args[arg_idx].type = P_DAT_TYPE_WITH_NAME_HINT;
+  p_diag->args[arg_idx].value_type_with_name_hint.type = p_type;
+  p_diag->args[arg_idx].value_type_with_name_hint.name = p_name;
+}
+
+void
 diag_add_source_range(PDiag* p_diag, PSourceRange p_range)
 {
   assert(p_diag->range_count < P_DIAG_MAX_RANGES);

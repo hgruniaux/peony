@@ -740,22 +740,45 @@ sema_act_on_binary_expr(PSema* p_s, PAstBinaryOp p_opcode, PSourceLocation p_op_
   return node;
 }
 
+/* If p_callee is a decl ref expr then returns its name
+ * otherwise returns NULL. */
+static PIdentifierInfo*
+get_decl_ref_name(PAst* p_callee)
+{
+  p_callee = p_ast_ignore_parens(p_callee);
+  if (P_AST_GET_KIND(p_callee) == P_AST_NODE_DECL_REF_EXPR) {
+    PIdentifierInfo* name = P_DECL_GET_NAME(((PAstDeclRefExpr*)(p_callee))->decl);
+    return name;
+  }
+
+  return NULL;
+}
+
 static bool
 check_call_args(PSourceRange p_call_range,
                 PSourceLocation p_lparen_loc,
+                PAst* p_callee,
                 PFunctionType* p_callee_type,
                 PAst** p_args,
                 size_t p_arg_count)
 {
   if (p_arg_count < p_callee_type->arg_count) {
     PDiag* d = diag_at(P_DK_err_too_few_args, p_lparen_loc);
-    diag_add_arg_type(d, (PType*)p_callee_type);
+    PIdentifierInfo* callee_name = get_decl_ref_name(p_callee);
+    if (callee_name != NULL)
+      diag_add_arg_type_with_name_hint(d, (PType*)p_callee_type, callee_name);
+    else
+      diag_add_arg_type(d, (PType*)p_callee_type);
     diag_add_source_range(d, p_call_range);
     diag_flush(d);
     return false;
   } else if (p_arg_count > p_callee_type->arg_count) {
     PDiag* d = diag_at(P_DK_err_too_many_args, p_lparen_loc);
-    diag_add_arg_type(d, (PType*)p_callee_type);
+    PIdentifierInfo* callee_name = get_decl_ref_name(p_callee);
+    if (callee_name != NULL)
+      diag_add_arg_type_with_name_hint(d, (PType*)p_callee_type, callee_name);
+    else
+      diag_add_arg_type(d, (PType*)p_callee_type);
     diag_add_source_range(d, p_call_range);
     diag_flush(d);
     return false;
@@ -802,11 +825,10 @@ sema_act_on_call_expr(PSema* p_s,
   if (!p_type_is_function(callee_type)) {
     PDiag* d;
 
-    PAst* callee = p_ast_ignore_parens_and_casts(p_callee);
-    if (P_AST_GET_KIND(callee) == P_AST_NODE_DECL_REF_EXPR) {
-      PIdentifierInfo* func_name = P_DECL_GET_NAME(((PAstDeclRefExpr*)(callee))->decl);
+    PIdentifierInfo* callee_name = get_decl_ref_name(p_callee);
+    if (callee_name != NULL) {
       d = diag_at(P_DK_err_cannot_be_used_as_function, p_lparen_loc);
-      diag_add_arg_ident(d, func_name);
+      diag_add_arg_ident(d, callee_name);
     } else {
       d = diag_at(P_DK_err_expr_cannot_be_used_as_function, p_lparen_loc);
     }
@@ -816,7 +838,7 @@ sema_act_on_call_expr(PSema* p_s,
     return NULL;
   }
 
-  if (!check_call_args(call_range, p_lparen_loc, (PFunctionType*)callee_type, p_args, p_arg_count))
+  if (!check_call_args(call_range, p_lparen_loc, p_callee, (PFunctionType*)callee_type, p_args, p_arg_count))
     return NULL;
 
   PAstCallExpr* node = CREATE_NODE_EXTRA_SIZE(PAstCallExpr, sizeof(PAst*) * (p_arg_count - 1), P_AST_NODE_CALL_EXPR);
