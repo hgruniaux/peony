@@ -1,6 +1,6 @@
 #pragma once
 
-#include "utils/hedley.h"
+#include <hedley.h>
 
 #include <stdbool.h>
 

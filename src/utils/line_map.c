@@ -2,7 +2,6 @@
 
 #include <assert.h>
 #include <stdlib.h>
-#include <string.h>
 
 #define INITIAL_CAPACITY 16
 #define GROWTH_CAPACITY(p_capacity) ((p_capacity)*2)

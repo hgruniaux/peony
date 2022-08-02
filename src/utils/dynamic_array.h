@@ -1,14 +1,13 @@
 #pragma once
 
-#include <stddef.h>
+#include <hedley.h>
 
-#include "hedley.h"
+#include <stddef.h>
 
 HEDLEY_BEGIN_C_DECLS
 
 /*
- * This file implements a generic dynamic array that stores
- * pointers.
+ * This file implements a generic dynamic array that stores pointers.
  */
 
 typedef void* PDynamicArrayItem;

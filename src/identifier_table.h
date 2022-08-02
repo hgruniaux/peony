@@ -2,6 +2,8 @@
 
 #include "token_kind.h"
 
+#include <hedley.h>
+
 #include <stddef.h>
 
 HEDLEY_BEGIN_C_DECLS

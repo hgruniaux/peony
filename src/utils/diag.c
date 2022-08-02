@@ -2,7 +2,8 @@
 
 #include "../options.h"
 #include "diag_formatter.h"
-#include "hedley.h"
+
+#include <hedley.h>
 
 #include <assert.h>
 #include <ctype.h>

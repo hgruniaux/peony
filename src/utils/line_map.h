@@ -1,6 +1,6 @@
 #pragma once
 
-#include "hedley.h"
+#include <hedley.h>
 
 #include <stdint.h>
 

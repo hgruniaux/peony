@@ -1,7 +1,8 @@
 #include "codegen_llvm.h"
 
-#include "hedley.h"
 #include "identifier_table.h"
+
+#include <hedley.h>
 
 #include <assert.h>
 

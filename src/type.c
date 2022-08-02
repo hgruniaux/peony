@@ -2,7 +2,6 @@
 
 #include "utils/bump_allocator.h"
 #include "utils/dynamic_array.h"
-#include "utils/hedley.h"
 
 #include <assert.h>
 #include <stdlib.h>
