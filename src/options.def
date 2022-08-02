@@ -13,7 +13,7 @@ OPTION("-verify", opt_verify_mode)
 #endif
 
 #ifndef FEATURE_OPTION_INT
-#define FEATURE_OPTION_SWITCH(p_name, p_var, p_default) FEATURE_OPTION(p_name, p_var)
+#define FEATURE_OPTION_INT(p_name, p_var, p_default) FEATURE_OPTION(p_name, p_var)
 #endif
 
 FEATURE_OPTION_SWITCH("syntax-only", opt_syntax_only, false)

@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+HEDLEY_NO_RETURN
 static void
 print_help(const char* p_argv0)
 {
@@ -139,15 +140,13 @@ cmdline_parser(int p_argc, char* p_argv[])
       continue;
     }
 
-#if 0
 #define OPTION(p_opt, p_var)                                                                                           \
-  if (strcmp((p_opt), arg) == 0) {                                                                                       \
+  if (strcmp(p_opt, arg) == 0) {                                                                                       \
     g_options.p_var = true;                                                                                            \
     continue;                                                                                                          \
   }
 #define FEATURE_OPTION(p_opt, p_var)
 #include "../options.def"
-#endif
 
     PDiag* d = diag(P_DK_err_unknown_cmdline_opt);
     diag_add_arg_str(d, arg);

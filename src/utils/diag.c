@@ -301,7 +301,7 @@ verify_expect(PDiagSeverity p_severity, const char* p_msg_begin, const char* p_m
     verify_print_fail("expected %s diagnostic", g_diag_severity_names[g_verify_last_diag_severity]);
     if (g_verify_last_diag_severity != P_DIAG_UNSPECIFIED) {
       fprintf(stdout,
-              "    but got %s diagnostic with message {{%s}}",
+              "    but got %s diagnostic with message {{%s}}\n",
               g_diag_severity_names[p_severity],
               g_verify_last_diag_message);
     }
@@ -317,7 +317,7 @@ verify_expect(PDiagSeverity p_severity, const char* p_msg_begin, const char* p_m
     fputs("    expected: {{", stdout);
     fwrite(p_msg_begin, sizeof(char), (p_msg_end - p_msg_begin), stdout);
     fputs("}}\n", stdout);
-    fprintf(stdout, "    got: {{%s}}", g_verify_last_diag_message);
+    fprintf(stdout, "    got: {{%s}}\n", g_verify_last_diag_message);
   }
 
   verify_clean_last_diag();

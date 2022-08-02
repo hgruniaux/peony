@@ -51,6 +51,10 @@ main(int p_argc, char* p_argv[])
   if (g_diag_context.diagnostic_count[P_DIAG_ERROR] > 0)
     return EXIT_FAILURE;
 
+  if (g_options.opt_verify_mode) {
+    g_options.opt_diagnostics_color = false;
+  }
+
   p_init_types();
 
   for (size_t i = 0; i < g_options.input_files.size; ++i) {
