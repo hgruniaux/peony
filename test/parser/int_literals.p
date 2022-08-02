@@ -1,4 +1,4 @@
-# RUN: peony -fsyntax-only -verify %s
+// RUN: peony -fsyntax-only -verify %s
 
 fn f() {
     let d0 = 0;

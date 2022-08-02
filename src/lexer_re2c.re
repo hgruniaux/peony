@@ -22,7 +22,15 @@ fill_token(PLexer* p_lexer, PToken* p_token, PTokenKind p_kind)
 }
 
 static void
-parse_int_suffix(PToken* p_token) {
+register_new_line(PLexer* p_lexer)
+{
+    uint32_t line_pos = p_lexer->cursor - p_lexer->source_file->buffer;
+    p_line_map_add(&p_lexer->source_file->line_map, line_pos);
+}
+
+static void
+parse_int_suffix(PToken* p_token)
+{
     PIntLiteralSuffix suffix = P_ILS_NO_SUFFIX;
 
     if (p_token->data.literal.end - p_token->data.literal.begin >= 2) {
@@ -83,23 +91,25 @@ p_lex(PLexer* p_lexer, PToken* p_token)
             re2c:define:YYCURSOR   = "p_lexer->cursor";
             re2c:define:YYMARKER   = "p_lexer->marker";
 
-            "\n"|"\r\n" {
-                uint32_t line_pos = p_lexer->cursor - p_lexer->source_file->buffer;
-                p_line_map_add(&p_lexer->source_file->line_map, line_pos);
+            new_line = "\n"|"\r\n";
+            new_line {
+                register_new_line(p_lexer);
                 continue;
             }
 
             [ \t\v\f\r]+ { continue; }
 
-            "#"[^\x00\n\r]* {
+            "//"[^\x00\n\r]* {
                 if (!g_options.opt_verify_mode)
                     continue;
 
                 FILL_TOKEN(P_TOK_COMMENT);
-                p_token->data.literal.begin = p_lexer->marked_cursor + 1;
+                p_token->data.literal.begin = p_lexer->marked_cursor;
                 p_token->data.literal.end = p_lexer->cursor;
                 break;
             }
+
+            "/*" { goto block_comment; }
 
             [a-zA-Z_][a-zA-Z0-9_]* {
                 struct PIdentifierInfo* ident = p_identifier_table_get(
@@ -225,6 +235,35 @@ p_lex(PLexer* p_lexer, PToken* p_token)
                 continue;
             }
         */
+
+        block_comment:
+        /*!re2c
+            new_line {
+                register_new_line(p_lexer);
+                goto block_comment;
+            }
+
+            "*/" {
+                if (!g_options.opt_verify_mode)
+                    continue;
+
+                FILL_TOKEN(P_TOK_COMMENT);
+                p_token->data.literal.begin = p_lexer->marked_cursor;
+                p_token->data.literal.end = p_lexer->cursor;
+                break;
+            }
+
+            "\x00" {
+                // Unterminated block comment
+                FILL_TOKEN(P_TOK_EOF);
+                p_lexer->cursor--;
+                break;
+            }
+
+            * {
+                goto block_comment;
+            }
+         */
     }
 
 #undef FILL_TOKEN

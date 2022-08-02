@@ -1,4 +1,4 @@
-# RUN: peony -fsyntax-only -verify %s
+// RUN: peony -fsyntax-only -verify %s
 
 fn f0() {}
 fn f1(i: i32) {}
