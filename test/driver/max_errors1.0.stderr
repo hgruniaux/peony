@@ -1,0 +1,3 @@
+<source>:3:1: error: unexpected token, found '%'
+<source>:4:1: error: unexpected token, found '%'
+compilation terminated due to -fmax-errors=2.

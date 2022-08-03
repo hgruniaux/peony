@@ -2,6 +2,7 @@
 
 #include "identifier_table.h"
 #include "type.h"
+#include "utils/dynamic_array.h"
 #include "utils/source_location.h"
 
 #include <stdbool.h>
@@ -346,6 +347,14 @@ typedef struct PDeclFunction
 {
   PDeclCommon common;
   PAst* body;
+  // Function bodies are parsed once all declarations were parsed and not
+  // at the same time as when parsing the function prototype. When the
+  // function prototype is parsed, the parser consumes all tokens that may
+  // compose the function body (between and including the '{' and '}') and
+  // stores them in lazy_body_token_run. Later the tokens from lazy_body_token_run
+  // are parsed and lazy_body_token_run is cleared. Therefore, the body
+  // is considered not parsed until lazy_body_token_run is empty.
+  PDynamicArray lazy_body_token_run;
   int param_count;
   PDeclParam* params[1]; // tail-allocated
 } PDeclFunction;

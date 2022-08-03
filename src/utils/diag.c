@@ -185,6 +185,13 @@ diag_add_source_range(PDiag* p_diag, PSourceRange p_range)
 }
 
 void
+diag_add_source_caret(PDiag* p_diag, PSourceLocation p_loc)
+{
+  assert(p_diag->range_count < P_DIAG_MAX_RANGES);
+  p_diag->ranges[p_diag->range_count++] = (PSourceRange){ p_loc, p_loc };
+}
+
+void
 diag_flush(PDiag* p_diag)
 {
   if (g_diag_context.ignore_notes && p_diag->severity == P_DIAG_NOTE)
@@ -202,158 +209,46 @@ diag_flush(PDiag* p_diag)
   p_diag->debug_was_flushed = true;
 #endif
 
-  if (!g_options.opt_verify_mode) {
-    // Print source location:
-    if (g_current_source_file != NULL) {
-      uint32_t lineno, colno;
-      p_source_location_get_lineno_and_colno(g_current_source_file, p_diag->caret_location, &lineno, &colno);
+  // Print source location:
+  if (g_current_source_file != NULL) {
+    uint32_t lineno, colno;
+    p_source_location_get_lineno_and_colno(g_current_source_file, p_diag->caret_location, &lineno, &colno);
 
-      colno -= 1;
-      colno += g_options.opt_diagnostics_column_origin;
+    colno -= 1;
+    colno += g_options.opt_diagnostics_column_origin;
 
-      if (g_options.opt_diagnostics_show_column) {
-        fprintf(stdout, "%s:%d:%d: ", g_current_source_file->filename, lineno, colno);
-      } else {
-        fprintf(stdout, "%s:%d: ", g_current_source_file->filename, lineno);
-      }
+    if (g_options.opt_diagnostics_show_column) {
+      fprintf(stderr, "%s:%d:%d: ", g_current_source_file->filename, lineno, colno);
+    } else {
+      fprintf(stderr, "%s:%d: ", g_current_source_file->filename, lineno);
     }
-
-    // Print severity:
-    if (g_options.opt_diagnostics_color)
-      fputs(g_diag_severity_colors[p_diag->severity], stdout);
-    fputs(g_diag_severity_names[p_diag->severity], stdout);
-    fputs(": ", stdout);
-    if (g_options.opt_diagnostics_color)
-      fputs("\x1b[0m", stdout);
   }
+
+  // Print severity:
+  if (g_options.opt_diagnostics_color)
+    fputs(g_diag_severity_colors[p_diag->severity], stderr);
+  fputs(g_diag_severity_names[p_diag->severity], stderr);
+  fputs(": ", stderr);
+  if (g_options.opt_diagnostics_color)
+    fputs("\x1b[0m", stderr);
 
   PMsgBuffer buffer;
   INIT_MSG_BUFFER(buffer);
   p_diag_format_msg(&buffer, p_diag->message, p_diag->args, p_diag->arg_count);
 
-  if (g_options.opt_verify_mode) {
-    if (g_verify_last_diag_severity != P_DIAG_UNSPECIFIED)
-      verify_unexpected();
+  fputs(buffer.buffer, stderr);
+  fputs("\n", stderr);
+  if (p_diag->range_count > 0)
+    p_diag_print_source_ranges(g_current_source_file, p_diag->ranges, p_diag->range_count);
 
-    g_verify_last_diag_severity = p_diag->severity;
-    g_verify_last_diag_message = malloc(sizeof(char) * sizeof(buffer.buffer));
-    memcpy(g_verify_last_diag_message, buffer.buffer, sizeof(buffer.buffer));
-  } else {
-    fputs(buffer.buffer, stdout);
-    fputs("\n", stdout);
-    if (p_diag->range_count > 0)
-      p_diag_print_source_ranges(g_current_source_file, p_diag->ranges, p_diag->range_count);
+  if (g_options.opt_diagnostics_max_errors != 0 &&
+      g_diag_context.diagnostic_count[P_DIAG_ERROR] >= g_options.opt_diagnostics_max_errors) {
+    fprintf(stderr, "compilation terminated due to -fmax-errors=%d.\n", g_options.opt_diagnostics_max_errors);
+    exit(EXIT_FAILURE);
   }
 
   if (g_diag_context.fatal_errors && p_diag->severity == P_DIAG_ERROR) {
-    fprintf(stdout, "compilation terminated due to -Wfatal-errors.\n");
+    fprintf(stderr, "compilation terminated due to -Wfatal-errors.\n");
     exit(EXIT_FAILURE);
   }
-}
-
-/*
- * Verify mode interface:
- */
-
-HEDLEY_PRINTF_FORMAT(1, 2)
-
-static void
-verify_print_fail(const char* p_msg, ...)
-{
-  fprintf(stdout, "FAIL: ");
-
-  va_list ap;
-  va_start(ap, p_msg);
-  vfprintf(stdout, p_msg, ap);
-  va_end(ap);
-
-  fputs("\n", stdout);
-}
-
-static bool
-verify_cmp_msg(const char* p_msg_begin, const char* p_msg_end)
-{
-  size_t last_msg_len = strlen(g_verify_last_diag_message);
-  size_t expect_msg_len = p_msg_end - p_msg_begin;
-  if (expect_msg_len != last_msg_len)
-    return false;
-
-  return memcmp(p_msg_begin, g_verify_last_diag_message, last_msg_len) == 0;
-}
-
-static void
-verify_clean_last_diag(void)
-{
-  free(g_verify_last_diag_message);
-  g_verify_last_diag_message = NULL;
-  g_verify_last_diag_severity = P_DIAG_UNSPECIFIED;
-}
-
-static void
-verify_unexpected(void)
-{
-  assert(g_options.opt_verify_mode);
-
-  ++g_verify_fail_count;
-
-  verify_print_fail("unexpected %s diagnostic", g_diag_severity_names[g_verify_last_diag_severity]);
-  fprintf(stdout, "    with message: {{%s}}\n", g_verify_last_diag_message);
-
-  verify_clean_last_diag();
-}
-
-static void
-verify_expect(PDiagSeverity p_severity, const char* p_msg_begin, const char* p_msg_end)
-{
-  assert(g_options.opt_verify_mode);
-
-  if (g_verify_last_diag_severity != p_severity) {
-    ++g_verify_fail_count;
-    verify_print_fail("expected %s diagnostic", g_diag_severity_names[g_verify_last_diag_severity]);
-    if (g_verify_last_diag_severity != P_DIAG_UNSPECIFIED) {
-      fprintf(stdout,
-              "    but got %s diagnostic with message {{%s}}\n",
-              g_diag_severity_names[p_severity],
-              g_verify_last_diag_message);
-    }
-
-    verify_clean_last_diag();
-    return;
-  }
-
-  if (g_verify_last_diag_message == NULL) {
-  } else if (!verify_cmp_msg(p_msg_begin, p_msg_end)) {
-    ++g_verify_fail_count;
-    verify_print_fail("diagnostic message mismatch");
-    fputs("    expected: {{", stdout);
-    fwrite(p_msg_begin, sizeof(char), (p_msg_end - p_msg_begin), stdout);
-    fputs("}}\n", stdout);
-    fprintf(stdout, "    got: {{%s}}\n", g_verify_last_diag_message);
-  }
-
-  verify_clean_last_diag();
-}
-
-void
-verify_expect_warning(const char* p_msg_begin, const char* p_msg_end)
-{
-  verify_expect(P_DIAG_WARNING, p_msg_begin, p_msg_end);
-}
-
-void
-verify_expect_error(const char* p_msg_begin, const char* p_msg_end)
-{
-  verify_expect(P_DIAG_ERROR, p_msg_begin, p_msg_end);
-}
-
-bool
-verify_finalize(void)
-{
-  assert(g_options.opt_verify_mode);
-
-  if (g_verify_last_diag_severity != P_DIAG_UNSPECIFIED) {
-    verify_unexpected();
-  }
-
-  return g_verify_fail_count == 0;
 }

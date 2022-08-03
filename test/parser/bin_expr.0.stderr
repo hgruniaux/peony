@@ -1,0 +1,102 @@
+<source>:15:7: error: mismatched types; expected 'bool', found 'i32'
+   15 |     5 && 2.0;
+      |     ~    ~~~
+<source>:15:7: error: mismatched types; expected 'bool', found 'f32'
+   15 |     5 && 2.0;
+      |     ~    ~~~
+<source>:18:7: error: mismatched types; expected 'bool', found 'i32'
+   18 |     5 || 2.0;
+      |     ~    ~~~
+<source>:18:7: error: mismatched types; expected 'bool', found 'f32'
+   18 |     5 || 2.0;
+      |     ~    ~~~
+<source>:25:10: error: cannot apply binary operator '==' to types 'i32' and 'f32'
+   25 |     if 5 == 1.0 {}
+      |        ~ ^  ~~~
+<source>:27:10: error: cannot apply binary operator '!=' to types 'i32' and 'f32'
+   27 |     if 5 != 1.0 {}
+      |        ~ ^  ~~~
+<source>:29:10: error: cannot apply binary operator '<' to types 'i32' and 'f32'
+   29 |     if 5 < 1.0 {}
+      |        ~ ^ ~~~
+<source>:31:10: error: cannot apply binary operator '<=' to types 'i32' and 'f32'
+   31 |     if 5 <= 1.0 {}
+      |        ~ ^  ~~~
+<source>:33:10: error: cannot apply binary operator '>' to types 'i32' and 'f32'
+   33 |     if 5 > 1.0 {}
+      |        ~ ^ ~~~
+<source>:35:10: error: cannot apply binary operator '>=' to types 'i32' and 'f32'
+   35 |     if 5 >= 1.0 {}
+      |        ~ ^  ~~~
+<source>:50:10: error: mismatched types; expected '{integer}', found 'bool'
+   50 |     true & 9.0;
+      |     ~~~~
+<source>:50:10: error: mismatched types; expected '{integer}', found 'f32'
+   50 |     true & 9.0;
+      |            ~~~
+<source>:53:10: error: mismatched types; expected '{integer}', found 'bool'
+   53 |     true ^ 9.0;
+      |     ~~~~
+<source>:53:10: error: mismatched types; expected '{integer}', found 'f32'
+   53 |     true ^ 9.0;
+      |            ~~~
+<source>:56:10: error: mismatched types; expected '{integer}', found 'bool'
+   56 |     true | 9.0;
+      |     ~~~~
+<source>:56:10: error: mismatched types; expected '{integer}', found 'f32'
+   56 |     true | 9.0;
+      |            ~~~
+<source>:59:10: error: mismatched types; expected '{integer}', found 'bool'
+   59 |     true << 9.0;
+      |     ~~~~
+<source>:59:10: error: mismatched types; expected '{integer}', found 'f32'
+   59 |     true << 9.0;
+      |             ~~~
+<source>:62:10: error: mismatched types; expected '{integer}', found 'bool'
+   62 |     true >> 9.0;
+      |     ~~~~
+<source>:62:10: error: mismatched types; expected '{integer}', found 'f32'
+   62 |     true >> 9.0;
+      |             ~~~
+<source>:66:8: error: mismatched types; expected 'i32', found 'f32'
+   66 |     a0 ^= 0.0;
+      |           ~~~
+<source>:70:8: error: binary assignment operation '&=' cannot be applied to type 'f32'
+   70 |     a1 &= 5;
+      |        ^
+<source>:72:8: error: binary assignment operation '^=' cannot be applied to type 'f32'
+   72 |     a1 ^= 5;
+      |        ^
+<source>:74:8: error: binary assignment operation '|=' cannot be applied to type 'f32'
+   74 |     a1 |= 5;
+      |        ^
+<source>:76:8: error: binary assignment operation '>>=' cannot be applied to type 'f32'
+   76 |     a1 >>= 5;
+      |        ^
+<source>:78:8: error: binary assignment operation '<<=' cannot be applied to type 'f32'
+   78 |     a1 <<= 5;
+      |        ^
+<source>:82:7: error: cannot add 'i32' to 'bool'
+   82 |     5 + true;
+      |     ~ ^ ~~~~
+<source>:84:8: error: cannot add-assign 'bool' to 'f32'
+   84 |     a1 += true;
+      |     ~~ ^  ~~~~
+<source>:86:10: error: cannot subtract 'f64' from 'u32'
+   86 |     5u32 - 2f64;
+      |     ~~~~ ^ ~~~~
+<source>:88:8: error: cannot subtract-assign 'bool' from 'f32'
+   88 |     a1 -= true;
+      |     ~~ ^  ~~~~
+<source>:90:12: error: cannot multiply 'f32' by 'f64'
+   90 |     8.0f32 * 16f64;
+      |     ~~~~~~ ^ ~~~~~
+<source>:92:8: error: cannot multiply-assign 'f32' by 'bool'
+   92 |     a1 *= true;
+      |     ~~ ^  ~~~~
+<source>:94:10: error: cannot divide 'bool' by 'i32'
+   94 |     true / 5;
+      |     ~~~~ ^ ~
+<source>:96:8: error: cannot divide-assign 'f32' by 'bool'
+   96 |     a1 /= true;
+      |     ~~ ^  ~~~~

@@ -134,17 +134,9 @@ void
 diag_add_source_range(PDiag* p_diag, PSourceRange p_range);
 
 void
+diag_add_source_caret(PDiag* p_diag, PSourceLocation p_loc);
+
+void
 diag_flush(PDiag* p_diag);
-
-/* Verify mode interface (used for testsuite): */
-
-void
-verify_expect_warning(const char* p_msg_begin, const char* p_msg_end);
-
-void
-verify_expect_error(const char* p_msg_begin, const char* p_msg_end);
-
-bool
-verify_finalize(void);
 
 HEDLEY_END_C_DECLS

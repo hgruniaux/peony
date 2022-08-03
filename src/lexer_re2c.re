@@ -48,11 +48,11 @@ parse_int_suffix(PToken* p_token)
     }
 
     if (p_token->data.literal.end - p_token->data.literal.begin >= 3) {
-        const char* suffix_start = p_token->data.literal.end - 2;
+        const char* suffix_start = p_token->data.literal.end - 3;
         if (*suffix_start == 'i' || *suffix_start == 'u') {
             bool is_unsigned = *suffix_start == 'u';
             ++suffix_start;
-            assert(*suffix_start == '3' || *suffix_start == '6');
+            assert(*suffix_start == '1' || *suffix_start == '3' || *suffix_start == '6');
             ++suffix_start;
 
             if (*suffix_start == '2') {
@@ -60,11 +60,16 @@ parse_int_suffix(PToken* p_token)
                     suffix = P_ILS_U32;
                 else
                     suffix = P_ILS_I32;
-            } else { // *suffix_start == '4'
+            } else if (*suffix_start == '4') {
                 if (is_unsigned)
                     suffix = P_ILS_U64;
                 else
                     suffix = P_ILS_I64;
+            } else { // *suffix_start == '6'
+                if (is_unsigned)
+                    suffix = P_ILS_U16;
+                else
+                    suffix = P_ILS_I16;
             }
 
             p_token->data.literal.end -= 3;
@@ -75,7 +80,7 @@ parse_int_suffix(PToken* p_token)
 }
 
 void
-p_lex(PLexer* p_lexer, PToken* p_token)
+lexer_next(PLexer* p_lexer, PToken* p_token)
 {
     assert(p_lexer != NULL && p_token != NULL);
 
@@ -100,18 +105,20 @@ p_lex(PLexer* p_lexer, PToken* p_token)
             [ \t\v\f\r]+ { continue; }
 
             "//"[^\x00\n\r]* {
-                if (!g_options.opt_verify_mode)
-                    continue;
+                continue;
 
+                #if 0
                 FILL_TOKEN(P_TOK_COMMENT);
                 p_token->data.literal.begin = p_lexer->marked_cursor;
                 p_token->data.literal.end = p_lexer->cursor;
                 break;
+                #endif
             }
 
             "/*" { goto block_comment; }
 
-            [a-zA-Z_][a-zA-Z0-9_]* {
+            ident = [a-zA-Z_][a-zA-Z0-9_]*;
+            ident {
                 struct PIdentifierInfo* ident = p_identifier_table_get(
                     p_lexer->identifier_table,
                     p_lexer->marked_cursor,
@@ -120,6 +127,19 @@ p_lex(PLexer* p_lexer, PToken* p_token)
 
                 assert(ident != NULL);
                 FILL_TOKEN(ident->token_kind);
+                p_token->data.identifier = ident;
+                break;
+            }
+
+            "r#" ident {
+                struct PIdentifierInfo* ident = p_identifier_table_get(
+                    p_lexer->identifier_table,
+                    p_lexer->marked_cursor + 2,
+                    p_lexer->cursor
+                );
+
+                assert(ident != NULL);
+                FILL_TOKEN(P_TOK_IDENTIFIER);
                 p_token->data.identifier = ident;
                 break;
             }
@@ -245,13 +265,14 @@ p_lex(PLexer* p_lexer, PToken* p_token)
             }
 
             "*/" {
-                if (!g_options.opt_verify_mode)
-                    continue;
+                continue;
 
+                #if 0
                 FILL_TOKEN(P_TOK_COMMENT);
                 p_token->data.literal.begin = p_lexer->marked_cursor;
                 p_token->data.literal.end = p_lexer->cursor;
                 break;
+                #endif
             }
 
             "\x00" {

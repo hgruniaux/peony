@@ -1,0 +1,15 @@
+<source>:10:8: error: too many arguments to function 'fn foo() -> void'
+   10 |     foo(5);
+      |        ^
+<source>:12:8: error: too few arguments to function 'fn bar(i32) -> void'
+   12 |     bar();
+      |        ^
+<source>:16:6: error: 'x' cannot be used as a function
+   16 |     x();
+      |     ~^
+<source>:18:6: error: expression cannot be used as a function
+   18 |     5();
+      |     ~^
+<source>:21:9: error: mismatched types; expected 'i32', found 'bool'
+   21 |     bar(true);
+      |         ~~~~

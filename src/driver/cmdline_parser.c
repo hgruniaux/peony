@@ -1,6 +1,7 @@
 #include "../options.h"
 #include "../utils/diag.h"
 
+#include <assert.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -23,6 +24,7 @@ static bool
 parse_feature_option_switch(const char* p_name, bool* p_var, const char* p_arg)
 {
   bool value = true;
+  p_arg += 2; // skip '-f'
   if (memcmp(p_arg, "no-", 3) == 0) {
     p_arg += 3;
     value = false;
@@ -36,36 +38,39 @@ parse_feature_option_switch(const char* p_name, bool* p_var, const char* p_arg)
 }
 
 static bool
-parse_feature_option_int(const char* p_name, const char* p_full_name, int* p_var, const char* p_arg)
+parse_feature_option_int(const char* p_name, int* p_var, const char* p_arg)
 {
-  size_t name_len = strlen(p_name);
-  if (memcmp(p_name, p_arg, name_len) != 0)
+  p_arg += 2; // skip '-f'
+
+  size_t name_len = strlen(p_name) - 2; // the two first characters are always '-f'
+  if (memcmp(p_name + 2, p_arg, name_len) != 0)
     return false;
 
   p_arg += name_len;
+  if (*p_arg == '\0' || (*p_arg == '=' && p_arg[1] == '\0')) {
+    PDiag* d = diag(P_DK_err_missing_argument_cmdline_opt);
+    diag_add_arg_str(d, p_name);
+    diag_flush(d);
+    return true; // there is no argument but this is the correct option so skip it
+  }
+
   if (*p_arg != '=')
     return false;
   p_arg += 1;
-
-  if (*p_arg == '\0') {
-    PDiag* d = diag(P_DK_err_missing_argument_cmdline_opt);
-    diag_add_arg_str(d, p_full_name);
-    diag_flush(d);
-    return false;
-  }
 
   int value = 0;
   while (*p_arg != '\0') {
     if (*p_arg >= '0' && *p_arg <= '9') {
       value *= 10;
       value += *p_arg - '0';
+      p_arg++;
       continue;
     }
 
     PDiag* d = diag(P_DK_err_cmdline_opt_expect_int);
-    diag_add_arg_str(d, p_full_name);
+    diag_add_arg_str(d, p_name);
     diag_flush(d);
-    return false;
+    return true; // invalid argument but this is the correct option so skip it
   }
 
   *p_var = value;
@@ -75,6 +80,9 @@ parse_feature_option_int(const char* p_name, const char* p_full_name, int* p_var
 static bool
 parse_optimization_level(const char* p_arg)
 {
+  assert(p_arg[0] == '-' && p_arg[1] == 'O');
+  p_arg += 2;
+
   POptimizationLevel level;
   if (strcmp(p_arg, "0") == 0)
     level = P_OPT_O0;
@@ -107,26 +115,17 @@ cmdline_parser(int p_argc, char* p_argv[])
     }
 
     if (memcmp(arg, "-f", 2) == 0) {
-      arg += 2;
 #define FEATURE_OPTION_SWITCH(p_opt, p_var, p_default)                                                                 \
-  if (parse_feature_option_switch((p_opt), &g_options.p_var, arg))                                                       \
+  if (parse_feature_option_switch(p_opt, &g_options.p_var, arg))                                                  \
     continue;
 #define FEATURE_OPTION_INT(p_opt, p_var, p_default)                                                                    \
-  if (parse_feature_option_int((p_opt), "-f" p_opt, &g_options.p_var, arg))                                              \
+  if (parse_feature_option_int("-f" p_opt, &g_options.p_var, arg))                                                     \
     continue;
 #include "../options.def"
-
-      arg -= 2;
-    } else if (memcmp(arg, "-O", 2) == 0) {
-      arg += 2;
-
-      if (parse_optimization_level(arg))
-        continue;
-
-      arg -= 2;
+    } else if (memcmp(arg, "-O", 2) == 0 && parse_optimization_level(arg)) {
+      continue;
     } else if (strcmp(arg, "--help") == 0) {
       print_help(p_argv[0]);
-      return;
     } else if (strcmp(arg, "-o") == 0 || strcmp(arg, "--output") == 0) {
       if (i + 1 >= p_argc) {
         PDiag* d = diag(P_DK_err_missing_argument_cmdline_opt);
@@ -153,7 +152,8 @@ cmdline_parser(int p_argc, char* p_argv[])
     diag_flush(d);
   }
 
-  if (g_options.input_files.size == 0) {
+  // Only emit "no input files" error if no error was already emitted.
+  if (g_diag_context.diagnostic_count[P_DIAG_ERROR] == 0 && g_options.input_files.size == 0) {
     PDiag* d = diag(P_DK_err_no_input_files);
     diag_flush(d);
     return;

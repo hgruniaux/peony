@@ -1,0 +1,7 @@
+<source>:3:7: error: expected parameter declarator
+    3 | fn f6(,
+      |       ^
+<source>:3:8: error: expected parameter declarator
+    3 | fn f6(,
+      |        ^
+<source>:3:8: error: expected ')', found 'EOF'

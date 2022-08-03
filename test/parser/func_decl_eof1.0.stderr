@@ -1,0 +1,4 @@
+<source>:3:8: error: expected parameter declarator
+    3 | fn foo(
+      |        ^
+<source>:3:8: error: expected ')', found 'EOF'

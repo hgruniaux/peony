@@ -1,10 +1,8 @@
 #include "parser.h"
 
 #include "literal_parser.h"
-#include "options.h"
 #include "scope.h"
 
-#include "utils/bump_allocator.h"
 #include "utils/diag.h"
 #include "utils/dynamic_array.h"
 
@@ -29,69 +27,51 @@
 #define DECL_LIST_APPEND(p_array, p_item) DYN_ARRAY_APPEND(PDecl*, p_array, p_item)
 #define DECL_LIST_AT(p_array, p_idx) DYN_ARRAY_AT(PDecl*, p_array, p_idx)
 
-static const char*
-trim_whitespace_left(const char* p_it)
-{
-  while (*p_it == ' ' || *p_it == '\t')
-    ++p_it;
-
-  return p_it;
-}
-
-static const char*
-trim_whitespace_right(const char* p_it)
-{
-  while (p_it[-1] == ' ' || p_it[-1] == '\t')
-    --p_it;
-
-  return p_it;
-}
-
 static void
 consume_token(struct PParser* p_parser)
 {
-  p_lex(p_parser->lexer, &p_parser->lookahead);
-
-  if (LOOKAHEAD_IS(P_TOK_COMMENT) && g_options.opt_verify_mode) {
-    const char* it = p_parser->lookahead.data.literal.begin;
-    while (*it == ' ' || *it == '\t')
-      ++it;
-
-    const char* expect_error_marker = "EXPECT-ERROR:";
-    const char* expect_warning_marker = "EXPECT-WARNING:";
-
-    if (memcmp(it, expect_error_marker, strlen(expect_error_marker)) == 0) {
-      it += strlen(expect_error_marker);
-      it = trim_whitespace_left(it);
-      const char* end = p_parser->lookahead.data.literal.end;
-      end = trim_whitespace_right(end);
-      verify_expect_error(it, end);
-    } else if (memcmp(it, expect_warning_marker, strlen(expect_warning_marker)) == 0) {
-      it += strlen(expect_warning_marker);
-      it = trim_whitespace_left(it);
-      const char* end = p_parser->lookahead.data.literal.end;
-      end = trim_whitespace_right(end);
-      verify_expect_warning(it, end);
+  p_parser->prev_lookahead_end_loc = LOOKAHEAD_END_LOC;
+  if (p_parser->token_run != NULL) {
+    memcpy(&p_parser->lookahead,
+           &DYN_ARRAY_AT(PToken, p_parser->token_run, p_parser->current_idx_in_token_run),
+           sizeof(PToken));
+    p_parser->current_idx_in_token_run++;
+    if (p_parser->current_idx_in_token_run >= p_parser->token_run->size) {
+      p_parser->token_run = NULL;
+      p_parser->current_idx_in_token_run = 0;
     }
-
-    consume_token(p_parser);
+  } else {
+    lexer_next(p_parser->lexer, &p_parser->lookahead);
   }
 }
 
 static void
-print_expect_tok_diag(struct PParser* p_parser, PTokenKind p_kind)
+print_expect_tok_diag(struct PParser* p_parser, PTokenKind p_kind, PSourceLocation p_loc)
 {
-  PDiag* d = diag_at(P_DK_err_expected_tok, LOOKAHEAD_BEGIN_LOC);
+  PDiag* d = diag_at(P_DK_err_expected_tok, p_loc);
   diag_add_arg_tok_kind(d, p_kind);
   diag_add_arg_tok_kind(d, p_parser->lookahead.kind);
   diag_flush(d);
 }
 
 static bool
+expect_token_with_loc(struct PParser* p_parser, PTokenKind p_kind, PSourceLocation p_loc)
+{
+  if (p_parser->lookahead.kind != p_kind) {
+    print_expect_tok_diag(p_parser, p_kind, p_loc);
+    consume_token(p_parser);
+    return false;
+  }
+
+  consume_token(p_parser);
+  return true;
+}
+
+static bool
 expect_token(struct PParser* p_parser, PTokenKind p_kind)
 {
   if (p_parser->lookahead.kind != p_kind) {
-    print_expect_tok_diag(p_parser, p_kind);
+    print_expect_tok_diag(p_parser, p_kind, p_parser->prev_lookahead_end_loc);
     consume_token(p_parser);
     return false;
   }
@@ -122,7 +102,7 @@ skip_until_no_consume(struct PParser* p_parser, PTokenKind p_kind)
   if (LOOKAHEAD_IS(p_kind))
     return true;
 
-  print_expect_tok_diag(p_parser, p_kind);
+  print_expect_tok_diag(p_parser, p_kind, p_parser->prev_lookahead_end_loc);
 
   while (!LOOKAHEAD_IS(p_kind) && !LOOKAHEAD_IS(P_TOK_EOF))
     consume_token(p_parser);
@@ -130,10 +110,37 @@ skip_until_no_consume(struct PParser* p_parser, PTokenKind p_kind)
   return false;
 }
 
+// Skips tokens until one of p_kinds (or EOF) is found which is not consumed.
+static void
+skip_until_any(struct PParser* p_parser, PTokenKind* p_kinds, size_t p_kind_count)
+{
+  while (true) {
+    if (LOOKAHEAD_IS(P_TOK_EOF))
+      return;
+
+    for (size_t i = 0; i < p_kind_count; ++i) {
+      if (LOOKAHEAD_IS(p_kinds[i]))
+        return;
+    }
+
+    consume_token(p_parser);
+  }
+}
+
+// Wrapper around skip_until_any() that takes only one token kind.
+static void
+skip_until(struct PParser* p_parser, PTokenKind p_kind)
+{
+  skip_until_any(p_parser, &p_kind, 1);
+}
+
 void
 p_parser_init(struct PParser* p_parser)
 {
   assert(p_parser != NULL);
+
+  p_parser->token_run = NULL;
+  p_parser->current_idx_in_token_run = 0;
 
   p_parser->sema.current_scope_cache_idx = 0;
   p_parser->sema.current_scope = NULL;
@@ -182,12 +189,14 @@ parse_type(struct PParser* p_parser)
   if (LOOKAHEAD_IS(P_TOK_STAR)) {
     consume_token(p_parser);
     return p_type_get_pointer(parse_type(p_parser));
-  } else if (LOOKAHEAD_IS(P_TOK_LPAREN)) {
+  }
+  if (LOOKAHEAD_IS(P_TOK_LPAREN)) {
     consume_token(p_parser);
     PType* sub_type = parse_type(p_parser);
     expect_token(p_parser, P_TOK_RPAREN);
     return p_type_get_paren(sub_type);
-  } else if (LOOKAHEAD_IS(P_TOK_IDENTIFIER)) {
+  }
+  if (LOOKAHEAD_IS(P_TOK_IDENTIFIER)) {
     // TODO
     PType* type = NULL;
     PSourceRange name_range = { LOOKAHEAD_BEGIN_LOC, LOOKAHEAD_END_LOC };
@@ -270,12 +279,16 @@ parse_param_or_var_decl(struct PParser* p_parser, bool p_is_param)
 {
   PSourceRange name_range = { LOOKAHEAD_BEGIN_LOC, LOOKAHEAD_END_LOC };
   if (!LOOKAHEAD_IS(P_TOK_IDENTIFIER)) {
-    PDiag* d = diag_at(p_is_param ? P_DK_err_expected_param_decl : P_DK_err_expected_var_decl, LOOKAHEAD_BEGIN_LOC);
+    PDiag* d =
+      diag_at(p_is_param ? P_DK_err_expected_param_decl : P_DK_err_expected_var_decl, p_parser->prev_lookahead_end_loc);
+    diag_add_source_caret(d, p_parser->prev_lookahead_end_loc);
     diag_flush(d);
-    if (p_is_param)
-      skip_until_no_consume(p_parser, P_TOK_RPAREN);
-    else
-      skip_until_no_consume(p_parser, P_TOK_SEMI);
+    if (p_is_param) {
+      PTokenKind kinds[] = { P_TOK_COMMA, P_TOK_RPAREN };
+      skip_until_any(p_parser, kinds, 2);
+    } else {
+      skip_until(p_parser, P_TOK_SEMI);
+    }
     return NULL;
   }
 
@@ -297,8 +310,7 @@ parse_param_or_var_decl(struct PParser* p_parser, bool p_is_param)
 
   if (p_is_param)
     return (PDecl*)sema_act_on_param_decl(&p_parser->sema, name_range, name, type, default_expr);
-  else
-    return (PDecl*)sema_act_on_var_decl(&p_parser->sema, name_range, name, type, default_expr);
+  return (PDecl*)sema_act_on_var_decl(&p_parser->sema, name_range, name, type, default_expr);
 }
 
 /*
@@ -318,12 +330,10 @@ parse_param_or_var_list(struct PParser* p_parser, PDynamicArray* p_param_list, b
     if (decl != NULL)
       DECL_LIST_APPEND(p_param_list, decl);
 
-    if (p_is_param ? LOOKAHEAD_IS(P_TOK_RPAREN) : LOOKAHEAD_IS(P_TOK_SEMI))
+    if (LOOKAHEAD_IS(P_TOK_EOF) || (p_is_param ? LOOKAHEAD_IS(P_TOK_RPAREN) : LOOKAHEAD_IS(P_TOK_SEMI)))
       break;
 
     expect_token(p_parser, P_TOK_COMMA);
-    if (LOOKAHEAD_IS(P_TOK_EOF))
-      break;
   }
 }
 
@@ -338,10 +348,12 @@ parse_param_or_var_list(struct PParser* p_parser, PDynamicArray* p_param_list, b
 static PAst*
 parse_compound_stmt(struct PParser* p_parser)
 {
+  assert(LOOKAHEAD_IS(P_TOK_LBRACE));
+
   sema_push_scope(&p_parser->sema, P_SF_NONE);
 
   PSourceLocation lbrace_loc = LOOKAHEAD_BEGIN_LOC;
-  expect_token(p_parser, P_TOK_LBRACE);
+  consume_token(p_parser); // consume '{'
 
   PDynamicArray stmts;
   AST_LIST_INIT(&stmts);
@@ -692,7 +704,8 @@ parse_int_literal(struct PParser* p_parser)
     overflow = parse_dec_int_literal_token(literal_begin, literal_end, &value);
   } else if (p_parser->lookahead.data.literal.int_radix == 2) {
     overflow = parse_bin_int_literal_token(literal_begin, literal_end, &value);
-  } else { // p_parser->lookahead.data.literal.int_radix == 16
+  } else {
+    // p_parser->lookahead.data.literal.int_radix == 16
     overflow = parse_hex_int_literal_token(literal_begin, literal_end, &value);
   }
 
@@ -774,7 +787,14 @@ parse_paren_expr(struct PParser* p_parser)
   PSourceLocation lparen_loc = LOOKAHEAD_BEGIN_LOC;
   consume_token(p_parser);
 
-  PAst* sub_expr = parse_expr(p_parser);
+  PAst* sub_expr = NULL;
+  if (LOOKAHEAD_IS(P_TOK_RPAREN) || LOOKAHEAD_IS(P_TOK_EOF)) {
+    PDiag* d = diag_at(P_DK_err_expected_expr, lparen_loc + 1);
+    diag_add_source_caret(d, lparen_loc + 1);
+    diag_flush(d);
+  } else {
+    sub_expr = parse_expr(p_parser);
+  }
 
   PSourceLocation rparen_loc = LOOKAHEAD_BEGIN_LOC;
   expect_token(p_parser, P_TOK_RPAREN);
@@ -993,7 +1013,7 @@ parse_cast_expr(struct PParser* p_parser)
 
     // FIXME: better end source location for cast expr instead of LOOKAHEAD_END_LOC
     //        probably use type->source_range.end when types have localizations.
-    SET_NODE_LOC_RANGE(node, P_AST_GET_SOURCE_RANGE(sub_expr).begin, LOOKAHEAD_END_LOC);
+    SET_NODE_LOC_RANGE(node, P_AST_GET_SOURCE_RANGE(sub_expr).begin, as_loc + 2);
     return (PAst*)node;
   }
 
@@ -1073,6 +1093,26 @@ parse_expr(struct PParser* p_parser)
   return parse_binary_expr(p_parser, lhs, 0);
 }
 
+static void
+tokenize_func_body(struct PParser* p_parser, PDynamicArray* p_token_run)
+{
+  assert(LOOKAHEAD_IS(P_TOK_LBRACE));
+
+  int depth = 1;
+  do {
+    DYN_ARRAY_APPEND(PToken, p_token_run, p_parser->lookahead);
+    consume_token(p_parser);
+    if (LOOKAHEAD_IS(P_TOK_LBRACE)) {
+      ++depth;
+    } else if (LOOKAHEAD_IS(P_TOK_RBRACE) && --depth == 0) {
+      break;
+    }
+  } while (!LOOKAHEAD_IS(P_TOK_EOF));
+
+  DYN_ARRAY_APPEND(PToken, p_token_run, p_parser->lookahead);
+  expect_token(p_parser, P_TOK_RBRACE);
+}
+
 /*
  * func_decl:
  *     "fn" identifier "(" param_decl_list? ")" func_type_specifier? ";"
@@ -1085,6 +1125,8 @@ static PDecl*
 parse_func_decl(struct PParser* p_parser)
 {
   assert(LOOKAHEAD_IS(P_TOK_KEY_fn));
+
+  PSourceLocation key_fn_end_loc = LOOKAHEAD_END_LOC;
   consume_token(p_parser);
 
   PSourceRange name_range = { LOOKAHEAD_BEGIN_LOC, LOOKAHEAD_END_LOC };
@@ -1094,19 +1136,27 @@ parse_func_decl(struct PParser* p_parser)
     consume_token(p_parser); // consume identifier
   } else {
     // Act as if there was an identifier but emit a diagnostic.
-    print_expect_tok_diag(p_parser, P_TOK_IDENTIFIER);
+    print_expect_tok_diag(p_parser, P_TOK_IDENTIFIER, key_fn_end_loc);
   }
 
   PDynamicArray params;
   DECL_LIST_INIT(&params);
 
   // Parse parameters
-  sema_push_scope(&p_parser->sema, P_SF_NONE);
   expect_token(p_parser, P_TOK_LPAREN);
+
+  sema_push_scope(&p_parser->sema, P_SF_NONE);
   if (!LOOKAHEAD_IS(P_TOK_RPAREN))
     parse_param_or_var_list(p_parser, &params, /* is_param */ true);
-  expect_token(p_parser, P_TOK_RPAREN);
   sema_pop_scope(&p_parser->sema);
+
+  PSourceLocation rparen_loc = LOOKAHEAD_BEGIN_LOC;
+  if (LOOKAHEAD_IS(P_TOK_EOF)) {
+    print_expect_tok_diag(p_parser, P_TOK_RPAREN, p_parser->prev_lookahead_end_loc);
+    return NULL;
+  }
+
+  expect_token(p_parser, P_TOK_RPAREN);
 
   // Parse return type specified (optional)
   PType* return_type = NULL;
@@ -1120,21 +1170,41 @@ parse_func_decl(struct PParser* p_parser)
   DECL_LIST_DESTROY(&params);
 
   // Parse body
-  // TODO: lazy body parsing
+  if (!LOOKAHEAD_IS(P_TOK_LBRACE)) {
+    PDiag* d = diag_at(P_DK_err_expected_func_body_after_func_decl, rparen_loc + 1);
+    diag_add_source_caret(d, rparen_loc + 1);
+    diag_flush(d);
+    return (PDecl*)decl;
+  }
+
   if (decl == NULL) {
     // Skip body
     expect_token(p_parser, P_TOK_LBRACE);
     skip_until_no_error(p_parser, P_TOK_RBRACE);
     consume_token(p_parser); // consume '}'
-    return NULL;
+    return (PDecl*)decl;
   }
 
-  sema_begin_func_decl_body_parsing(&p_parser->sema, decl);
-  PAst* body = parse_compound_stmt(p_parser);
-  sema_end_func_decl_body_parsing(&p_parser->sema, decl);
+  DYN_ARRAY_INIT(PToken, &decl->lazy_body_token_run);
+  tokenize_func_body(p_parser, &decl->lazy_body_token_run);
 
-  decl->body = body;
   return (PDecl*)decl;
+}
+
+static void
+parse_lazy_func_body(struct PParser* p_parser, PDeclFunction* p_decl)
+{
+  assert(P_DECL_GET_KIND(p_decl) == P_DECL_FUNCTION);
+
+  p_parser->token_run = &p_decl->lazy_body_token_run;
+  consume_token(p_parser); // fill p_parser->lookahead with the content of token_run
+
+  sema_begin_func_decl_body_parsing(&p_parser->sema, p_decl);
+  PAst* body = parse_compound_stmt(p_parser);
+  sema_end_func_decl_body_parsing(&p_parser->sema, p_decl);
+
+  p_decl->body = body;
+  DYN_ARRAY_DESTROY(PToken, &p_decl->lazy_body_token_run);
 }
 
 /*
@@ -1193,7 +1263,7 @@ parse_struct_decl(struct PParser* p_parser)
     consume_token(p_parser); // consume identifier
   } else {
     // Act as if there was an identifier but emit a diagnostic.
-    print_expect_tok_diag(p_parser, P_TOK_IDENTIFIER);
+    print_expect_tok_diag(p_parser, P_TOK_IDENTIFIER, p_parser->prev_lookahead_end_loc);
   }
 
   PDynamicArray fields;
@@ -1271,8 +1341,13 @@ parse_translation_unit(struct PParser* p_parser)
     CREATE_NODE_EXTRA_SIZE(PAstTranslationUnit, sizeof(PDecl*) * (decls.size - 1), P_AST_NODE_TRANSLATION_UNIT);
   node->decl_count = decls.size;
   memcpy(node->decls, decls.buffer, sizeof(PDecl*) * decls.size);
-
   DECL_LIST_DESTROY(&decls);
+
+  for (size_t i = 0; i < node->decl_count; ++i) {
+    if (P_DECL_GET_KIND(node->decls[i]) == P_DECL_FUNCTION)
+      parse_lazy_func_body(p_parser, (PDeclFunction*)node->decls[i]);
+  }
+
   sema_pop_scope(&p_parser->sema);
   SET_NODE_LOC_RANGE(node, loc_begin, LOOKAHEAD_END_LOC);
   return (PAst*)node;
@@ -1283,7 +1358,11 @@ p_parse(struct PParser* p_parser)
 {
   assert(p_parser != NULL);
 
-  consume_token(p_parser);
+  // We do not call consume_token() because it sets p_parser->prev_lookahead_end_loc
+  // to the end position of lookahead which is undefined here.
+  p_parser->prev_lookahead_end_loc = 0;
+  lexer_next(p_parser->lexer, &p_parser->lookahead);
+
   PAst* ast = parse_translation_unit(p_parser);
   return ast;
 }

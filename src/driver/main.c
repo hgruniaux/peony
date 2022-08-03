@@ -9,7 +9,7 @@
 #include <locale.h>
 #include <stdlib.h>
 
-void
+bool
 compile_to(PSourceFile* p_source_file, const char* p_output_filename)
 {
   PIdentifierTable identifier_table;
@@ -17,7 +17,7 @@ compile_to(PSourceFile* p_source_file, const char* p_output_filename)
 
   PLexer lexer;
   lexer.identifier_table = &identifier_table;
-  p_lexer_init(&lexer, p_source_file);
+  lexer_init(&lexer, p_source_file);
 
   struct PParser parser;
   parser.lexer = &lexer;
@@ -34,8 +34,9 @@ compile_to(PSourceFile* p_source_file, const char* p_output_filename)
     p_cg_destroy(&codegen);
   }
 
-  p_lexer_destroy(&lexer);
+  lexer_destroy(&lexer);
   p_identifier_table_destroy(&identifier_table);
+  return g_diag_context.diagnostic_count[P_DIAG_ERROR] != 0;
 }
 
 // Implemented in cmdline_parser.c
@@ -53,12 +54,9 @@ main(int p_argc, char* p_argv[])
   if (g_diag_context.diagnostic_count[P_DIAG_ERROR] > 0)
     return EXIT_FAILURE;
 
-  if (g_options.opt_verify_mode) {
-    g_options.opt_diagnostics_color = false;
-  }
-
   p_init_types();
 
+  bool has_error = false;
   for (size_t i = 0; i < g_options.input_files.size; ++i) {
     const char* filename = DYN_ARRAY_AT(const char*, &g_options.input_files, i);
     PSourceFile* source_file = p_source_file_open(filename);
@@ -69,15 +67,11 @@ main(int p_argc, char* p_argv[])
       return EXIT_FAILURE;
     }
 
-    compile_to(source_file, g_options.output_file);
+    has_error |= compile_to(source_file, g_options.output_file);
 
     p_source_file_close(source_file);
   }
 
-  int exit_code = EXIT_SUCCESS;
-  if (g_options.opt_verify_mode && !verify_finalize())
-    exit_code = EXIT_FAILURE;
-
   p_bump_destroy(&p_global_bump_allocator);
-  return exit_code;
+  return EXIT_FAILURE ? has_error : EXIT_SUCCESS;
 }

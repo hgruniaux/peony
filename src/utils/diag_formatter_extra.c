@@ -174,7 +174,7 @@ print_char_n_times(char p_c, int p_n)
 {
   // FIXME: probably find a better way
   while (p_n--)
-    fputc(p_c, stdout);
+    fputc(p_c, stderr);
 }
 
 static void
@@ -184,12 +184,12 @@ print_partial_src_range(struct PartialSourceRange* p_range, uint32_t p_current_c
     print_char_n_times(' ', p_range->colno_begin - p_current_colno);
 
   if (p_range->colno_begin == p_range->colno_end)
-    fputs("^", stdout);
+    fputs("^", stderr);
   else
     print_char_n_times('~', p_range->colno_end - p_range->colno_begin);
 }
 
-/* Print a line margin in stdout of the form:
+/* Print a line margin to stderr of the form:
  * "    5 | "
  * If p_lineno is set to 0, no line number will be printed.
  * This function follows the formatting options given by user (cmd line options). */
@@ -206,9 +206,9 @@ print_line_margin(uint32_t p_lineno)
     print_char_n_times(' ', margin_width - 1);
   } else {
     char format[] = { '%', '0' + (margin_width - 1), 'd', '\0' };
-    fprintf(stdout, format, p_lineno);
+    fprintf(stderr, format, p_lineno);
   }
-  fputs(" | ", stdout);
+  fputs(" | ", stderr);
 }
 
 void
@@ -252,7 +252,7 @@ p_diag_print_source_ranges(PSourceFile* p_file, PSourceRange* p_ranges, size_t p
     uint32_t current_lineno = partial_source_ranges[i].lineno;
     if (current_lineno != (prev_lineno + 1)) {
       print_line_margin(0);
-      fputs("...\n", stdout);
+      fputs("...\n", stderr);
     }
 
     prev_lineno = current_lineno;
@@ -268,7 +268,10 @@ p_diag_print_source_ranges(PSourceFile* p_file, PSourceRange* p_ranges, size_t p
         partial_source_ranges[i].colno_end = line_length + 1;
 
       print_partial_src_range(&partial_source_ranges[i], current_colno);
-      current_colno = partial_source_ranges[i].colno_end;
+      if (partial_source_ranges[i].colno_begin == partial_source_ranges[i].colno_end)
+        current_colno = partial_source_ranges[i].colno_end + 1;
+      else
+        current_colno = partial_source_ranges[i].colno_end;
 
       ++i;
       if (i >= partial_source_range_count)
@@ -276,7 +279,7 @@ p_diag_print_source_ranges(PSourceFile* p_file, PSourceRange* p_ranges, size_t p
     }
 
     --i;
-    fputs("\n", stdout);
+    fputs("\n", stderr);
   }
 }
 
@@ -295,7 +298,7 @@ p_diag_print_source_line(PSourceFile* p_file, uint32_t p_lineno)
   }
 
   print_line_margin(p_lineno);
-  fwrite(p_file->buffer + start_position, sizeof(char), line_length, stdout);
-  fputs("\n", stdout);
+  fwrite(p_file->buffer + start_position, sizeof(char), line_length, stderr);
+  fputs("\n", stderr);
   return line_length;
 }

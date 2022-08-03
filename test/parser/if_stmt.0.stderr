@@ -1,0 +1,6 @@
+<source>:9:8: error: mismatched types; expected 'bool', found 'i32'
+    9 |     if 5i32 {}
+      |        ~~~~
+<source>:12:9: error: expected expression
+   12 |     if () {}
+      |         ^

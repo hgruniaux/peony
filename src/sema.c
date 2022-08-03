@@ -170,7 +170,6 @@ sema_act_on_func_decl(PSema* p_s,
     return NULL;
 
   PType* func_type = create_function_type(p_s, p_ret_type, p_params, p_param_count);
-  p_s->curr_func_type = (PFunctionType*)func_type;
 
   PDeclFunction* decl =
     CREATE_DECL_EXTRA_SIZE(PDeclFunction, sizeof(PDeclParam*) * (p_param_count - 1), P_DECL_FUNCTION);
@@ -189,6 +188,8 @@ void
 sema_begin_func_decl_body_parsing(PSema* p_s, PDeclFunction* p_decl)
 {
   sema_push_scope(p_s, P_SF_NONE);
+
+  p_s->curr_func_type = (PFunctionType*)P_DECL_GET_TYPE(p_decl);
 
   // Register parameters on the current scope.
   // All parameters have already been checked.
@@ -268,7 +269,7 @@ sema_act_on_param_decl(PSema* p_s,
 
   PSymbol* symbol = sema_local_lookup(p_s, p_name);
   if (symbol != NULL) {
-    PDiag* d = diag_at(P_DK_err_redeclaration_function, p_name_range.begin);
+    PDiag* d = diag_at(P_DK_err_parameter_name_already_used, p_name_range.begin);
     diag_add_arg_ident(d, p_name);
     diag_add_source_range(d, p_name_range);
     diag_flush(d);
@@ -493,9 +494,7 @@ sema_act_on_if_stmt(PSema* p_s, PAst* p_cond_expr, PAst* p_then_stmt, PAst* p_el
   if (p_cond_expr == NULL || p_then_stmt == NULL)
     return NULL;
 
-  if (!check_condition_expr(p_cond_expr))
-    return NULL;
-
+  check_condition_expr(p_cond_expr);
   p_cond_expr = convert_to_rvalue(p_cond_expr);
 
   PAstIfStmt* node = CREATE_NODE(PAstIfStmt, P_AST_NODE_IF_STMT);
@@ -523,9 +522,7 @@ sema_act_on_while_stmt(PSema* p_s, PAst* p_cond_expr, PScope* p_scope)
 
   assert(p_scope != NULL);
 
-  if (!check_condition_expr(p_cond_expr))
-    return NULL;
-
+  check_condition_expr(p_cond_expr);
   p_cond_expr = convert_to_rvalue(p_cond_expr);
 
   PAstWhileStmt* node = CREATE_NODE(PAstWhileStmt, P_AST_NODE_WHILE_STMT);
@@ -658,11 +655,11 @@ sema_act_on_binary_expr(PSema* p_s, PAstBinaryOp p_opcode, PSourceLocation p_op_
   PType* lhs_type = p_ast_get_type(p_lhs);
   PType* rhs_type = p_ast_get_type(p_rhs);
 
-  PType* result_type = NULL;
+  PType* result_type;
   switch (p_opcode) {
     case P_BINARY_LOG_AND:
     case P_BINARY_LOG_OR: {
-      bool has_error = false;
+      result_type = p_type_get_bool();
 
       if (!p_type_is_bool(lhs_type)) {
         PDiag* d = diag_at(P_DK_err_expected_type, p_op_loc);
@@ -671,7 +668,6 @@ sema_act_on_binary_expr(PSema* p_s, PAstBinaryOp p_opcode, PSourceLocation p_op_
         diag_add_source_range(d, P_AST_GET_SOURCE_RANGE(p_lhs));
         diag_add_source_range(d, P_AST_GET_SOURCE_RANGE(p_rhs));
         diag_flush(d);
-        has_error = true;
       }
 
       if (!p_type_is_bool(rhs_type)) {
@@ -681,13 +677,8 @@ sema_act_on_binary_expr(PSema* p_s, PAstBinaryOp p_opcode, PSourceLocation p_op_
         diag_add_source_range(d, P_AST_GET_SOURCE_RANGE(p_lhs));
         diag_add_source_range(d, P_AST_GET_SOURCE_RANGE(p_rhs));
         diag_flush(d);
-        has_error = true;
       }
 
-      if (has_error)
-        return NULL;
-
-      result_type = lhs_type;
     } break;
 
     case P_BINARY_EQ:
@@ -697,69 +688,110 @@ sema_act_on_binary_expr(PSema* p_s, PAstBinaryOp p_opcode, PSourceLocation p_op_
     case P_BINARY_GT:
     case P_BINARY_GE:
       if (!are_types_compatible(lhs_type, rhs_type)) {
-        PDiag* d = diag_at(P_DK_err_cannot_bin_op_generic, p_op_loc);
+        PDiag* d = diag_at(P_DK_err_cannot_apply_bin_op_generic, p_op_loc);
         diag_add_arg_str(d, p_binop_get_spelling(p_opcode));
         diag_add_arg_type(d, lhs_type);
         diag_add_arg_type(d, rhs_type);
         diag_add_source_range(d, P_AST_GET_SOURCE_RANGE(p_lhs));
         diag_add_source_range(d, P_AST_GET_SOURCE_RANGE(p_rhs));
+        diag_add_source_caret(d, p_op_loc);
         diag_flush(d);
-        return NULL;
       }
 
       result_type = p_type_get_bool();
       break;
 
+    case P_BINARY_ASSIGN_BIT_AND:
+    case P_BINARY_ASSIGN_BIT_XOR:
+    case P_BINARY_ASSIGN_BIT_OR:
+    case P_BINARY_ASSIGN_SHL:
+    case P_BINARY_ASSIGN_SHR: {
+      result_type = lhs_type;
+
+      if (!p_type_is_int(lhs_type)) {
+        PDiag* d = diag_at(P_DK_err_cannot_apply_assign_op, p_op_loc);
+        const char* spelling = p_binop_get_spelling(p_opcode);
+        diag_add_arg_str(d, spelling);
+        diag_add_arg_type(d, lhs_type);
+        diag_add_source_caret(d, p_op_loc);
+        diag_flush(d);
+
+        // Dummy type to try to recover.
+        result_type = p_type_get_generic_int();
+        break;
+      }
+
+      if (!are_types_compatible(rhs_type, lhs_type)) {
+        PDiag* d = diag_at(P_DK_err_expected_type, p_op_loc);
+        diag_add_arg_type(d, lhs_type);
+        diag_add_arg_type(d, rhs_type);
+        diag_add_source_range(d, P_AST_GET_SOURCE_RANGE(p_rhs));
+        diag_flush(d);
+        break;
+      }
+    } break;
     case P_BINARY_BIT_AND:
     case P_BINARY_BIT_XOR:
     case P_BINARY_BIT_OR:
-    case P_BINARY_ASSIGN_BIT_AND:
-    case P_BINARY_ASSIGN_BIT_XOR:
-    case P_BINARY_ASSIGN_BIT_OR: {
-      bool has_error = false;
+    case P_BINARY_SHL:
+    case P_BINARY_SHR: {
+      result_type = lhs_type;
 
       if (!p_type_is_int(lhs_type)) {
         PDiag* d = diag_at(P_DK_err_expected_type, p_op_loc);
         diag_add_arg_type(d, p_type_get_generic_int());
         diag_add_arg_type(d, lhs_type);
+        diag_add_source_range(d, P_AST_GET_SOURCE_RANGE(p_lhs));
         diag_flush(d);
-        has_error = true;
+
+        // Dummy type to try to recover.
+        result_type = p_type_get_generic_int();
       }
 
       if (!p_type_is_int(rhs_type)) {
         PDiag* d = diag_at(P_DK_err_expected_type, p_op_loc);
         diag_add_arg_type(d, p_type_get_generic_int());
         diag_add_arg_type(d, rhs_type);
+        diag_add_source_range(d, P_AST_GET_SOURCE_RANGE(p_rhs));
         diag_flush(d);
-        has_error = true;
       }
-
-      if (has_error)
-        return NULL;
-    }
-      HEDLEY_FALL_THROUGH;
+    } break;
     default:
+      result_type = lhs_type;
+
       if (!are_types_compatible(lhs_type, rhs_type) || !p_type_is_arithmetic(lhs_type)) {
-        PDiagKind diag_kind = P_DK_err_cannot_bin_op_generic;
+        PDiagKind diag_kind = P_DK_err_cannot_apply_bin_op_generic;
         switch (p_opcode) {
           case P_BINARY_ADD:
             diag_kind = P_DK_err_cannot_add;
             break;
+          case P_BINARY_ASSIGN_ADD:
+            diag_kind = P_DK_err_cannot_add_assign;
+            break;
           case P_BINARY_SUB:
             diag_kind = P_DK_err_cannot_sub;
+            break;
+          case P_BINARY_ASSIGN_SUB:
+            diag_kind = P_DK_err_cannot_sub_assign;
             break;
           case P_BINARY_MUL:
             diag_kind = P_DK_err_cannot_mul;
             break;
+          case P_BINARY_ASSIGN_MUL:
+            diag_kind = P_DK_err_cannot_mul_assign;
+            break;
           case P_BINARY_DIV:
             diag_kind = P_DK_err_cannot_div;
+            break;
+          case P_BINARY_ASSIGN_DIV:
+            diag_kind = P_DK_err_cannot_div_assign;
             break;
           default:
             break;
         }
 
         PDiag* d = diag_at(diag_kind, p_op_loc);
-        if (diag_kind == P_DK_err_cannot_bin_op_generic) {
+        if (diag_kind == P_DK_err_cannot_apply_bin_op_generic) {
           const char* spelling = p_binop_get_spelling(p_opcode);
           diag_add_arg_str(d, spelling);
         }
@@ -768,11 +800,10 @@ sema_act_on_binary_expr(PSema* p_s, PAstBinaryOp p_opcode, PSourceLocation p_op_
         diag_add_arg_type(d, rhs_type);
         diag_add_source_range(d, P_AST_GET_SOURCE_RANGE(p_lhs));
         diag_add_source_range(d, P_AST_GET_SOURCE_RANGE(p_rhs));
+        diag_add_source_caret(d, p_op_loc);
         diag_flush(d);
-        return NULL;
       }
 
-      result_type = lhs_type;
       break;
   }
 
@@ -827,7 +858,7 @@ check_call_args(PSourceRange p_call_range,
       diag_add_arg_type_with_name_hint(d, (PType*)p_callee_type, callee_name);
     else
       diag_add_arg_type(d, (PType*)p_callee_type);
-    diag_add_source_range(d, p_call_range);
+    diag_add_source_caret(d, p_lparen_loc);
     diag_flush(d);
     return false;
   } else if (p_arg_count > p_callee_type->arg_count) {
@@ -837,7 +868,7 @@ check_call_args(PSourceRange p_call_range,
       diag_add_arg_type_with_name_hint(d, (PType*)p_callee_type, callee_name);
     else
       diag_add_arg_type(d, (PType*)p_callee_type);
-    diag_add_source_range(d, p_call_range);
+    diag_add_source_caret(d, p_lparen_loc);
     diag_flush(d);
     return false;
   }
@@ -877,7 +908,7 @@ sema_act_on_call_expr(PSema* p_s,
   if (p_callee == NULL || p_args == NULL)
     return NULL;
 
-  PSourceRange call_range = { P_AST_GET_SOURCE_RANGE(p_callee).begin, p_rparen_loc };
+  PSourceRange call_range = { P_AST_GET_SOURCE_RANGE(p_callee).begin, p_rparen_loc + 1 };
 
   PType* callee_type = p_ast_get_type(p_callee);
   if (!p_type_is_function(callee_type)) {
@@ -891,7 +922,8 @@ sema_act_on_call_expr(PSema* p_s,
       d = diag_at(P_DK_err_expr_cannot_be_used_as_function, p_lparen_loc);
     }
 
-    diag_add_source_range(d, call_range);
+    diag_add_source_range(d, P_AST_GET_SOURCE_RANGE(p_callee));
+    diag_add_source_caret(d, p_lparen_loc);
     diag_flush(d);
     return NULL;
   }

@@ -5,7 +5,7 @@
 #include <assert.h>
 
 void
-p_lexer_init(PLexer* p_lexer, PSourceFile* p_source_file)
+lexer_init(PLexer* p_lexer, PSourceFile* p_source_file)
 {
   assert(p_lexer != NULL && p_source_file != NULL);
 
@@ -18,7 +18,7 @@ p_lexer_init(PLexer* p_lexer, PSourceFile* p_source_file)
 }
 
 void
-p_lexer_destroy(PLexer* p_lexer)
+lexer_destroy(PLexer* p_lexer)
 {
   assert(p_lexer != NULL);
 }
