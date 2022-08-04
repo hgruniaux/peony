@@ -15,13 +15,13 @@ p_source_file_open(const char* p_filename)
     return NULL;
 
   fseek(file, 0, SEEK_END);
-  long bufsize = ftell(file);
+  const size_t bufsize = (size_t)ftell(file);
   fseek(file, 0, SEEK_SET);
 
   PSourceFile* source_file = malloc(sizeof(PSourceFile));
   assert(source_file != NULL);
 
-  size_t filename_len = strlen(p_filename) + 1 /* NUL-terminated */;
+  const size_t filename_len = strlen(p_filename) + 1 /* NUL-terminated */;
   source_file->filename = malloc(sizeof(char) * filename_len);
   assert(source_file->filename != NULL);
   memcpy(source_file->filename, p_filename, sizeof(char) * filename_len);

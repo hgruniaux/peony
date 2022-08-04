@@ -5,6 +5,7 @@
 
 #include <assert.h>
 #include <stdio.h>
+#include <string.h>
 
 /*!re2c
     re2c:yyfill:enable    = 0;

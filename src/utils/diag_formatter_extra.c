@@ -72,7 +72,7 @@ format_arg_type(PMsgBuffer* p_buffer, PType* p_type, PIdentifierInfo* p_name_hin
     if (p_name_hint != NULL)
       write_buffer_str(p_buffer, p_name_hint->spelling);
     write_buffer_str(p_buffer, "(");
-    for (int i = 0; i < func_type->arg_count; ++i) {
+    for (size_t i = 0; i < func_type->arg_count; ++i) {
       format_arg_type(p_buffer, func_type->args[i], NULL); // do not propagate the hint
       if ((i + 1) != func_type->arg_count)
         write_buffer_str(p_buffer, ", ");

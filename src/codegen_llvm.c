@@ -7,6 +7,7 @@
 #include <hedley.h>
 
 #include <assert.h>
+#include <stdlib.h>
 
 #include <llvm-c/Analysis.h>
 #include <llvm-c/Core.h>
@@ -464,7 +465,7 @@ cg_unary_expr(struct PCodegenLLVM* p_cg, PAstUnaryExpr* p_node)
     case P_UNARY_ADDRESS_OF:
       return sub_expr;
     case P_UNARY_DEREF:
-      return LLVMBuildLoad(p_cg->builder, sub_expr, "");
+      return LLVMBuildLoad2(p_cg->builder, cg_to_llvm_type(p_ast_get_type(p_node->sub_expr)), sub_expr, "");
     default:
       HEDLEY_UNREACHABLE_RETURN(NULL);
   }
@@ -625,7 +626,7 @@ cg_assignment_impl(struct PCodegenLLVM* p_cg, PType* p_type, PAstBinaryOp p_op, 
 
   p_op = get_assignment_op(p_op);
 
-  const LLVMValueRef lhs_value = LLVMBuildLoad(p_cg->builder, p_lhs, "");
+  const LLVMValueRef lhs_value = LLVMBuildLoad2(p_cg->builder, cg_to_llvm_type(p_type), p_lhs, "");
   const LLVMValueRef value = cg_binary_expr_impl(p_cg, p_type, p_op, lhs_value, p_rhs);
   return LLVMBuildStore(p_cg->builder, value, p_lhs);
 }
@@ -655,17 +656,18 @@ cg_call_expr(struct PCodegenLLVM* p_cg, PAstCallExpr* p_node)
 {
   assert(P_AST_GET_KIND(p_node) == P_AST_NODE_CALL_EXPR);
 
+  PType* callee_type = p_ast_get_type(p_node->callee);
   const LLVMValueRef fn = cg_visit(p_cg, p_node->callee);
 
   LLVMValueRef* args = malloc(sizeof(LLVMValueRef) * p_node->arg_count);
   assert(args != NULL);
 
-  for (int i = 0; i < p_node->arg_count; ++i) {
+  for (size_t i = 0; i < p_node->arg_count; ++i) {
     args[i] = cg_visit(p_cg, p_node->args[i]);
   }
 
-  // FIXME: Use LLVMBuildCall2
-  const LLVMValueRef call = LLVMBuildCall(p_cg->builder, fn, args, p_node->arg_count, "");
+  const LLVMValueRef call =
+    LLVMBuildCall2(p_cg->builder, cg_to_llvm_type(callee_type), fn, args, (unsigned int)p_node->arg_count, "");
 
   free(args);
 
@@ -742,7 +744,7 @@ cg_lvalue_to_rvalue_expr(struct PCodegenLLVM* p_cg, PAstLValueToRValueExpr* p_no
   assert(P_AST_GET_KIND(p_node) == P_AST_NODE_LVALUE_TO_RVALUE_EXPR);
 
   LLVMValueRef addr = cg_visit(p_cg, p_node->sub_expr);
-  return LLVMBuildLoad(p_cg->builder, addr, "");
+  return LLVMBuildLoad2(p_cg->builder, cg_to_llvm_type(p_ast_get_type(p_node->sub_expr)), addr, "");
 }
 
 static LLVMValueRef
@@ -807,9 +809,9 @@ p_cg_init(struct PCodegenLLVM* p_cg)
 
   p_cg->opt_level = 0;
 
-  const char* target_triple = LLVMGetDefaultTargetTriple();
-  const char* host_cpu = LLVMGetHostCPUName();
-  const char* host_features = LLVMGetHostCPUFeatures();
+  char* target_triple = LLVMGetDefaultTargetTriple();
+  char* host_cpu = LLVMGetHostCPUName();
+  char* host_features = LLVMGetHostCPUFeatures();
   LLVMTargetRef target = NULL;
   char* error = NULL;
   LLVMSetTarget(p_cg->module, target_triple);

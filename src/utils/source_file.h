@@ -12,7 +12,7 @@ HEDLEY_BEGIN_C_DECLS
  */
 typedef struct PSourceFile
 {
-  const char* filename;
+  char* filename;
   PLineMap line_map; // populated by the lexer
   const char* buffer; // the source file code, NUL-terminated
 } PSourceFile;
