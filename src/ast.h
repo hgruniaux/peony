@@ -52,7 +52,7 @@ typedef struct PAst
 typedef struct PAstTranslationUnit
 {
   PAstCommon common;
-  int decl_count;
+  size_t decl_count;
   PDecl* decls[1]; /* tail-allocated */
 } PAstTranslationUnit;
 
@@ -62,7 +62,7 @@ typedef struct PAstCompoundStmt
   PAstCommon common;
   PSourceLocation lbrace_loc;
   PSourceLocation rbrace_loc;
-  int stmt_count;
+  size_t stmt_count;
   PAst* stmts[1]; /* tail-allocated */
 } PAstCompoundStmt;
 
@@ -252,7 +252,7 @@ typedef struct PAstCallExpr
   PAstCommon common;
   PAstExprCommon expr_common;
   PAst* callee;
-  int arg_count;
+  size_t arg_count;
   PAst* args[1]; /* tail-allocated */
 } PAstCallExpr;
 
@@ -355,7 +355,11 @@ typedef struct PDeclFunction
   // are parsed and lazy_body_token_run is cleared. Therefore, the body
   // is considered not parsed until lazy_body_token_run is empty.
   PDynamicArray lazy_body_token_run;
-  int param_count;
+  // The count of parameters that do not have a default argument.
+  size_t required_param_count;
+  // The count of parameters of this function. It is also the size
+  // of the params array.
+  size_t param_count;
   PDeclParam* params[1]; // tail-allocated
 } PDeclFunction;
 

@@ -17,3 +17,6 @@
 <source>:24:8: error: expected function body after function declarator
    24 | fn f8()
       |        ^
+<source>:27:24: error: default argument references parameter 'x'
+   27 | fn f9(x: i32, y: i32 = x) {}
+      |                        ~

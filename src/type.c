@@ -247,7 +247,7 @@ p_type_get_paren(PType* p_sub_type)
 }
 
 PType*
-p_type_get_function(PType* p_ret_ty, PType** p_args, int p_arg_count)
+p_type_get_function(PType* p_ret_ty, PType** p_args, size_t p_arg_count)
 {
   assert(p_ret_ty != NULL && (p_arg_count == 0 || p_args != NULL));
 
@@ -320,7 +320,7 @@ p_type_get_pointer(PType* p_element_ty)
 }
 
 PType*
-p_type_get_array(PType* p_element_ty, int p_num_elements)
+p_type_get_array(PType* p_element_ty, size_t p_num_elements)
 {
   assert(p_element_ty != NULL && p_num_elements > 0);
 
@@ -347,7 +347,7 @@ PType*
 p_type_get_tag(struct PDecl* p_decl)
 {
   PTagType* type = P_BUMP_ALLOC(&p_global_bump_allocator, PTagType);
-  init_type(type, P_TYPE_TAG);
+  init_type((PType*)type, P_TYPE_TAG);
   type->decl = p_decl;
   return type;
 }

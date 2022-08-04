@@ -23,3 +23,6 @@ fn f7(,) {}
 
 fn f8()
 //~^ ERROR: expected function body after function declarator
+
+fn f9(x: i32, y: i32 = x) {}
+//~^ ERROR: default argument references parameter 'x'

@@ -2,6 +2,7 @@
 
 fn foo() {}
 fn bar(a: i32) {}
+fn baz(a: i32, b: i32 = 5) {}
 
 fn test() {
     foo();
@@ -20,4 +21,12 @@ fn test() {
 
     bar(true);
     //~^ ERROR: mismatched types; expected 'i32', found 'bool'
+
+    // Test default arguments:
+    baz(5);
+    baz(5, 8);
+    baz(5, 8, 9);
+    //~^ ERROR: too many arguments to function 'fn baz(i32, i32) -> void'
+    baz();
+    //~^ ERROR: too few arguments to function 'fn baz(i32, i32) -> void'
 }

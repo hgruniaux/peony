@@ -398,8 +398,7 @@ parse_let_stmt(struct PParser* p_parser)
   if (node == NULL)
     return NULL;
 
-  // FIXME: incorrect end source location
-  SET_NODE_LOC_RANGE(node, loc_begin, LOOKAHEAD_BEGIN_LOC);
+  SET_NODE_LOC_RANGE(node, loc_begin, p_parser->prev_lookahead_end_loc);
   return (PAst*)node;
 }
 
@@ -1145,7 +1144,7 @@ parse_func_decl(struct PParser* p_parser)
   // Parse parameters
   expect_token(p_parser, P_TOK_LPAREN);
 
-  sema_push_scope(&p_parser->sema, P_SF_NONE);
+  sema_push_scope(&p_parser->sema, P_SF_FUNC_PARAMS);
   if (!LOOKAHEAD_IS(P_TOK_RPAREN))
     parse_param_or_var_list(p_parser, &params, /* is_param */ true);
   sema_pop_scope(&p_parser->sema);

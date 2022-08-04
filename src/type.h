@@ -3,6 +3,7 @@
 #include <hedley.h>
 
 #include <stdbool.h>
+#include <stddef.h>
 
 HEDLEY_BEGIN_C_DECLS
 
@@ -57,7 +58,7 @@ typedef struct PFunctionType
 {
   PTypeCommon common;
   PType* ret_type;
-  int arg_count;
+  size_t arg_count;
   PType* args[1]; /* tail-allocated */
 } PFunctionType;
 
@@ -71,7 +72,7 @@ typedef struct PArrayType
 {
   PTypeCommon common;
   PType* element_type;
-  int num_elements;
+  size_t num_elements;
 } PArrayType;
 
 // Type that is intimately linked to a statement. The type
@@ -201,13 +202,13 @@ PType*
 p_type_get_paren(PType* p_sub_type);
 
 PType*
-p_type_get_function(PType* p_ret_ty, PType** p_args, int p_arg_count);
+p_type_get_function(PType* p_ret_ty, PType** p_args, size_t p_arg_count);
 
 PType*
 p_type_get_pointer(PType* p_element_ty);
 
 PType*
-p_type_get_array(PType* p_element_ty, int p_num_elements);
+p_type_get_array(PType* p_element_ty, size_t p_num_elements);
 
 PType*
 p_type_get_tag(struct PDecl* p_decl);

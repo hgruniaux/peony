@@ -108,22 +108,28 @@ are_types_compatible(PType* p_from, PType* p_to)
 }
 
 static bool
-check_func_decl_params(PIdentifierInfo* p_func_name, PDeclParam** p_params, size_t p_param_count)
+check_func_decl_params(PIdentifierInfo* p_func_name,
+                       PDeclParam** p_params,
+                       size_t p_param_count,
+                       size_t* p_required_param_count)
 {
   bool has_error = false;
   bool found_first_default_arg = false;
-  for (int i = 0; i < p_param_count; ++i) {
+  for (size_t i = 0; i < p_param_count; ++i) {
     if (p_params[i]->default_expr == NULL) {
       if (found_first_default_arg) {
         // FIXME: provide better source location
         PDiag* d = diag(P_DK_err_missing_default_argument);
-        diag_add_arg_int(d, i + 1);
+        diag_add_arg_int(d, (int)(i + 1));
         diag_add_arg_ident(d, p_func_name);
         diag_flush(d);
         has_error = true;
+      } else {
+        (*p_required_param_count)++;
       }
     } else {
       found_first_default_arg = true;
+      p_params[i]->default_expr = convert_to_rvalue(p_params[i]->default_expr);
     }
   }
 
@@ -135,7 +141,7 @@ create_function_type(PSema* p_s, PType* p_ret_type, PDeclParam** p_params, size_
 {
   PType** param_types = malloc(sizeof(PType*) * p_param_count);
   assert(param_types != NULL);
-  for (int i = 0; i < p_param_count; ++i)
+  for (size_t i = 0; i < p_param_count; ++i)
     param_types[i] = P_DECL_GET_TYPE(p_params[i]);
   PType* type = p_type_get_function(p_ret_type, param_types, p_param_count);
   free(param_types);
@@ -166,7 +172,8 @@ sema_act_on_func_decl(PSema* p_s,
   if (p_ret_type == NULL)
     p_ret_type = p_type_get_void();
 
-  if (!check_func_decl_params(p_name, p_params, p_param_count))
+  size_t required_param_count = 0;
+  if (!check_func_decl_params(p_name, p_params, p_param_count, &required_param_count))
     return NULL;
 
   PType* func_type = create_function_type(p_s, p_ret_type, p_params, p_param_count);
@@ -175,6 +182,7 @@ sema_act_on_func_decl(PSema* p_s,
     CREATE_DECL_EXTRA_SIZE(PDeclFunction, sizeof(PDeclParam*) * (p_param_count - 1), P_DECL_FUNCTION);
   P_DECL_GET_NAME(decl) = p_name;
   P_DECL_GET_TYPE(decl) = func_type;
+  decl->required_param_count = required_param_count;
   decl->param_count = p_param_count;
   memcpy(decl->params, p_params, sizeof(PDeclParam*) * p_param_count);
 
@@ -187,7 +195,7 @@ sema_act_on_func_decl(PSema* p_s,
 void
 sema_begin_func_decl_body_parsing(PSema* p_s, PDeclFunction* p_decl)
 {
-  sema_push_scope(p_s, P_SF_NONE);
+  sema_push_scope(p_s, P_SF_FUNC_PARAMS);
 
   p_s->curr_func_type = (PFunctionType*)P_DECL_GET_TYPE(p_decl);
 
@@ -255,6 +263,20 @@ sema_act_on_struct_field_decl(PSema* p_s, PSourceRange p_name_range, PIdentifier
   P_DECL_GET_TYPE(node) = p_type;
 
   return node;
+}
+
+// Gets the first paren scope that has the flag P_SF_FUNC_PARAMS.
+static PScope*
+get_param_scope(PSema* p_s)
+{
+  PScope* scope = p_s->current_scope;
+  while (scope != NULL) {
+    if (scope->flags & P_SF_FUNC_PARAMS)
+      return scope;
+    scope = scope->parent_scope;
+  }
+
+  return NULL;
 }
 
 PDeclParam*
@@ -623,12 +645,20 @@ sema_act_on_decl_ref_expr(PSema* p_s, PSourceRange p_range, PIdentifierInfo* p_n
     return NULL;
   }
 
+  PScope* param_scope = get_param_scope(p_s);
+  if (symbol != NULL && symbol == p_scope_local_lookup(param_scope, p_name)) {
+    PDiag* d = diag_at(P_DK_err_default_arg_ref_param, p_range.begin);
+    diag_add_arg_ident(d, p_name);
+    diag_add_source_range(d, p_range);
+    diag_flush(d);
+  }
+
   assert(symbol->decl != NULL);
   symbol->decl->common.used = true;
 
   PAstDeclRefExpr* node = CREATE_NODE(PAstDeclRefExpr, P_AST_NODE_DECL_REF_EXPR);
   P_AST_EXPR_GET_VALUE_CATEGORY(node) = P_VC_LVALUE;
-  node->decl = symbol->decl;
+  node->decl = symbol != NULL ? symbol->decl : NULL;
   return node;
 }
 
@@ -829,15 +859,14 @@ sema_act_on_binary_expr(PSema* p_s, PAstBinaryOp p_opcode, PSourceLocation p_op_
   return node;
 }
 
-/* If p_callee is a decl ref expr then returns its name
+/* If p_expr is a decl ref expr (ignoring parentheses) then returns its decl
  * otherwise returns NULL. */
-static PIdentifierInfo*
-get_decl_ref_name(PAst* p_callee)
+static PDecl*
+get_decl_ref_decl(PAst* p_expr)
 {
-  p_callee = p_ast_ignore_parens(p_callee);
-  if (P_AST_GET_KIND(p_callee) == P_AST_NODE_DECL_REF_EXPR) {
-    PIdentifierInfo* name = P_DECL_GET_NAME(((PAstDeclRefExpr*)(p_callee))->decl);
-    return name;
+  p_expr = p_ast_ignore_parens(p_expr);
+  if (P_AST_GET_KIND(p_expr) == P_AST_NODE_DECL_REF_EXPR) {
+    return ((PAstDeclRefExpr*)(p_expr))->decl;
   }
 
   return NULL;
@@ -846,16 +875,17 @@ get_decl_ref_name(PAst* p_callee)
 static bool
 check_call_args(PSourceRange p_call_range,
                 PSourceLocation p_lparen_loc,
-                PAst* p_callee,
+                PDeclFunction* p_callee_decl, // may be NULL
                 PFunctionType* p_callee_type,
                 PAst** p_args,
                 size_t p_arg_count)
 {
-  if (p_arg_count < p_callee_type->arg_count) {
+  const size_t required_param_count =
+    p_callee_decl != NULL ? p_callee_decl->required_param_count : p_callee_type->arg_count;
+  if (p_arg_count < required_param_count) {
     PDiag* d = diag_at(P_DK_err_too_few_args, p_lparen_loc);
-    PIdentifierInfo* callee_name = get_decl_ref_name(p_callee);
-    if (callee_name != NULL)
-      diag_add_arg_type_with_name_hint(d, (PType*)p_callee_type, callee_name);
+    if (p_callee_decl != NULL)
+      diag_add_arg_type_with_name_hint(d, (PType*)p_callee_type, P_DECL_GET_NAME(p_callee_decl));
     else
       diag_add_arg_type(d, (PType*)p_callee_type);
     diag_add_source_caret(d, p_lparen_loc);
@@ -863,9 +893,8 @@ check_call_args(PSourceRange p_call_range,
     return false;
   } else if (p_arg_count > p_callee_type->arg_count) {
     PDiag* d = diag_at(P_DK_err_too_many_args, p_lparen_loc);
-    PIdentifierInfo* callee_name = get_decl_ref_name(p_callee);
-    if (callee_name != NULL)
-      diag_add_arg_type_with_name_hint(d, (PType*)p_callee_type, callee_name);
+    if (p_callee_decl != NULL)
+      diag_add_arg_type_with_name_hint(d, (PType*)p_callee_type, P_DECL_GET_NAME(p_callee_decl));
     else
       diag_add_arg_type(d, (PType*)p_callee_type);
     diag_add_source_caret(d, p_lparen_loc);
@@ -910,14 +939,14 @@ sema_act_on_call_expr(PSema* p_s,
 
   PSourceRange call_range = { P_AST_GET_SOURCE_RANGE(p_callee).begin, p_rparen_loc + 1 };
 
-  PType* callee_type = p_ast_get_type(p_callee);
-  if (!p_type_is_function(callee_type)) {
+  PDeclFunction* callee_decl = (PDeclFunction*)get_decl_ref_decl(p_callee);
+  PFunctionType* callee_type = (PFunctionType*)p_ast_get_type(p_callee);
+  if (!p_type_is_function((PType*)callee_type)) {
     PDiag* d;
 
-    PIdentifierInfo* callee_name = get_decl_ref_name(p_callee);
-    if (callee_name != NULL) {
+    if (callee_decl != NULL) {
       d = diag_at(P_DK_err_cannot_be_used_as_function, p_lparen_loc);
-      diag_add_arg_ident(d, callee_name);
+      diag_add_arg_ident(d, P_DECL_GET_NAME(callee_decl));
     } else {
       d = diag_at(P_DK_err_expr_cannot_be_used_as_function, p_lparen_loc);
     }
@@ -928,14 +957,19 @@ sema_act_on_call_expr(PSema* p_s,
     return NULL;
   }
 
-  if (!check_call_args(call_range, p_lparen_loc, p_callee, (PFunctionType*)callee_type, p_args, p_arg_count))
+  if (!check_call_args(call_range, p_lparen_loc, callee_decl, callee_type, p_args, p_arg_count))
     return NULL;
 
-  PAstCallExpr* node = CREATE_NODE_EXTRA_SIZE(PAstCallExpr, sizeof(PAst*) * (p_arg_count - 1), P_AST_NODE_CALL_EXPR);
+  PAstCallExpr* node =
+    CREATE_NODE_EXTRA_SIZE(PAstCallExpr, sizeof(PAst*) * (callee_type->arg_count - 1), P_AST_NODE_CALL_EXPR);
   P_AST_EXPR_GET_VALUE_CATEGORY(node) = P_VC_RVALUE;
   node->callee = p_callee;
-  node->arg_count = p_arg_count;
+  node->arg_count = callee_type->arg_count;
   memcpy(node->args, p_args, sizeof(PAst*) * p_arg_count);
+  for (size_t i = p_arg_count; i < callee_type->arg_count; ++i) {
+    node->args[i] = callee_decl->params[i]->default_expr;
+  }
+
   return node;
 }
 

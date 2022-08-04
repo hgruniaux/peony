@@ -14,8 +14,9 @@ typedef struct PSymbol
 typedef enum PScopeFlags
 {
   P_SF_NONE = 0x00,
-  P_SF_BREAK = 0x01, /* Scope can contains `break` statements. */
-  P_SF_CONTINUE = 0x02, /* Scope can contains `continue` statements. */
+  P_SF_BREAK = 0x01,       /* Scope can contains `break` statements. */
+  P_SF_CONTINUE = 0x02,    /* Scope can contains `continue` statements. */
+  P_SF_FUNC_PARAMS = 0x04, /* Scope where the parameters of a function are placed. */
 } PScopeFlags;
 
 struct PScope

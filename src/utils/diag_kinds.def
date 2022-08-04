@@ -21,9 +21,9 @@ ERROR(expected_expr, "expected expression")
 ERROR(expected_param_decl, "expected parameter declarator")
 ERROR(expected_var_decl, "expected variable declarator")
 ERROR(expected_func_body_after_func_decl, "expected function body after function declarator")
+
 ERROR(member_not_struct, "request for member <%{0}%> in something not a structure")
 ERROR(no_member_named, "<%{0}%> has no member named <%{1}%>")
-
 ERROR(redeclaration_function, "redeclaration of function <%{0}%>")
 ERROR(redeclaration_variable, "redeclaration of variable <%{0}%>")
 ERROR(redeclaration_struct, "redeclaration of structure <%{0}%>")
@@ -32,6 +32,7 @@ ERROR(use_undeclared_type, "use of undeclared type <%{0}%>")
 
 ERROR(parameter_name_already_used, "identifier <%{0}%> is bound more than once in this parameter list")
 ERROR(missing_default_argument, "default argument missing for parameter {0} of function <%{1}%>")
+ERROR(default_arg_ref_param, "default argument references parameter <%{0}%>")
 ERROR(break_or_continue_outside_of_loop, "<%{0}%> outside of a loop")
 
 ERROR(int_literal_too_large, "integer literal too large for type <%{0}%>")
