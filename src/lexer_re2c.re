@@ -105,14 +105,13 @@ lexer_next(PLexer* p_lexer, PToken* p_token)
             [ \t\v\f\r]+ { continue; }
 
             "//"[^\x00\n\r]* {
-                continue;
+                if (!p_lexer->keep_comments)
+                    continue;
 
-                #if 0
                 FILL_TOKEN(P_TOK_COMMENT);
                 p_token->data.literal.begin = p_lexer->marked_cursor;
                 p_token->data.literal.end = p_lexer->cursor;
                 break;
-                #endif
             }
 
             "/*" { goto block_comment; }
@@ -207,6 +206,8 @@ lexer_next(PLexer* p_lexer, PToken* p_token)
             "}"   { FILL_TOKEN(P_TOK_RBRACE); break; }
             "("   { FILL_TOKEN(P_TOK_LPAREN); break; }
             ")"   { FILL_TOKEN(P_TOK_RPAREN); break; }
+            "["   { FILL_TOKEN(P_TOK_LSQUARE); break; }
+            "]"   { FILL_TOKEN(P_TOK_RSQUARE); break; }
             ","   { FILL_TOKEN(P_TOK_COMMA); break; }
             ":"   { FILL_TOKEN(P_TOK_COLON); break; }
             ";"   { FILL_TOKEN(P_TOK_SEMI); break; }
@@ -245,6 +246,7 @@ lexer_next(PLexer* p_lexer, PToken* p_token)
 
             "\x00" {
                 FILL_TOKEN(P_TOK_EOF);
+                p_token->token_length = 0;
                 p_lexer->cursor--;
                 break;
             }
@@ -265,14 +267,13 @@ lexer_next(PLexer* p_lexer, PToken* p_token)
             }
 
             "*/" {
-                continue;
+                if (!p_lexer->keep_comments)
+                    continue;
 
-                #if 0
                 FILL_TOKEN(P_TOK_COMMENT);
                 p_token->data.literal.begin = p_lexer->marked_cursor;
                 p_token->data.literal.end = p_lexer->cursor;
                 break;
-                #endif
             }
 
             "\x00" {

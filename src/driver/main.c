@@ -14,10 +14,12 @@ compile_to(PSourceFile* p_source_file, const char* p_output_filename)
 {
   PIdentifierTable identifier_table;
   p_identifier_table_init(&identifier_table);
+  p_identifier_table_register_keywords(&identifier_table);
 
   PLexer lexer;
   lexer.identifier_table = &identifier_table;
-  lexer_init(&lexer, p_source_file);
+  lexer_init(&lexer);
+  lexer_set_source_file(&lexer, p_source_file);
 
   struct PParser parser;
   parser.lexer = &lexer;

@@ -6,6 +6,7 @@
 
 #include <assert.h>
 #include <stdio.h>
+#include <string.h>
 
 
 
@@ -179,17 +180,20 @@ lexer_next(PLexer* p_lexer, PToken* p_token)
         case 'x':
         case 'y':
         case 'z': goto yy38;
-        case '^': goto yy41;
-        case 'r': goto yy43;
-        case '{': goto yy44;
-        case '|': goto yy45;
-        case '}': goto yy47;
+        case '[': goto yy41;
+        case ']': goto yy42;
+        case '^': goto yy43;
+        case 'r': goto yy45;
+        case '{': goto yy46;
+        case '|': goto yy47;
+        case '}': goto yy49;
         default: goto yy2;
     }
 yy1:
     ++p_lexer->cursor;
     {
                 FILL_TOKEN(P_TOK_EOF);
+                p_token->token_length = 0;
                 p_lexer->cursor--;
                 break;
             }
@@ -229,7 +233,7 @@ yy7:
 yy8:
     yych = *++p_lexer->cursor;
     switch (yych) {
-        case '=': goto yy48;
+        case '=': goto yy50;
         default: goto yy9;
     }
 yy9:
@@ -237,7 +241,7 @@ yy9:
 yy10:
     yych = *++p_lexer->cursor;
     switch (yych) {
-        case '=': goto yy49;
+        case '=': goto yy51;
         default: goto yy11;
     }
 yy11:
@@ -245,8 +249,8 @@ yy11:
 yy12:
     yych = *++p_lexer->cursor;
     switch (yych) {
-        case '&': goto yy50;
-        case '=': goto yy51;
+        case '&': goto yy52;
+        case '=': goto yy53;
         default: goto yy13;
     }
 yy13:
@@ -260,7 +264,7 @@ yy15:
 yy16:
     yych = *++p_lexer->cursor;
     switch (yych) {
-        case '=': goto yy52;
+        case '=': goto yy54;
         default: goto yy17;
     }
 yy17:
@@ -268,7 +272,7 @@ yy17:
 yy18:
     yych = *++p_lexer->cursor;
     switch (yych) {
-        case '=': goto yy53;
+        case '=': goto yy55;
         default: goto yy19;
     }
 yy19:
@@ -279,8 +283,8 @@ yy20:
 yy21:
     yych = *++p_lexer->cursor;
     switch (yych) {
-        case '=': goto yy54;
-        case '>': goto yy55;
+        case '=': goto yy56;
+        case '>': goto yy57;
         default: goto yy22;
     }
 yy22:
@@ -291,9 +295,9 @@ yy23:
 yy24:
     yych = *++p_lexer->cursor;
     switch (yych) {
-        case '*': goto yy56;
-        case '/': goto yy57;
-        case '=': goto yy59;
+        case '*': goto yy58;
+        case '/': goto yy59;
+        case '=': goto yy61;
         default: goto yy25;
     }
 yy25:
@@ -303,9 +307,9 @@ yy26:
     yych = *(p_lexer->marker = ++p_lexer->cursor);
     switch (yych) {
         case 'B':
-        case 'b': goto yy62;
+        case 'b': goto yy64;
         case 'X':
-        case 'x': goto yy64;
+        case 'x': goto yy66;
         default: goto yy29;
     }
 yy27:
@@ -322,7 +326,7 @@ yy28:
     yych = *(p_lexer->marker = ++p_lexer->cursor);
 yy29:
     switch (yych) {
-        case '.': goto yy60;
+        case '.': goto yy62;
         case '0':
         case '1':
         case '2':
@@ -335,10 +339,10 @@ yy29:
         case '9':
         case '_': goto yy28;
         case 'E':
-        case 'e': goto yy63;
-        case 'f': goto yy65;
+        case 'e': goto yy65;
+        case 'f': goto yy67;
         case 'i':
-        case 'u': goto yy66;
+        case 'u': goto yy68;
         default: goto yy27;
     }
 yy30:
@@ -350,8 +354,8 @@ yy31:
 yy32:
     yych = *++p_lexer->cursor;
     switch (yych) {
-        case '<': goto yy67;
-        case '=': goto yy69;
+        case '<': goto yy69;
+        case '=': goto yy71;
         default: goto yy33;
     }
 yy33:
@@ -359,7 +363,7 @@ yy33:
 yy34:
     yych = *++p_lexer->cursor;
     switch (yych) {
-        case '=': goto yy70;
+        case '=': goto yy72;
         default: goto yy35;
     }
 yy35:
@@ -367,8 +371,8 @@ yy35:
 yy36:
     yych = *++p_lexer->cursor;
     switch (yych) {
-        case '=': goto yy71;
-        case '>': goto yy72;
+        case '=': goto yy73;
+        case '>': goto yy74;
         default: goto yy37;
     }
 yy37:
@@ -456,85 +460,90 @@ yy40:
                 break;
             }
 yy41:
-    yych = *++p_lexer->cursor;
-    switch (yych) {
-        case '=': goto yy74;
-        default: goto yy42;
-    }
-yy42:
-    { FILL_TOKEN(P_TOK_CARET); break; }
-yy43:
-    yyaccept = 1;
-    yych = *(p_lexer->marker = ++p_lexer->cursor);
-    switch (yych) {
-        case '#': goto yy75;
-        default: goto yy39;
-    }
-yy44:
     ++p_lexer->cursor;
-    { FILL_TOKEN(P_TOK_LBRACE); break; }
-yy45:
+    { FILL_TOKEN(P_TOK_LSQUARE); break; }
+yy42:
+    ++p_lexer->cursor;
+    { FILL_TOKEN(P_TOK_RSQUARE); break; }
+yy43:
     yych = *++p_lexer->cursor;
     switch (yych) {
         case '=': goto yy76;
-        case '|': goto yy77;
-        default: goto yy46;
+        default: goto yy44;
+    }
+yy44:
+    { FILL_TOKEN(P_TOK_CARET); break; }
+yy45:
+    yyaccept = 1;
+    yych = *(p_lexer->marker = ++p_lexer->cursor);
+    switch (yych) {
+        case '#': goto yy77;
+        default: goto yy39;
     }
 yy46:
-    { FILL_TOKEN(P_TOK_PIPE); break; }
+    ++p_lexer->cursor;
+    { FILL_TOKEN(P_TOK_LBRACE); break; }
 yy47:
-    ++p_lexer->cursor;
-    { FILL_TOKEN(P_TOK_RBRACE); break; }
+    yych = *++p_lexer->cursor;
+    switch (yych) {
+        case '=': goto yy78;
+        case '|': goto yy79;
+        default: goto yy48;
+    }
 yy48:
-    ++p_lexer->cursor;
-    { FILL_TOKEN(P_TOK_EXCLAIM_EQUAL); break; }
+    { FILL_TOKEN(P_TOK_PIPE); break; }
 yy49:
     ++p_lexer->cursor;
-    { FILL_TOKEN(P_TOK_PERCENT_EQUAL); break; }
+    { FILL_TOKEN(P_TOK_RBRACE); break; }
 yy50:
     ++p_lexer->cursor;
-    { FILL_TOKEN(P_TOK_AMP_AMP); break; }
+    { FILL_TOKEN(P_TOK_EXCLAIM_EQUAL); break; }
 yy51:
     ++p_lexer->cursor;
-    { FILL_TOKEN(P_TOK_AMP_EQUAL); break; }
+    { FILL_TOKEN(P_TOK_PERCENT_EQUAL); break; }
 yy52:
     ++p_lexer->cursor;
-    { FILL_TOKEN(P_TOK_STAR_EQUAL); break; }
+    { FILL_TOKEN(P_TOK_AMP_AMP); break; }
 yy53:
     ++p_lexer->cursor;
-    { FILL_TOKEN(P_TOK_PLUS_EQUAL); break; }
+    { FILL_TOKEN(P_TOK_AMP_EQUAL); break; }
 yy54:
     ++p_lexer->cursor;
-    { FILL_TOKEN(P_TOK_MINUS_EQUAL); break; }
+    { FILL_TOKEN(P_TOK_STAR_EQUAL); break; }
 yy55:
     ++p_lexer->cursor;
-    { FILL_TOKEN(P_TOK_ARROW); break; }
+    { FILL_TOKEN(P_TOK_PLUS_EQUAL); break; }
 yy56:
     ++p_lexer->cursor;
-    { goto block_comment; }
+    { FILL_TOKEN(P_TOK_MINUS_EQUAL); break; }
 yy57:
+    ++p_lexer->cursor;
+    { FILL_TOKEN(P_TOK_ARROW); break; }
+yy58:
+    ++p_lexer->cursor;
+    { goto block_comment; }
+yy59:
     yych = *++p_lexer->cursor;
     switch (yych) {
         case 0x00:
         case '\n':
-        case '\r': goto yy58;
-        default: goto yy57;
+        case '\r': goto yy60;
+        default: goto yy59;
     }
-yy58:
+yy60:
     {
-                continue;
+                if (!p_lexer->keep_comments)
+                    continue;
 
-                #if 0
                 FILL_TOKEN(P_TOK_COMMENT);
                 p_token->data.literal.begin = p_lexer->marked_cursor;
                 p_token->data.literal.end = p_lexer->cursor;
                 break;
-                #endif
             }
-yy59:
+yy61:
     ++p_lexer->cursor;
     { FILL_TOKEN(P_TOK_SLASH_EQUAL); break; }
-yy60:
+yy62:
     yych = *++p_lexer->cursor;
     switch (yych) {
         case '0':
@@ -546,34 +555,34 @@ yy60:
         case '6':
         case '7':
         case '8':
-        case '9': goto yy78;
-        default: goto yy61;
+        case '9': goto yy80;
+        default: goto yy63;
     }
-yy61:
+yy63:
     p_lexer->cursor = p_lexer->marker;
     switch (yyaccept) {
         case 0: goto yy27;
         case 1: goto yy40;
-        case 2: goto yy79;
-        case 3: goto yy81;
-        default: goto yy86;
+        case 2: goto yy81;
+        case 3: goto yy83;
+        default: goto yy88;
     }
-yy62:
+yy64:
     yych = *++p_lexer->cursor;
     switch (yych) {
         case '0':
-        case '1': goto yy80;
-        case '_': goto yy62;
-        default: goto yy61;
+        case '1': goto yy82;
+        case '_': goto yy64;
+        default: goto yy63;
     }
-yy63:
+yy65:
     yych = *++p_lexer->cursor;
     switch (yych) {
         case '+':
-        case '-': goto yy82;
-        default: goto yy83;
+        case '-': goto yy84;
+        default: goto yy85;
     }
-yy64:
+yy66:
     yych = *++p_lexer->cursor;
     switch (yych) {
         case '0':
@@ -597,55 +606,55 @@ yy64:
         case 'c':
         case 'd':
         case 'e':
-        case 'f': goto yy85;
-        case '_': goto yy64;
-        default: goto yy61;
-    }
-yy65:
-    yych = *++p_lexer->cursor;
-    switch (yych) {
-        case '3': goto yy87;
-        case '6': goto yy88;
-        default: goto yy61;
-    }
-yy66:
-    yych = *++p_lexer->cursor;
-    switch (yych) {
-        case '1': goto yy89;
-        case '3': goto yy90;
-        case '6': goto yy91;
-        case '8': goto yy92;
-        default: goto yy61;
+        case 'f': goto yy87;
+        case '_': goto yy66;
+        default: goto yy63;
     }
 yy67:
     yych = *++p_lexer->cursor;
     switch (yych) {
-        case '=': goto yy93;
-        default: goto yy68;
+        case '3': goto yy89;
+        case '6': goto yy90;
+        default: goto yy63;
     }
 yy68:
-    { FILL_TOKEN(P_TOK_LESS_LESS); break; }
-yy69:
-    ++p_lexer->cursor;
-    { FILL_TOKEN(P_TOK_LESS_EQUAL); break; }
-yy70:
-    ++p_lexer->cursor;
-    { FILL_TOKEN(P_TOK_EQUAL_EQUAL); break; }
-yy71:
-    ++p_lexer->cursor;
-    { FILL_TOKEN(P_TOK_GREATER_EQUAL); break; }
-yy72:
     yych = *++p_lexer->cursor;
     switch (yych) {
-        case '=': goto yy94;
-        default: goto yy73;
+        case '1': goto yy91;
+        case '3': goto yy92;
+        case '6': goto yy93;
+        case '8': goto yy94;
+        default: goto yy63;
     }
+yy69:
+    yych = *++p_lexer->cursor;
+    switch (yych) {
+        case '=': goto yy95;
+        default: goto yy70;
+    }
+yy70:
+    { FILL_TOKEN(P_TOK_LESS_LESS); break; }
+yy71:
+    ++p_lexer->cursor;
+    { FILL_TOKEN(P_TOK_LESS_EQUAL); break; }
+yy72:
+    ++p_lexer->cursor;
+    { FILL_TOKEN(P_TOK_EQUAL_EQUAL); break; }
 yy73:
-    { FILL_TOKEN(P_TOK_GREATER_GREATER); break; }
+    ++p_lexer->cursor;
+    { FILL_TOKEN(P_TOK_GREATER_EQUAL); break; }
 yy74:
+    yych = *++p_lexer->cursor;
+    switch (yych) {
+        case '=': goto yy96;
+        default: goto yy75;
+    }
+yy75:
+    { FILL_TOKEN(P_TOK_GREATER_GREATER); break; }
+yy76:
     ++p_lexer->cursor;
     { FILL_TOKEN(P_TOK_CARET_EQUAL); break; }
-yy75:
+yy77:
     yych = *++p_lexer->cursor;
     switch (yych) {
         case 'A':
@@ -700,16 +709,16 @@ yy75:
         case 'w':
         case 'x':
         case 'y':
-        case 'z': goto yy95;
-        default: goto yy61;
+        case 'z': goto yy97;
+        default: goto yy63;
     }
-yy76:
+yy78:
     ++p_lexer->cursor;
     { FILL_TOKEN(P_TOK_PIPE_EQUAL); break; }
-yy77:
+yy79:
     ++p_lexer->cursor;
     { FILL_TOKEN(P_TOK_PIPE_PIPE); break; }
-yy78:
+yy80:
     yyaccept = 2;
     yych = *(p_lexer->marker = ++p_lexer->cursor);
     switch (yych) {
@@ -723,13 +732,13 @@ yy78:
         case '7':
         case '8':
         case '9':
-        case '_': goto yy78;
+        case '_': goto yy80;
         case 'E':
-        case 'e': goto yy63;
-        case 'f': goto yy65;
-        default: goto yy79;
+        case 'e': goto yy65;
+        case 'f': goto yy67;
+        default: goto yy81;
     }
-yy79:
+yy81:
     {
                 FILL_TOKEN(P_TOK_FLOAT_LITERAL);
                 p_token->data.literal.begin = p_lexer->marked_cursor;
@@ -751,18 +760,18 @@ yy79:
 
                 break;
             }
-yy80:
+yy82:
     yyaccept = 3;
     yych = *(p_lexer->marker = ++p_lexer->cursor);
     switch (yych) {
         case '0':
         case '1':
-        case '_': goto yy80;
+        case '_': goto yy82;
         case 'i':
-        case 'u': goto yy97;
-        default: goto yy81;
+        case 'u': goto yy99;
+        default: goto yy83;
     }
-yy81:
+yy83:
     {
                 FILL_TOKEN(P_TOK_INT_LITERAL);
                 p_token->data.literal.int_radix = 2;
@@ -771,9 +780,9 @@ yy81:
                 parse_int_suffix(p_token);
                 break;
             }
-yy82:
+yy84:
     yych = *++p_lexer->cursor;
-yy83:
+yy85:
     switch (yych) {
         case '0':
         case '1':
@@ -784,11 +793,11 @@ yy83:
         case '6':
         case '7':
         case '8':
-        case '9': goto yy84;
-        case '_': goto yy82;
-        default: goto yy61;
+        case '9': goto yy86;
+        case '_': goto yy84;
+        default: goto yy63;
     }
-yy84:
+yy86:
     yyaccept = 2;
     yych = *(p_lexer->marker = ++p_lexer->cursor);
     switch (yych) {
@@ -802,11 +811,11 @@ yy84:
         case '7':
         case '8':
         case '9':
-        case '_': goto yy84;
-        case 'f': goto yy65;
-        default: goto yy79;
+        case '_': goto yy86;
+        case 'f': goto yy67;
+        default: goto yy81;
     }
-yy85:
+yy87:
     yyaccept = 4;
     yych = *(p_lexer->marker = ++p_lexer->cursor);
     switch (yych) {
@@ -832,12 +841,12 @@ yy85:
         case 'c':
         case 'd':
         case 'e':
-        case 'f': goto yy85;
+        case 'f': goto yy87;
         case 'i':
-        case 'u': goto yy98;
-        default: goto yy86;
+        case 'u': goto yy100;
+        default: goto yy88;
     }
-yy86:
+yy88:
     {
                 FILL_TOKEN(P_TOK_INT_LITERAL);
                 p_token->data.literal.int_radix = 16;
@@ -846,46 +855,46 @@ yy86:
                 parse_int_suffix(p_token);
                 break;
             }
-yy87:
-    yych = *++p_lexer->cursor;
-    switch (yych) {
-        case '2': goto yy99;
-        default: goto yy61;
-    }
-yy88:
-    yych = *++p_lexer->cursor;
-    switch (yych) {
-        case '4': goto yy99;
-        default: goto yy61;
-    }
 yy89:
     yych = *++p_lexer->cursor;
     switch (yych) {
-        case '6': goto yy92;
-        default: goto yy61;
+        case '2': goto yy101;
+        default: goto yy63;
     }
 yy90:
     yych = *++p_lexer->cursor;
     switch (yych) {
-        case '2': goto yy92;
-        default: goto yy61;
+        case '4': goto yy101;
+        default: goto yy63;
     }
 yy91:
     yych = *++p_lexer->cursor;
     switch (yych) {
-        case '4': goto yy92;
-        default: goto yy61;
+        case '6': goto yy94;
+        default: goto yy63;
     }
 yy92:
-    ++p_lexer->cursor;
-    goto yy27;
+    yych = *++p_lexer->cursor;
+    switch (yych) {
+        case '2': goto yy94;
+        default: goto yy63;
+    }
 yy93:
-    ++p_lexer->cursor;
-    { FILL_TOKEN(P_TOK_LESS_LESS_EQUAL); break; }
+    yych = *++p_lexer->cursor;
+    switch (yych) {
+        case '4': goto yy94;
+        default: goto yy63;
+    }
 yy94:
     ++p_lexer->cursor;
-    { FILL_TOKEN(P_TOK_GREATER_GREATER_EQUAL); break; }
+    goto yy27;
 yy95:
+    ++p_lexer->cursor;
+    { FILL_TOKEN(P_TOK_LESS_LESS_EQUAL); break; }
+yy96:
+    ++p_lexer->cursor;
+    { FILL_TOKEN(P_TOK_GREATER_GREATER_EQUAL); break; }
+yy97:
     yych = *++p_lexer->cursor;
     switch (yych) {
         case '0':
@@ -950,10 +959,10 @@ yy95:
         case 'w':
         case 'x':
         case 'y':
-        case 'z': goto yy95;
-        default: goto yy96;
+        case 'z': goto yy97;
+        default: goto yy98;
     }
-yy96:
+yy98:
     {
                 struct PIdentifierInfo* ident = p_identifier_table_get(
                     p_lexer->identifier_table,
@@ -966,69 +975,69 @@ yy96:
                 p_token->data.identifier = ident;
                 break;
             }
-yy97:
-    yych = *++p_lexer->cursor;
-    switch (yych) {
-        case '1': goto yy100;
-        case '3': goto yy101;
-        case '6': goto yy102;
-        case '8': goto yy103;
-        default: goto yy61;
-    }
-yy98:
-    yych = *++p_lexer->cursor;
-    switch (yych) {
-        case '1': goto yy104;
-        case '3': goto yy105;
-        case '6': goto yy106;
-        case '8': goto yy107;
-        default: goto yy61;
-    }
 yy99:
-    ++p_lexer->cursor;
-    goto yy79;
+    yych = *++p_lexer->cursor;
+    switch (yych) {
+        case '1': goto yy102;
+        case '3': goto yy103;
+        case '6': goto yy104;
+        case '8': goto yy105;
+        default: goto yy63;
+    }
 yy100:
     yych = *++p_lexer->cursor;
     switch (yych) {
-        case '6': goto yy103;
-        default: goto yy61;
+        case '1': goto yy106;
+        case '3': goto yy107;
+        case '6': goto yy108;
+        case '8': goto yy109;
+        default: goto yy63;
     }
 yy101:
-    yych = *++p_lexer->cursor;
-    switch (yych) {
-        case '2': goto yy103;
-        default: goto yy61;
-    }
+    ++p_lexer->cursor;
+    goto yy81;
 yy102:
     yych = *++p_lexer->cursor;
     switch (yych) {
-        case '4': goto yy103;
-        default: goto yy61;
+        case '6': goto yy105;
+        default: goto yy63;
     }
 yy103:
-    ++p_lexer->cursor;
-    goto yy81;
+    yych = *++p_lexer->cursor;
+    switch (yych) {
+        case '2': goto yy105;
+        default: goto yy63;
+    }
 yy104:
     yych = *++p_lexer->cursor;
     switch (yych) {
-        case '6': goto yy107;
-        default: goto yy61;
+        case '4': goto yy105;
+        default: goto yy63;
     }
 yy105:
-    yych = *++p_lexer->cursor;
-    switch (yych) {
-        case '2': goto yy107;
-        default: goto yy61;
-    }
+    ++p_lexer->cursor;
+    goto yy83;
 yy106:
     yych = *++p_lexer->cursor;
     switch (yych) {
-        case '4': goto yy107;
-        default: goto yy61;
+        case '6': goto yy109;
+        default: goto yy63;
     }
 yy107:
+    yych = *++p_lexer->cursor;
+    switch (yych) {
+        case '2': goto yy109;
+        default: goto yy63;
+    }
+yy108:
+    yych = *++p_lexer->cursor;
+    switch (yych) {
+        case '4': goto yy109;
+        default: goto yy63;
+    }
+yy109:
     ++p_lexer->cursor;
-    goto yy86;
+    goto yy88;
 }
 
 
@@ -1038,13 +1047,13 @@ yy107:
     char yych;
     yych = *p_lexer->cursor;
     switch (yych) {
-        case 0x00: goto yy109;
-        case '\n': goto yy112;
-        case '\r': goto yy113;
-        case '*': goto yy114;
-        default: goto yy110;
+        case 0x00: goto yy111;
+        case '\n': goto yy114;
+        case '\r': goto yy115;
+        case '*': goto yy116;
+        default: goto yy112;
     }
-yy109:
+yy111:
     ++p_lexer->cursor;
     {
                 // Unterminated block comment
@@ -1052,41 +1061,40 @@ yy109:
                 p_lexer->cursor--;
                 break;
             }
-yy110:
+yy112:
     ++p_lexer->cursor;
-yy111:
+yy113:
     {
                 goto block_comment;
             }
-yy112:
+yy114:
     ++p_lexer->cursor;
     {
                 register_new_line(p_lexer);
                 goto block_comment;
             }
-yy113:
-    yych = *++p_lexer->cursor;
-    switch (yych) {
-        case '\n': goto yy112;
-        default: goto yy111;
-    }
-yy114:
-    yych = *++p_lexer->cursor;
-    switch (yych) {
-        case '/': goto yy115;
-        default: goto yy111;
-    }
 yy115:
+    yych = *++p_lexer->cursor;
+    switch (yych) {
+        case '\n': goto yy114;
+        default: goto yy113;
+    }
+yy116:
+    yych = *++p_lexer->cursor;
+    switch (yych) {
+        case '/': goto yy117;
+        default: goto yy113;
+    }
+yy117:
     ++p_lexer->cursor;
     {
-                continue;
+                if (!p_lexer->keep_comments)
+                    continue;
 
-                #if 0
                 FILL_TOKEN(P_TOK_COMMENT);
                 p_token->data.literal.begin = p_lexer->marked_cursor;
                 p_token->data.literal.end = p_lexer->cursor;
                 break;
-                #endif
             }
 }
 

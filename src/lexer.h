@@ -2,14 +2,17 @@
 
 #include "identifier_table.h"
 #include "token.h"
-#include "utils/dynamic_array.h"
 #include "utils/source_file.h"
+
+HEDLEY_BEGIN_C_DECLS
 
 // The lexical analyzer interface.
 typedef struct PLexer
 {
   PIdentifierTable* identifier_table;
   PSourceFile* source_file;
+
+  bool keep_comments;
 
   // For re2c:
   const char* cursor;
@@ -19,7 +22,10 @@ typedef struct PLexer
 } PLexer;
 
 void
-lexer_init(PLexer* p_lexer, PSourceFile* p_source_file);
+lexer_init(PLexer* p_lexer);
+
+void
+lexer_set_source_file(PLexer* p_lexer, PSourceFile* p_source_file);
 
 void
 lexer_destroy(PLexer* p_lexer);
@@ -31,3 +37,5 @@ lexer_destroy(PLexer* p_lexer);
 // still be issued.
 void
 lexer_next(PLexer* p_lexer, PToken* p_token);
+
+HEDLEY_END_C_DECLS
