@@ -2,6 +2,8 @@ cmake_minimum_required (VERSION 3.8)
 
 project("peony")
 
+set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+
 add_library(peony_lib STATIC
     "thirdparty/hedley/hedley.h"
 
@@ -102,8 +104,7 @@ target_link_libraries(peony_lib PUBLIC ${llvm_libs})
 
 # Testing:
 enable_testing()
-include(GoogleTest)
-find_package(GTest CONFIG REQUIRED)
+include(InstallGoogleTest)
 
 add_executable(peony_test
     "src/main_test.cxx"
@@ -116,7 +117,7 @@ add_executable(peony_test
  "src/literal_parser_test.cxx" "src/name_mangling_test.cxx" "src/utils/string_test.cxx")
 
 target_link_libraries(peony_test PRIVATE peony_lib)
-target_link_libraries(peony_test PRIVATE GTest::gtest)
+target_link_libraries(peony_test PRIVATE gtest)
 gtest_discover_tests(peony_test)
 
 add_subdirectory(test)
