@@ -31,16 +31,25 @@ dyn_array_destroy_impl(PDynamicArray* p_array)
 }
 
 void
-dyn_array_append_impl(PDynamicArray* p_array, size_t p_item_size, void* p_item)
+dyn_array_reserve_impl(PDynamicArray* p_array, size_t p_item_size, size_t p_capacity)
 {
-  if (p_array->size >= p_array->capacity) {
+  if (p_capacity > p_array->capacity) {
     p_array->capacity *= GROWTH_FACTOR;
-    PDynamicArrayItem* new_buffer = ALLOC_BUFFER(p_array->capacity, p_item_size);
+    if (p_capacity > p_array->capacity) {
+      p_array->capacity = p_capacity;  
+    }
+
+    char* new_buffer = ALLOC_BUFFER(p_array->capacity, p_item_size);
     assert(new_buffer != NULL);
     memcpy(new_buffer, p_array->buffer, p_item_size * p_array->size);
     free(p_array->buffer);
     p_array->buffer = new_buffer;
   }
+}
 
+void
+dyn_array_append_impl(PDynamicArray* p_array, size_t p_item_size, void* p_item)
+{
+  dyn_array_reserve_impl(p_array, p_item_size, p_array->size + 1);
   memcpy(p_array->buffer + p_array->size++ * p_item_size, p_item, p_item_size);
 }

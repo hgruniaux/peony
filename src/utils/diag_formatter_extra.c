@@ -62,9 +62,9 @@ format_arg_type(PMsgBuffer* p_buffer, PType* p_type, PIdentifierInfo* p_name_hin
 {
   assert(p_type != NULL);
 
-  /* WARNING: Must have the same layout as PTypeKind. */
-  static const char* builtin_types[] = { "void", "char", "i8",        "i16", "i32", "i64",     "u8",  "u16",
-                                         "u32",  "u64",  "{integer}", "f32", "f64", "{float}", "bool" };
+  /* WARNING: Must have the same other as PTypeKind. */
+  static const char* builtin_types[] = { "void", "char", "bool", "i8",  "i16", "i32",       "i64",    "u8",
+                                         "u16",  "u32",  "u64",  "f32", "f64", "{integer}", "{float}" };
 
   if (P_TYPE_GET_KIND(p_type) == P_TYPE_FUNCTION) {
     PFunctionType* func_type = (PFunctionType*)p_type;

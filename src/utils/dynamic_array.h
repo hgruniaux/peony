@@ -6,9 +6,6 @@
 
 HEDLEY_BEGIN_C_DECLS
 
-
-typedef void* PDynamicArrayItem;
-
 // PDynamicArray is a generic dynamic array implementation.
 //
 // Use the DYN_ARRAY_*() macros to use. They all takes a parameter the
@@ -35,6 +32,8 @@ void
 dyn_array_init_impl(PDynamicArray* p_array, size_t p_item_size);
 void
 dyn_array_destroy_impl(PDynamicArray* p_array);
+void
+dyn_array_reserve_impl(PDynamicArray* p_array, size_t p_item_size, size_t p_capacity);
 void
 dyn_array_append_impl(PDynamicArray* p_array, size_t p_item_size, void* p_item);
 

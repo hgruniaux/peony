@@ -6,10 +6,15 @@
 
 HEDLEY_BEGIN_C_DECLS
 
+// WARNING: If you change the order of the following enum, you
+// must update the functions:
+//     - append_type() in name_mangling.c
+//     - format_arg_type() in utils/diag_formatter_extra.c
 typedef enum PTypeKind
 {
   P_TYPE_VOID, // 'void' type
   P_TYPE_CHAR, // An Unicode scalar value (32-bit integer)
+  P_TYPE_BOOL,
   P_TYPE_I8,
   P_TYPE_I16,
   P_TYPE_I32,
@@ -18,16 +23,16 @@ typedef enum PTypeKind
   P_TYPE_U16,
   P_TYPE_U32,
   P_TYPE_U64,
-  P_TYPE_GENERIC_INT,
   P_TYPE_F32,
   P_TYPE_F64,
+  P_TYPE_GENERIC_INT,
   P_TYPE_GENERIC_FLOAT,
-  P_TYPE_BOOL,
-  P_TYPE_PAREN, // A parenthesized type (e.g. '(i32)') implemented by PParenType
+  P_TYPE_LAST_BUILTIN = P_TYPE_GENERIC_FLOAT,
+  P_TYPE_PAREN,    // A parenthesized type (e.g. '(i32)') implemented by PParenType
   P_TYPE_FUNCTION, // A function type implemented by PFunctionType
-  P_TYPE_POINTER, // A pointer type implemented by PPointerType
-  P_TYPE_ARRAY, // An array type implemented by PArrayType
-  P_TYPE_TAG, // A tag (referencing a declaration) type implemented by PTagType
+  P_TYPE_POINTER,  // A pointer type implemented by PPointerType
+  P_TYPE_ARRAY,    // An array type implemented by PArrayType
+  P_TYPE_TAG,      // A tag (referencing a declaration) type implemented by PTagType
 } PTypeKind;
 
 typedef struct PTypeCommon

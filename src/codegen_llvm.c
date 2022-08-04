@@ -1,6 +1,8 @@
 #include "codegen_llvm.h"
 
 #include "identifier_table.h"
+#include "name_mangling.h"
+#include "utils/string.h"
 
 #include <hedley.h>
 
@@ -183,10 +185,14 @@ cg_function_decl(struct PCodegenLLVM* p_cg, PDeclFunction* p_decl)
 {
   assert(P_DECL_GET_KIND(p_decl) == P_DECL_FUNCTION);
 
-  const char* name = P_DECL_GET_NAME(p_decl)->spelling;
+  PString mangled_name;
+  string_init(&mangled_name);
+  name_mangle(P_DECL_GET_NAME(p_decl), (PFunctionType*)P_DECL_GET_TYPE(p_decl), &mangled_name);
+
   LLVMTypeRef type = cg_to_llvm_type(P_DECL_GET_TYPE(p_decl));
-  LLVMValueRef func = LLVMAddFunction(p_cg->module, name, type);
+  LLVMValueRef func = LLVMAddFunction(p_cg->module, mangled_name.buffer, type);
   p_decl->common._llvm_address = func;
+  string_destroy(&mangled_name);
 
   if (p_decl->body != NULL) {
     p_cg->current_function = func;

@@ -11,7 +11,6 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 
 PDiagContext g_diag_context = { .diagnostic_count = { 0 },
                                 .max_errors = 0,
@@ -28,13 +27,6 @@ static PDiag g_current_diag;
 
 PSourceLocation g_current_source_location = 0;
 PSourceFile* g_current_source_file = NULL;
-
-static PDiagSeverity g_verify_last_diag_severity = P_DIAG_UNSPECIFIED;
-static const char* g_verify_last_diag_message = NULL;
-static int g_verify_fail_count = 0;
-
-static void
-verify_unexpected(void);
 
 static const char* g_diag_severity_names[] = {
   "unspecified", "note", "warning", "error", "fatal error",

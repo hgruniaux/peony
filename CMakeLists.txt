@@ -48,7 +48,7 @@ add_library(peony_lib STATIC
 
     "src/options.h"
     "src/options.c"
- "src/literal_parser.h" "src/literal_parser.c")
+ "src/literal_parser.h" "src/literal_parser.c" "src/name_mangling.c" "src/utils/string.h" "src/utils/string.c")
 
 target_compile_definitions(peony_lib PUBLIC "-DP_DEBUG")
 target_include_directories(peony_lib PUBLIC "thirdparty/hedley")
@@ -113,7 +113,7 @@ add_executable(peony_test
     "src/utils/dynamic_array_test.cxx"
     "src/identifier_table_test.cxx"
     "src/type_test.cxx"
- "src/literal_parser_test.cxx")
+ "src/literal_parser_test.cxx" "src/name_mangling_test.cxx" "src/utils/string_test.cxx")
 
 target_link_libraries(peony_test PRIVATE peony_lib)
 target_link_libraries(peony_test PRIVATE GTest::gtest)
