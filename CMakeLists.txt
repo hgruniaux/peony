@@ -89,17 +89,13 @@ endif()
 
 # LLVM:
 find_package(LLVM CONFIG REQUIRED)
-
-list(APPEND CMAKE_MODULE_PATH "${LLVM_CMAKE_DIR}")
-include(HandleLLVMOptions)
-add_definitions(${LLVM_DEFINITIONS})
-
 target_include_directories(peony_lib PUBLIC ${LLVM_INCLUDE_DIRS})
 
-# Find the libraries that correspond to the LLVM components that we wish to use
-llvm_map_components_to_libnames(llvm_libs support core irreader x86codegen passes )
+target_include_directories(peony_lib PRIVATE ${LLVM_INCLUDE_DIRS})
+separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND ${LLVM_DEFINITIONS})
+target_compile_definitions(peony_lib PRIVATE ${LLVM_DEFINITIONS_LIST})
 
-# Link against LLVM libraries
+llvm_map_components_to_libnames(llvm_libs support core irreader x86codegen passes)
 target_link_libraries(peony_lib PUBLIC ${llvm_libs})
 
 # Testing:
