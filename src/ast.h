@@ -377,7 +377,7 @@ typedef struct PDeclStructField
 typedef struct PDeclStruct
 {
   PDeclCommon common;
-  int field_count;
+  size_t field_count;
   PDeclStructField* fields[1]; // tail-allocated
 } PDeclStruct;
 
