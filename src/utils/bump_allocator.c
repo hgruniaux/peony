@@ -12,7 +12,7 @@
 
 #define DEFAULT_SLAB_SIZE 4096
 
-static bool
+static inline bool
 is_power_of_2(size_t p_value)
 {
   return (p_value != 0) && ((p_value & (p_value - 1)) == 0);
