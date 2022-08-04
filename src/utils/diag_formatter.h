@@ -20,7 +20,7 @@ typedef struct PMsgBuffer
   ((p_buffer).it = (p_buffer).buffer);                                                                                 \
   (p_buffer).end = (p_buffer).buffer + sizeof((p_buffer).buffer)
 
-static void
+static inline void
 write_buffer(PMsgBuffer* p_buffer, const char* p_bytes, size_t p_size)
 {
   assert((p_buffer->it + p_size) < p_buffer->end);
@@ -28,14 +28,14 @@ write_buffer(PMsgBuffer* p_buffer, const char* p_bytes, size_t p_size)
   p_buffer->it += p_size;
 }
 
-static void
+static inline void
 write_buffer_str(PMsgBuffer* p_buffer, const char* p_str)
 {
   write_buffer(p_buffer, p_str, strlen(p_str));
 }
 
 HEDLEY_PRINTF_FORMAT(2, 3)
-static void
+static inline void
 write_buffer_printf(PMsgBuffer* p_buffer, const char* p_format, ...)
 {
   va_list ap;

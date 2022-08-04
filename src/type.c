@@ -349,5 +349,5 @@ p_type_get_tag(struct PDecl* p_decl)
   PTagType* type = P_BUMP_ALLOC(&p_global_bump_allocator, PTagType);
   init_type((PType*)type, P_TYPE_TAG);
   type->decl = p_decl;
-  return type;
+  return (PType*)type;
 }

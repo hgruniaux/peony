@@ -26,7 +26,8 @@ TEST_F(name_mangling, builtin_types)
   PType* args[] = { p_type_get_char(), p_type_get_bool(), p_type_get_i8(),  p_type_get_u8(),
                     p_type_get_i16(),  p_type_get_u16(),  p_type_get_i32(), p_type_get_u32(),
                     p_type_get_i64(),  p_type_get_u64(),  p_type_get_f32(), p_type_get_f64() };
-  PType* func_type = p_type_get_function(p_type_get_void(), args, std::size(args));
+  const size_t args_size = sizeof(args) / sizeof(*args);
+  PType* func_type = p_type_get_function(p_type_get_void(), args, args_size);
 
   check_mangled_name("foo", func_type, "_P3foovcbahstlmxyfd");
 }
@@ -34,8 +35,8 @@ TEST_F(name_mangling, builtin_types)
 TEST_F(name_mangling, pointer_type)
 {
   PType* args[] = { p_type_get_pointer(p_type_get_bool()) };
-  PType* func_type =
-    p_type_get_function(p_type_get_pointer(p_type_get_pointer(p_type_get_f32())), args, std::size(args));
+  const size_t args_size = sizeof(args) / sizeof(*args);
+  PType* func_type = p_type_get_function(p_type_get_pointer(p_type_get_pointer(p_type_get_f32())), args, args_size);
 
   check_mangled_name("ptr_func", func_type, "_P8ptr_funcPPfPb");
 }
@@ -43,9 +44,11 @@ TEST_F(name_mangling, pointer_type)
 TEST_F(name_mangling, func_type)
 {
   PType* args1[] = { p_type_get_f32(), p_type_get_paren(p_type_get_bool()) };
-  PType* func1_type = p_type_get_function(p_type_get_paren(p_type_get_i32()), args1, std::size(args1));
+  const size_t args1_size = sizeof(args1) / sizeof(*args1);
+  PType* func1_type = p_type_get_function(p_type_get_paren(p_type_get_i32()), args1, args1_size);
 
   PType* args2[] = { func1_type };
-  PType* func2_type = p_type_get_function(p_type_get_void(), args2, std::size(args2));
+  const size_t args2_size = sizeof(args2) / sizeof(*args2);
+  PType* func2_type = p_type_get_function(p_type_get_void(), args2, args2_size);
   check_mangled_name("func_with_func_arg", func2_type, "_P18func_with_func_argvFlfbE");
 }
