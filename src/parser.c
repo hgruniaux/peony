@@ -1225,7 +1225,7 @@ parse_struct_field_decl(struct PParser* p_parser)
   PType* type = parse_type(p_parser);
 
   expect_token(p_parser, P_TOK_SEMI);
-  return sema_act_on_struct_field_decl(&p_parser->sema, name_range, name, type);
+  return (PDecl*)sema_act_on_struct_field_decl(&p_parser->sema, name_range, name, type);
 }
 
 /*
