@@ -17,7 +17,10 @@ jobs:
     - uses: actions/checkout@v3
 
     - name: Install LLVM
-      run: sudo apt-get install -y llvm-dev
+      run:
+        deb http://apt.llvm.org/focal/ llvm-toolchain-focal-15 main
+        deb-src http://apt.llvm.org/focal/ llvm-toolchain-focal-15 main
+        sudo apt-get install -y llvm-15-dev
 
     - name: Configure CMake
       run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
