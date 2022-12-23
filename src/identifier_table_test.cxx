@@ -1,4 +1,4 @@
-#include "identifier_table.h"
+#include "identifier_table.hxx"
 
 #include <gtest/gtest.h>
 

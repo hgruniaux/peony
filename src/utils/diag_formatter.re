@@ -1,5 +1,5 @@
-#include "diag_formatter.h"
-#include "../options.h"
+#include "diag_formatter.hxx"
+#include "../options.hxx"
 
 static size_t
 parse_integer(const char* p_begin, const char* p_end)

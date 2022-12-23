@@ -1,11 +1,11 @@
-#include "lexer.h"
+#include "lexer.hxx"
 
-#include "utils/diag.h"
-#include "options.h"
+#include "utils/diag.hxx"
+#include "options.hxx"
 
-#include <assert.h>
-#include <stdio.h>
-#include <string.h>
+#include <cassert>
+#include <cstdio>
+#include <cstring>
 
 /*!re2c
     re2c:yyfill:enable    = 0;
@@ -83,7 +83,7 @@ parse_int_suffix(PToken* p_token)
 void
 lexer_next(PLexer* p_lexer, PToken* p_token)
 {
-    assert(p_lexer != NULL && p_token != NULL);
+    assert(p_lexer != nullptr && p_token != nullptr);
 
 #define FILL_TOKEN(p_kind) (fill_token(p_lexer, p_token, p_kind))
 
@@ -125,7 +125,7 @@ lexer_next(PLexer* p_lexer, PToken* p_token)
                     p_lexer->cursor
                 );
 
-                assert(ident != NULL);
+                assert(ident != nullptr);
                 FILL_TOKEN(ident->token_kind);
                 p_token->data.identifier = ident;
                 break;
@@ -138,7 +138,7 @@ lexer_next(PLexer* p_lexer, PToken* p_token)
                     p_lexer->cursor
                 );
 
-                assert(ident != NULL);
+                assert(ident != nullptr);
                 FILL_TOKEN(P_TOK_IDENTIFIER);
                 p_token->data.identifier = ident;
                 break;

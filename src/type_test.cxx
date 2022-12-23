@@ -1,4 +1,4 @@
-#include "type.h"
+#include "type.hxx"
 
 #include <gtest/gtest.h>
 

@@ -1,4 +1,4 @@
-#include "lexer.h"
+#include "lexer.hxx"
 
 #include <gtest/gtest.h>
 

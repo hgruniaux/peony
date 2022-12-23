@@ -2,61 +2,67 @@ cmake_minimum_required (VERSION 3.8)
 
 project("peony")
 
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+add_compile_options(-fsanitize=address,undefined)
+add_link_options(-fsanitize=address,undefined)
+
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 add_library(peony_lib STATIC
     "thirdparty/hedley/hedley.h"
 
-    "src/utils/bump_allocator.c"
-    "src/utils/bump_allocator.h"
-    "src/utils/diag.h"
-    "src/utils/diag.c"
-    "src/utils/diag_formatter.h"
-    "src/utils/diag_formatter.c"
-    "src/utils/diag_formatter_extra.c"
-    "src/utils/dynamic_array.h"
-    "src/utils/dynamic_array.c"
-    "src/utils/hash_table_common.h"
-    "src/utils/hash_table_common.c"
-    "src/utils/line_map.h"
-    "src/utils/line_map.c"
-    "src/utils/source_location.h"
-    "src/utils/source_file.h"
-    "src/utils/source_file.c"
-    "src/utils/source_location.c"
+    "src/utils/bump_allocator.cxx"
+    "src/utils/bump_allocator.hxx"
+    "src/utils/diag.hxx"
+    "src/utils/diag.cxx"
+    "src/utils/diag_formatter.hxx"
+    "src/utils/diag_formatter.cxx"
+    "src/utils/diag_formatter_extra.cxx"
+        "src/utils/hash_table_common.hxx"
+    "src/utils/hash_table_common.cxx"
+    "src/utils/line_map.hxx"
+    "src/utils/line_map.cxx"
+    "src/utils/source_location.hxx"
+    "src/utils/source_file.hxx"
+    "src/utils/source_file.cxx"
+    "src/utils/source_location.cxx"
 
-    "src/ast.h"
-    "src/ast.c"
-    "src/codegen_llvm.h"
-    "src/codegen_llvm.c"
-    "src/identifier_table.c"
-    "src/identifier_table.h"
-    "src/lexer.h"
-    "src/lexer.c"
-    "src/lexer_re2c.c"
-    "src/parser.c"
-    "src/parser.h"
-    "src/scope.h"
-    "src/scope.c"
-    "src/sema.h"
-    "src/sema.c"
-    
-    "src/token.h"
-    "src/token_kind.c"
-    "src/token_kind.h"
+        "src/ast.hxx"
+    "src/ast.cxx"
+    "src/codegen_llvm.hxx"
+    "src/codegen_llvm.cxx"
+    "src/identifier_table.cxx"
+    "src/identifier_table.hxx"
+    "src/lexer.hxx"
+    "src/lexer.cxx"
+    "src/lexer_re2c.cxx"
+    "src/parser.cxx"
+    "src/parser.hxx"
+    "src/scope.hxx"
+    "src/scope.cxx"
+    "src/sema.hxx"
+    "src/sema.cxx"
+    "src/token.hxx"
+    "src/token_kind.cxx"
+    "src/token_kind.hxx"
     "src/token_kinds.def"
-    "src/type.h"
-    "src/type.c"
-
-    "src/options.h"
-    "src/options.c"
- "src/literal_parser.h" "src/literal_parser.c" "src/name_mangling.c" "src/utils/string.h" "src/utils/string.c")
+    "src/type.hxx"
+    "src/type.cxx"
+    "src/options.hxx"
+    "src/options.cxx"
+    "src/literal_parser.hxx"
+    "src/literal_parser.cxx"
+    "src/name_mangling.cxx"
+    )
 
 target_compile_definitions(peony_lib PUBLIC "-DP_DEBUG")
 target_include_directories(peony_lib PUBLIC "thirdparty/hedley")
 target_include_directories(peony_lib PUBLIC "src")
 
-add_executable(peony "src/driver/main.c" "src/driver/cmdline_parser.c")
+add_executable(peony "src/driver/main.cxx" "src/driver/cmdline_parser.cxx")
 target_link_libraries(peony PRIVATE peony_lib)
 
 if(MSCV)
@@ -88,7 +94,7 @@ if(RE2C_PROGRAM)
 endif()
 
 # LLVM:
-find_package(LLVM CONFIG REQUIRED)
+find_package(LLVM 14.0 CONFIG REQUIRED)
 target_include_directories(peony_lib PUBLIC ${LLVM_INCLUDE_DIRS})
 
 target_include_directories(peony_lib PRIVATE ${LLVM_INCLUDE_DIRS})
@@ -107,11 +113,10 @@ add_executable(peony_test
 
     "src/utils/line_map_test.cxx"
     "src/utils/diag_formatter_test.cxx"
-    "src/utils/dynamic_array_test.cxx"
-    "src/identifier_table_test.cxx"
+        "src/identifier_table_test.cxx"
     "src/type_test.cxx"
     "src/lexer_test.cxx"
- "src/literal_parser_test.cxx" "src/name_mangling_test.cxx" "src/utils/string_test.cxx")
+ "src/literal_parser_test.cxx" "src/name_mangling_test.cxx")
 
 target_link_libraries(peony_test PRIVATE peony_lib)
 target_link_libraries(peony_test PRIVATE gtest)

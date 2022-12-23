@@ -1,4 +1,4 @@
-#include "literal_parser.h"
+#include "literal_parser.hxx"
 
 #include <gtest/gtest.h>
 

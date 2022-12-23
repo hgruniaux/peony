@@ -1,4 +1,4 @@
-#include "line_map.h"
+#include "line_map.hxx"
 
 #include <gtest/gtest.h>
 

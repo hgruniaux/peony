@@ -1,8 +1,8 @@
-#include "diag_formatter.h"
+#include "diag_formatter.hxx"
 
-#include "../identifier_table.h"
-#include "../type.h"
-#include "../options.h"
+#include "../identifier_table.hxx"
+#include "../type.hxx"
+#include "../options.hxx"
 
 #include <gtest/gtest.h>
 
@@ -82,7 +82,7 @@ TEST(diag_formatter, ident_arg)
 
   PDiagArgument arg;
   arg.type = P_DAT_IDENT;
-  arg.value_ident = p_identifier_table_get(&table, "foo", NULL);
+  arg.value_ident = p_identifier_table_get(&table, "foo", nullptr);
   check_arg_format(&arg, "foo");
 
   p_identifier_table_destroy(&table);
@@ -139,9 +139,9 @@ TEST(diag_formatter, quote)
   const bool enable_ansi_color_save = g_options.opt_diagnostics_color;
 
   g_options.opt_diagnostics_color = true;
-  check_format("<%foo%>", NULL, 0, "\x1b[1m'foo'\x1b[0m");
+  check_format("<%foo%>", nullptr, 0, "\x1b[1m'foo'\x1b[0m");
   g_options.opt_diagnostics_color = false;
-  check_format("<%foo%>", NULL, 0, "'foo'");
+  check_format("<%foo%>", nullptr, 0, "'foo'");
 
   g_options.opt_diagnostics_color = enable_ansi_color_save;
 }

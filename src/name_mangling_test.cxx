@@ -1,4 +1,4 @@
-#include "name_mangling.h"
+#include "name_mangling.hxx"
 
 #include <gtest/gtest.h>
 
@@ -11,11 +11,9 @@ protected:
   void check_mangled_name(const char* name, PType* func_type, const char* expected_mangled_name)
   {
     PIdentifierInfo* ident = p_identifier_table_get(&identifier_table, name, nullptr);
-    PString mangled_name;
-    string_init(&mangled_name);
-    name_mangle(ident, (PFunctionType*)func_type, &mangled_name);
-    EXPECT_STREQ(mangled_name.buffer, expected_mangled_name);
-    string_destroy(&mangled_name);
+    std::string mangled_name;
+    name_mangle(ident, (PFunctionType*)func_type, mangled_name);
+    EXPECT_STREQ(mangled_name.data(), expected_mangled_name);
   }
 
   PIdentifierTable identifier_table;
