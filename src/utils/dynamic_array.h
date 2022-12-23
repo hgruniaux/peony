@@ -8,7 +8,7 @@ HEDLEY_BEGIN_C_DECLS
 
 // PDynamicArray is a generic dynamic array implementation.
 //
-// Use the DYN_ARRAY_*() macros to use. They all takes a parameter the
+// Use the DYN_ARRAY_*() macros to use. They all take a parameter the
 // type of elements in the dynamic array and do all the dirty work for
 // you. The elements stored in the dynamic array must be trivially
 // copyable.

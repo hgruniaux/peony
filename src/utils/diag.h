@@ -56,7 +56,9 @@ typedef struct PDiagArgument
   };
 } PDiagArgument;
 
+// Maximum count of arguments that a diagnostic can have at the same time.
 #define P_DIAG_MAX_ARGUMENTS 8
+// Maximum count of source ranges that can be attached to a diagnostic at the same time.
 #define P_DIAG_MAX_RANGES 4
 
 typedef struct PDiag
@@ -71,7 +73,9 @@ typedef struct PDiag
   uint32_t arg_count;
 
 #ifdef P_DEBUG
+  // The following fields are used to print a useful error when the user forget to call diag_flush().
   bool debug_was_flushed;
+  // The source filename (as given by __FILE__) and line (__LINE__) where the diag() function was called.
   const char* debug_source_filename;
   int debug_source_line;
 #endif

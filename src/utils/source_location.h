@@ -11,7 +11,7 @@ typedef uint32_t PSourceLocation;
 
 /*
  * A closed source range. It is just a pair of source locations which
- * represents the begin and end of the range (both inclusives).
+ * represents the beginning and end of the range (both inclusives).
  */
 typedef struct PSourceRange
 {

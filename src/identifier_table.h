@@ -10,15 +10,18 @@ HEDLEY_BEGIN_C_DECLS
 
 typedef struct PIdentifierInfo
 {
+  // Internal identifier hash used by the identifier table implementation.
+  // TODO: Should we really store the hash value or compute it again on the fly?
   size_t hash;
-  /* Either TOK_IDENTIFIER or a keyword token kind. */
+  // Either TOK_IDENTIFIER or a keyword token kind.
   PTokenKind token_kind;
-  /* The *real* length of the NUL-terminated string 'spelling'. Of course,
-   * the final NUL character is not included in its length. */
+  // The UTF-8 encoded spelling of the identifier (NUL-terminated) and its
+  // byte-length (excluding the final NUL).
   size_t spelling_len;
   char spelling[1];
 } PIdentifierInfo;
 
+/* A dynamic hash table optimized for storing identifiers. */
 typedef struct PIdentifierTable
 {
   PIdentifierInfo** identifiers;
@@ -52,7 +55,7 @@ p_identifier_table_get(PIdentifierTable* p_table,
                        const char* p_spelling_begin,
                        const char* p_spelling_end);
 
-/* Registers default keywords into the given identifier table. */
+/* Registers default Peony keywords into the given identifier table. */
 void
 p_identifier_table_register_keywords(PIdentifierTable* p_table);
 
