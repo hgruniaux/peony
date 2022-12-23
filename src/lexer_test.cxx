@@ -16,20 +16,17 @@ protected:
     lexer.identifier_table = &identifier_table;
     lexer_init(&lexer);
     source_file.filename = "<test-input>";
-    p_line_map_init(&source_file.line_map);
   }
 
   void TearDown() override
   {
-    p_line_map_destroy(&source_file.line_map);
     p_identifier_table_destroy(&identifier_table);
     lexer_destroy(&lexer);
   }
 
   void set_input(const char* p_input)
   {
-    p_line_map_destroy(&source_file.line_map);
-    p_line_map_init(&source_file.line_map);
+    source_file.line_map = {};
     source_file.buffer = (char*)p_input;
     lexer_set_source_file(&lexer, &source_file);
   }

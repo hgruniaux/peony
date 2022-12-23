@@ -289,7 +289,7 @@ p_diag_print_source_line(PSourceFile* p_file, uint32_t p_lineno)
 {
   assert(p_file != nullptr);
 
-  uint32_t start_position = p_line_map_get_line_start_position(&p_file->line_map, p_lineno);
+  uint32_t start_position = p_file->line_map.get_line_start_pos(p_lineno);
 
   size_t line_length = 0;
   const char* it = p_file->buffer + start_position;

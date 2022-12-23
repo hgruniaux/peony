@@ -2,8 +2,6 @@
 
 #include "source_file.hxx"
 
-HEDLEY_BEGIN_C_DECLS
-
 /*
  * A source location is really just a byte offset into a source file.
  */
@@ -26,6 +24,3 @@ p_source_location_get_lineno_and_colno(PSourceFile* p_source_file,
                                        PSourceLocation p_position,
                                        uint32_t* p_lineno,
                                        uint32_t* p_colno);
-
-
-HEDLEY_END_C_DECLS

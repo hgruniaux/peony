@@ -22,7 +22,7 @@ static void
 register_new_line(PLexer* p_lexer)
 {
     uint32_t line_pos = p_lexer->cursor - p_lexer->source_file->buffer;
-    p_line_map_add(&p_lexer->source_file->line_map, line_pos);
+    p_lexer->source_file->line_map.add(line_pos);
 }
 
 static void

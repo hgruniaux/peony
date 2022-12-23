@@ -15,10 +15,10 @@ p_source_file_open(const char* p_filename)
     return nullptr;
 
   fseek(file, 0, SEEK_END);
-  const size_t bufsize = (size_t)ftell(file);
+  const auto bufsize = (size_t)ftell(file);
   fseek(file, 0, SEEK_SET);
 
-  PSourceFile* source_file = static_cast<PSourceFile*>(malloc(sizeof(PSourceFile)));
+  auto* source_file = new PSourceFile;
   assert(source_file != nullptr);
 
   const size_t filename_len = strlen(p_filename) + 1 /* NUL-terminated */;
@@ -40,7 +40,6 @@ p_source_file_open(const char* p_filename)
   }
 
   source_file->buffer = buffer;
-  p_line_map_init(&source_file->line_map);
   return source_file;
 }
 
@@ -50,8 +49,7 @@ p_source_file_close(PSourceFile* p_file)
   if (p_file == nullptr)
     return;
 
-  p_line_map_destroy(&p_file->line_map);
   free((void*)p_file->buffer);
   free(p_file->filename);
-  free(p_file);
+  delete p_file;
 }
