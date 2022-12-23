@@ -703,7 +703,9 @@ parse_int_literal(struct PParser* p_parser)
     overflow = parse_dec_int_literal_token(literal_begin, literal_end, &value);
   } else if (p_parser->lookahead.data.literal.int_radix == 2) {
     overflow = parse_bin_int_literal_token(literal_begin, literal_end, &value);
-  } else {
+  } else if (p_parser->lookahead.data.literal.int_radix == 8) {
+    overflow = parse_oct_int_literal_token(literal_begin, literal_end, &value);
+  }  else {
     // p_parser->lookahead.data.literal.int_radix == 16
     overflow = parse_hex_int_literal_token(literal_begin, literal_end, &value);
   }

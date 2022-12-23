@@ -31,7 +31,7 @@ typedef enum PFloatLiteralSuffix
 
 typedef struct PTokenLiteralData
 {
-  // The radix of the integer literal (either 2, 10 or 16).
+  // The radix of the integer literal (either 2, 8, 10 or 16).
   // This value is undefined for tokens other than P_TOK_INT_LITERAL.
   int int_radix;
   // Either a value of PIntLiteralSuffix or PFloatLiteralSuffix depending

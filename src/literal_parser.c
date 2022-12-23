@@ -6,8 +6,11 @@
 #include <stddef.h>
 #include <stdlib.h>
 
-/* Do `*p_acc += p_value` checking for overflow (returns true if overflow). */
-static bool
+/*
+ * Do `*p_acc += p_value` checking for overflow. Returns true in case of
+ * overflow, otherwise false is returned.
+ */
+static inline bool
 safe_add(uintmax_t* p_acc, uintmax_t p_value)
 {
 #ifdef __GNUC__
@@ -23,8 +26,11 @@ safe_add(uintmax_t* p_acc, uintmax_t p_value)
 #endif
 }
 
-/* Do `*p_acc *= p_value` checking for overflow (returns true if overflow). */
-static bool
+/*
+ * Do `*p_acc *= p_value` checking for overflow. Returns true in case of
+ * overflow, otherwise false is returned.
+ */
+static inline bool
 safe_mul(uintmax_t* p_acc, uintmax_t p_value)
 {
 #ifdef __GNUC__
@@ -40,39 +46,61 @@ safe_mul(uintmax_t* p_acc, uintmax_t p_value)
 #endif
 }
 
-bool
-parse_dec_int_literal_token(const char* p_begin, const char* p_end, uintmax_t* p_value)
+/*
+ * Converts `p_ch` to a digit in the given radix (1 to 36).
+ */
+static inline uintmax_t
+to_digit(char p_ch, int p_radix)
+{
+  // Based on Rust char::to_digit() implementation.
+  // If not a digit, a number greater than radix will be created.
+  uintmax_t digit = p_ch - '0';
+  if (p_radix > 10) {
+    assert(p_radix <= 36);
+
+    if (digit < 10) {
+      return digit;
+    }
+
+    // Force the 6th bit to be set to ensure ascii is lower case.
+    digit = (p_ch | 0x20) - 'a' + 10;
+  }
+
+  if (digit < p_radix) {
+    return digit;
+  } else {
+    return -1;
+  }
+}
+
+static inline bool
+parse_int_literal_helper(const char* p_begin, const char* p_end, uintmax_t* p_value, int p_radix)
 {
   assert(p_begin != NULL && p_begin != p_end && p_value != NULL);
 
+  bool overflow = false;
+  uintmax_t digit;
+
   *p_value = 0;
   while (*p_begin != *p_end) {
-    switch (*p_begin) {
-      case '0':
-      case '1':
-      case '2':
-      case '3':
-      case '4':
-      case '5':
-      case '6':
-      case '7':
-      case '8':
-      case '9': {
-        bool overflow = safe_mul(p_value, 10);
-        overflow |= safe_add(p_value, *p_begin++ - '0');
-        if (overflow)
-          return true;
-      }
-      break;
-      case '_': // digit separator
-        p_begin++;
-        continue;
-      default:
-        assert(false && "invalid character in integer literal");
+    char ch = *p_begin++;
+    if (ch == '_') { // digit separator
+      continue;
+    } else if ((digit = to_digit(ch, p_radix)) >= 0) {
+      overflow |= safe_mul(p_value, p_radix);
+      overflow |= safe_add(p_value, digit);
+    } else {
+      assert(0 && "invalid character in integer literal");
     }
   }
 
-  return false;
+  return overflow;
+}
+
+bool
+parse_dec_int_literal_token(const char* p_begin, const char* p_end, uintmax_t* p_value)
+{
+  return parse_int_literal_helper(p_begin, p_end, p_value, 10);
 }
 
 bool
@@ -83,26 +111,18 @@ parse_bin_int_literal_token(const char* p_begin, const char* p_end, uintmax_t* p
 
   p_begin += 2; // skip '0b'
 
-  *p_value = 0;
-  while (*p_begin != *p_end) {
-    switch (*p_begin) {
-      case '0':
-      case '1': {
-        bool overflow = safe_mul(p_value, 2);
-        overflow |= safe_add(p_value, *p_begin++ - '0');
-        if (overflow)
-          return true;
-      }
-      break;
-      case '_': // digit separator
-        p_begin++;
-        continue;
-      default:
-        assert(false && "invalid character in integer literal");
-    }
-  }
+  return parse_int_literal_helper(p_begin, p_end, p_value, 2);
+}
 
-  return false;
+bool
+parse_oct_int_literal_token(const char* p_begin, const char* p_end, uintmax_t* p_value)
+{
+  assert(p_begin != NULL && p_begin != p_end && p_value != NULL);
+  assert(p_begin[0] == '0' && (p_begin[1] == 'o' || p_begin[1] == 'O'));
+
+  p_begin += 2; // skip '0o'
+
+  return parse_int_literal_helper(p_begin, p_end, p_value, 8);
 }
 
 bool
@@ -113,58 +133,7 @@ parse_hex_int_literal_token(const char* p_begin, const char* p_end, uintmax_t* p
 
   p_begin += 2; // skip '0x'
 
-  *p_value = 0;
-  while (*p_begin != *p_end) {
-    switch (*p_begin) {
-      case '0':
-      case '1':
-      case '2':
-      case '3':
-      case '4':
-      case '5':
-      case '6':
-      case '7':
-      case '8':
-      case '9': {
-        bool overflow = safe_mul(p_value, 16);
-        overflow |= safe_add(p_value, *p_begin++ - '0');
-        if (overflow)
-          return true;
-      }
-      break;
-      case 'a':
-      case 'b':
-      case 'c':
-      case 'd':
-      case 'e':
-      case 'f': {
-        bool overflow = safe_mul(p_value, 16);
-        overflow |= safe_add(p_value, (uintmax_t)(*p_begin++ - 'a') + 10);
-        if (overflow)
-          return true;
-      }
-      break;
-      case 'A':
-      case 'B':
-      case 'C':
-      case 'D':
-      case 'E':
-      case 'F': {
-        bool overflow = safe_mul(p_value, 16);
-        overflow |= safe_add(p_value, (uintmax_t)(*p_begin++ - 'A') + 10);
-        if (overflow)
-          return true;
-      }
-      break;
-      case '_': // digit separator
-        p_begin++;
-        continue;
-      default:
-        assert(false && "invalid character in integer literal");
-    }
-  }
-
-  return false;
+  return parse_int_literal_helper(p_begin, p_end, p_value, 16);
 }
 
 bool
@@ -189,6 +158,7 @@ parse_float_literal_token(const char* p_begin, const char* p_end, double* p_valu
   *it = '\0';
 
   // This expects that the current locale is the "C" locale (this is set by the driver).
+  // TODO: Maybe find a better way to parse float literals.
   errno = 0;
   *p_value = strtod(buffer, NULL);
   bool too_big = (errno == ERANGE);

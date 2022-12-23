@@ -44,6 +44,27 @@ TEST(literal_parser, bin_int_literal)
   EXPECT_TRUE(does_overflow("0b1111111111111111111111111111111111111111111111111111111111111111111111111"));
 }
 
+TEST(literal_parser, oct_int_literal)
+{
+  auto does_overflow = [](const char* p_input) {
+    const char* end = p_input + strlen(p_input);
+    uintmax_t value;
+    return parse_oct_int_literal_token(p_input, end, &value);
+  };
+
+  auto get_value = [](const char* p_input) {
+    const char* end = p_input + strlen(p_input);
+    uintmax_t value;
+    EXPECT_FALSE(parse_oct_int_literal_token(p_input, end, &value));
+    return value;
+  };
+
+  EXPECT_EQ(get_value("0o0"), 0);
+  EXPECT_EQ(get_value("0O720"), 464);
+  EXPECT_EQ(get_value("0O132_7523"), 372563);
+  EXPECT_TRUE(does_overflow("0O7777777777777777777777"));
+}
+
 TEST(literal_parser, hex_int_literal)
 {
   auto does_overflow = [](const char* p_input) {

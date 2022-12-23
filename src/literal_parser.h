@@ -27,15 +27,22 @@ bool
 parse_dec_int_literal_token(const char* p_begin, const char* p_end, uintmax_t* p_value);
 
 /*
- * Same as parse_dec_int_literal_token() but takes a hexadecimal integer literal
- * INCLUDING the '0x' prefix.
+ * Same as parse_dec_int_literal_token() but takes a binary integer literal
+ * INCLUDING the '0b' prefix.
  */
 bool
 parse_bin_int_literal_token(const char* p_begin, const char* p_end, uintmax_t* p_value);
 
 /*
- * Same as parse_dec_int_literal_token() but takes a binary integer literal
- * INCLUDING the '0b' prefix.
+ * Same as parse_dec_int_literal_token() but takes an octal integer literal
+ * INCLUDING the '0o' prefix.
+ */
+bool
+parse_oct_int_literal_token(const char* p_begin, const char* p_end, uintmax_t* p_value);
+
+/*
+ * Same as parse_dec_int_literal_token() but takes a hexadecimal integer literal
+ * INCLUDING the '0x' prefix.
  */
 bool
 parse_hex_int_literal_token(const char* p_begin, const char* p_end, uintmax_t* p_value);

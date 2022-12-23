@@ -144,10 +144,12 @@ lexer_next(PLexer* p_lexer, PToken* p_token)
                 break;
             }
 
+            digit_sep = "_";
             int_suffix = [iu] ("8"|"16"|"32"|"64");
 
             bin_digit = "0"|"1";
-            '0b' (bin_digit|"_")* bin_digit (bin_digit|"_")* int_suffix? {
+            bin_literal = '0b' (bin_digit|digit_sep)* bin_digit (bin_digit|digit_sep)*;
+            bin_literal int_suffix? {
                 FILL_TOKEN(P_TOK_INT_LITERAL);
                 p_token->data.literal.int_radix = 2;
                 p_token->data.literal.begin = p_lexer->marked_cursor;
@@ -156,8 +158,20 @@ lexer_next(PLexer* p_lexer, PToken* p_token)
                 break;
             }
 
+            oct_digit = [0-7];
+            oct_literal = '0o' (oct_digit|digit_sep)* oct_digit (oct_digit|digit_sep)*;
+            oct_literal int_suffix? {
+                FILL_TOKEN(P_TOK_INT_LITERAL);
+                p_token->data.literal.int_radix = 8;
+                p_token->data.literal.begin = p_lexer->marked_cursor;
+                p_token->data.literal.end = p_lexer->cursor;
+                parse_int_suffix(p_token);
+                break;
+            }
+
             hex_digit = [0-9a-fA-F];
-            '0x' (hex_digit|"_")* hex_digit (hex_digit|"_")* int_suffix? {
+            hex_literal = '0x' (hex_digit|digit_sep)* hex_digit (hex_digit|digit_sep)*;
+            hex_literal int_suffix? {
                 FILL_TOKEN(P_TOK_INT_LITERAL);
                 p_token->data.literal.int_radix = 16;
                 p_token->data.literal.begin = p_lexer->marked_cursor;
@@ -167,7 +181,7 @@ lexer_next(PLexer* p_lexer, PToken* p_token)
             }
 
             dec_digit = [0-9];
-            dec_literal = dec_digit (dec_digit|"_")*;
+            dec_literal = dec_digit (dec_digit|digit_sep)*;
             dec_literal int_suffix? {
                 FILL_TOKEN(P_TOK_INT_LITERAL);
                 p_token->data.literal.int_radix = 10;
@@ -177,7 +191,7 @@ lexer_next(PLexer* p_lexer, PToken* p_token)
                 break;
             }
 
-            float_exp = 'e' [+-]? (dec_digit|"_")* dec_digit (dec_digit|"_")*;
+            float_exp = 'e' [+-]? (dec_digit|digit_sep)* dec_digit (dec_digit|digit_sep)*;
             float_suffix = "f32" | "f64";
             dec_literal float_exp
             | dec_literal "." dec_literal float_exp?
