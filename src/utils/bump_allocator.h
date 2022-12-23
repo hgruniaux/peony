@@ -65,6 +65,6 @@ p_bump_alloc(struct PBumpAllocator* p_allocator, size_t p_size, size_t p_align);
 // FIXME: move this into a better place
 #define P_ARRAY_LENGTH(array) (sizeof(array) / sizeof((array)[0]))
 
-struct PBumpAllocator p_global_bump_allocator;
+extern struct PBumpAllocator p_global_bump_allocator;
 
 HEDLEY_END_C_DECLS

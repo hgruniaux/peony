@@ -51,7 +51,7 @@ p_source_file_close(PSourceFile* p_file)
     return;
 
   p_line_map_destroy(&p_file->line_map);
-  free(p_file->buffer);
+  free((void*)p_file->buffer);
   free(p_file->filename);
   free(p_file);
 }

@@ -1,6 +1,7 @@
 #include "source_location.h"
 
 #include <assert.h>
+#include <stddef.h>
 
 void
 p_source_location_get_lineno_and_colno(PSourceFile* p_source_file,

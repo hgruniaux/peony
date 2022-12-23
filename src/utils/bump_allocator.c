@@ -12,6 +12,8 @@
 
 #define DEFAULT_SLAB_SIZE 4096
 
+struct PBumpAllocator p_global_bump_allocator;
+
 static inline bool
 is_power_of_2(size_t p_value)
 {
