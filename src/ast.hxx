@@ -347,14 +347,6 @@ typedef struct PDeclFunction
 {
   PDeclCommon common;
   PAst* body;
-  // Function bodies are parsed once all declarations were parsed and not
-  // at the same time as when parsing the function prototype. When the
-  // function prototype is parsed, the parser consumes all tokens that may
-  // compose the function body (between and including the '{' and '}') and
-  // stores them in lazy_body_token_run. Later the tokens from lazy_body_token_run
-  // are parsed and lazy_body_token_run is cleared. Therefore, the body
-  // is considered not parsed until lazy_body_token_run is empty.
-  std::vector<PToken> lazy_body_token_run;
   // The count of parameters that do not have a default argument.
   size_t required_param_count;
   // The count of parameters of this function. It is also the size

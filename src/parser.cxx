@@ -1086,26 +1086,6 @@ parse_expr(struct PParser* p_parser)
   return parse_binary_expr(p_parser, lhs, 0);
 }
 
-static void
-tokenize_func_body(struct PParser* p_parser, std::vector<PToken>& p_token_run)
-{
-  assert(LOOKAHEAD_IS(P_TOK_LBRACE));
-
-  int depth = 1;
-  do {
-    p_token_run.push_back(p_parser->lookahead);
-    consume_token(p_parser);
-    if (LOOKAHEAD_IS(P_TOK_LBRACE)) {
-      ++depth;
-    } else if (LOOKAHEAD_IS(P_TOK_RBRACE) && --depth == 0) {
-      break;
-    }
-  } while (!LOOKAHEAD_IS(P_TOK_EOF));
-
-  p_token_run.push_back(p_parser->lookahead);
-  expect_token(p_parser, P_TOK_RBRACE);
-}
-
 /*
  * func_decl:
  *     "fn" identifier "(" param_decl_list? ")" func_type_specifier? ";"
@@ -1176,26 +1156,11 @@ parse_func_decl(struct PParser* p_parser)
     return (PDecl*)decl;
   }
 
-  decl->lazy_body_token_run.clear();
-  tokenize_func_body(p_parser, decl->lazy_body_token_run);
+  sema_begin_func_decl_body_parsing(&p_parser->sema, decl);
+  decl->body = parse_compound_stmt(p_parser);
+  sema_end_func_decl_body_parsing(&p_parser->sema, decl);
 
   return (PDecl*)decl;
-}
-
-static void
-parse_lazy_func_body(struct PParser* p_parser, PDeclFunction* p_decl)
-{
-  assert(P_DECL_GET_KIND(p_decl) == P_DECL_FUNCTION);
-
-  p_parser->token_run = &p_decl->lazy_body_token_run;
-  consume_token(p_parser); // fill p_parser->lookahead with the content of token_run
-
-  sema_begin_func_decl_body_parsing(&p_parser->sema, p_decl);
-  PAst* body = parse_compound_stmt(p_parser);
-  sema_end_func_decl_body_parsing(&p_parser->sema, p_decl);
-
-  p_decl->body = body;
-  p_decl->lazy_body_token_run.clear();
 }
 
 /*
@@ -1329,11 +1294,6 @@ parse_translation_unit(struct PParser* p_parser)
     CREATE_NODE_EXTRA_SIZE(PAstTranslationUnit, sizeof(PDecl*) * (decls.size() - 1), P_AST_NODE_TRANSLATION_UNIT);
   node->decl_count = decls.size();
   memcpy(node->decls, decls.data(), sizeof(PDecl*) * decls.size());
-
-  for (size_t i = 0; i < node->decl_count; ++i) {
-    if (P_DECL_GET_KIND(node->decls[i]) == P_DECL_FUNCTION)
-      parse_lazy_func_body(p_parser, (PDeclFunction*)node->decls[i]);
-  }
 
   sema_pop_scope(&p_parser->sema);
   SET_NODE_LOC_RANGE(node, loc_begin, LOOKAHEAD_END_LOC);
