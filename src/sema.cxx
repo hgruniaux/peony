@@ -7,6 +7,24 @@
 #include <cstdlib>
 #include <cstring>
 
+PSema::PSema(PContext& p_context)
+  : context(p_context)
+  , current_scope_cache_idx(0)
+  , current_scope(nullptr)
+{
+  memset(scope_cache, 0, sizeof(scope_cache));
+}
+
+PSema::~PSema()
+{
+  assert(current_scope == nullptr);
+
+  for (auto & i : scope_cache) {
+    if (i != nullptr)
+      p_scope_destroy(i);
+  }
+}
+
 void
 sema_push_scope(PSema* p_s, PScopeFlags p_flags)
 {
@@ -87,21 +105,21 @@ convert_to_rvalue(PAst* p_node)
 }
 
 /* Returns true if p_from is trivially convertible to p_to.
- * Most of time this is equivalent to p_from == p_to, unless
+ * Most time this is equivalent to p_from == p_to, unless
  * if one of the types is a generic int/float. */
 static bool
 are_types_compatible(PType* p_from, PType* p_to)
 {
-  p_from = p_type_get_canonical(p_from);
-  p_to = p_type_get_canonical(p_to);
+  p_from = p_from->get_canonical_ty();
+  p_to = p_to->get_canonical_ty();
 
   if (p_from == p_to)
     return true;
 
-  if ((p_type_is_generic_int(p_from) && p_type_is_int(p_to)) || (p_type_is_int(p_to) && p_type_is_generic_int(p_to)))
+  if ((p_type_is_generic_int(p_from) && p_to->is_int_ty()) || (p_to->is_int_ty() && p_type_is_generic_int(p_to)))
     return true;
-  if ((p_type_is_generic_float(p_from) && p_type_is_float(p_to)) ||
-      (p_type_is_float(p_to) && p_type_is_generic_float(p_to)))
+  if ((p_type_is_generic_float(p_from) && p_to->is_float_ty()) ||
+      (p_to->is_float_ty() && p_type_is_generic_float(p_to)))
     return true;
 
   return false;
@@ -143,7 +161,7 @@ create_function_type(PSema* p_s, PType* p_ret_type, PDeclParam** p_params, size_
   assert(param_types != nullptr);
   for (size_t i = 0; i < p_param_count; ++i)
     param_types[i] = P_DECL_GET_TYPE(p_params[i]);
-  PType* type = p_type_get_function(p_ret_type, param_types, p_param_count);
+  PType* type = p_s->context.get_function_ty(p_ret_type, param_types, p_param_count);
   free(param_types);
 
   return type;
@@ -170,7 +188,7 @@ sema_act_on_func_decl(PSema* p_s,
   }
 
   if (p_ret_type == nullptr)
-    p_ret_type = p_type_get_void();
+    p_ret_type = p_s->context.get_void_ty();
 
   size_t required_param_count = 0;
   if (!check_func_decl_params(p_name, p_params, p_param_count, &required_param_count))
@@ -449,9 +467,9 @@ sema_act_on_return_stmt(PSema* p_s, PSourceLocation p_semi_loc, PAst* p_ret_expr
 {
   if (p_ret_expr != nullptr) {
     PType* ret_type = p_ast_get_type(p_ret_expr);
-    if (!are_types_compatible(ret_type, p_s->curr_func_type->ret_type)) {
+    if (!are_types_compatible(ret_type, p_s->curr_func_type->get_ret_ty())) {
       PDiag* d = diag_at(P_DK_err_expected_type, P_AST_GET_SOURCE_RANGE(p_ret_expr).begin);
-      diag_add_arg_type(d, p_s->curr_func_type->ret_type);
+      diag_add_arg_type(d, p_s->curr_func_type->get_ret_ty());
       diag_add_arg_type(d, ret_type);
       diag_add_source_range(d, P_AST_GET_SOURCE_RANGE(p_ret_expr));
       diag_flush(d);
@@ -460,10 +478,10 @@ sema_act_on_return_stmt(PSema* p_s, PSourceLocation p_semi_loc, PAst* p_ret_expr
 
     p_ret_expr = convert_to_rvalue(p_ret_expr);
   } else { // p_ret_expr == nullptr
-    if (!p_type_is_void(p_s->curr_func_type->ret_type)) {
+    if (!p_s->curr_func_type->get_ret_ty()->is_void_ty()) {
       PDiag* d = diag_at(P_DK_err_expected_type, p_semi_loc);
-      diag_add_arg_type(d, p_s->curr_func_type->ret_type);
-      diag_add_arg_type(d, p_type_get_void());
+      diag_add_arg_type(d, p_s->curr_func_type->get_ret_ty());
+      diag_add_arg_type(d, p_s->context.get_void_ty());
       diag_flush(d);
       return nullptr;
     }
@@ -499,16 +517,16 @@ check_suspicious_condition_expr(PAst* p_cond_expr)
 }
 
 static bool
-check_condition_expr(PAst* p_cond_expr)
+check_condition_expr(PSema* p_s, PAst* p_cond_expr)
 {
   check_suspicious_condition_expr(p_cond_expr);
 
   PType* cond_type = p_ast_get_type(p_cond_expr);
-  if (p_type_is_bool(cond_type))
+  if (cond_type->is_bool_ty())
     return true;
 
   PDiag* d = diag_at(P_DK_err_expected_type, P_AST_GET_SOURCE_RANGE(p_cond_expr).begin);
-  diag_add_arg_type(d, p_type_get_bool());
+  diag_add_arg_type(d, p_s->context.get_bool_ty());
   diag_add_arg_type(d, cond_type);
   diag_add_source_range(d, P_AST_GET_SOURCE_RANGE(p_cond_expr));
   diag_flush(d);
@@ -521,7 +539,7 @@ sema_act_on_if_stmt(PSema* p_s, PAst* p_cond_expr, PAst* p_then_stmt, PAst* p_el
   if (p_cond_expr == nullptr || p_then_stmt == nullptr)
     return nullptr;
 
-  check_condition_expr(p_cond_expr);
+  check_condition_expr(p_s, p_cond_expr);
   p_cond_expr = convert_to_rvalue(p_cond_expr);
 
   PAstIfStmt* node = CREATE_NODE(PAstIfStmt, P_AST_NODE_IF_STMT);
@@ -549,7 +567,7 @@ sema_act_on_while_stmt(PSema* p_s, PAst* p_cond_expr, PScope* p_scope)
 
   assert(p_scope != nullptr);
 
-  check_condition_expr(p_cond_expr);
+  check_condition_expr(p_s, p_cond_expr);
   p_cond_expr = convert_to_rvalue(p_cond_expr);
 
   PAstWhileStmt* node = CREATE_NODE(PAstWhileStmt, P_AST_NODE_WHILE_STMT);
@@ -571,10 +589,10 @@ PAstIntLiteral*
 sema_act_on_int_literal(PSema* p_s, PSourceRange p_range, PType* p_type, uintmax_t p_value)
 {
   if (p_type == nullptr)
-    p_type = p_type_get_i32();
+    p_type = p_s->context.get_i32_ty();
 
   uintmax_t max_value = UINTMAX_MAX;
-  switch (P_TYPE_GET_KIND(p_type)) {
+  switch (p_type->get_kind()) {
     case P_TYPE_I8:
       max_value = INT8_MAX;
       break;
@@ -626,7 +644,7 @@ PAstFloatLiteral*
 sema_act_on_float_literal(PSema* p_s, PSourceRange p_range, PType* p_type, double p_value)
 {
   if (p_type == nullptr)
-    p_type = p_type_get_f32();
+    p_type = p_s->context.get_f32_ty();
 
   PAstFloatLiteral* node = CREATE_NODE(PAstFloatLiteral, P_AST_NODE_FLOAT_LITERAL);
   P_AST_EXPR_GET_VALUE_CATEGORY(node) = P_VC_RVALUE;
@@ -694,20 +712,20 @@ sema_act_on_binary_expr(PSema* p_s, PAstBinaryOp p_opcode, PSourceLocation p_op_
   switch (p_opcode) {
     case P_BINARY_LOG_AND:
     case P_BINARY_LOG_OR: {
-      result_type = p_type_get_bool();
+      result_type = p_s->context.get_bool_ty();
 
-      if (!p_type_is_bool(lhs_type)) {
+      if (!lhs_type->is_bool_ty()) {
         PDiag* d = diag_at(P_DK_err_expected_type, p_op_loc);
-        diag_add_arg_type(d, p_type_get_bool());
+        diag_add_arg_type(d, p_s->context.get_bool_ty());
         diag_add_arg_type(d, lhs_type);
         diag_add_source_range(d, P_AST_GET_SOURCE_RANGE(p_lhs));
         diag_add_source_range(d, P_AST_GET_SOURCE_RANGE(p_rhs));
         diag_flush(d);
       }
 
-      if (!p_type_is_bool(rhs_type)) {
+      if (!rhs_type->is_bool_ty()) {
         PDiag* d = diag_at(P_DK_err_expected_type, p_op_loc);
-        diag_add_arg_type(d, p_type_get_bool());
+        diag_add_arg_type(d, p_s->context.get_bool_ty());
         diag_add_arg_type(d, rhs_type);
         diag_add_source_range(d, P_AST_GET_SOURCE_RANGE(p_lhs));
         diag_add_source_range(d, P_AST_GET_SOURCE_RANGE(p_rhs));
@@ -733,7 +751,7 @@ sema_act_on_binary_expr(PSema* p_s, PAstBinaryOp p_opcode, PSourceLocation p_op_
         diag_flush(d);
       }
 
-      result_type = p_type_get_bool();
+      result_type = p_s->context.get_bool_ty();
       break;
 
     case P_BINARY_ASSIGN_BIT_AND:
@@ -743,7 +761,7 @@ sema_act_on_binary_expr(PSema* p_s, PAstBinaryOp p_opcode, PSourceLocation p_op_
     case P_BINARY_ASSIGN_SHR: {
       result_type = lhs_type;
 
-      if (!p_type_is_int(lhs_type)) {
+      if (!lhs_type->is_int_ty()) {
         PDiag* d = diag_at(P_DK_err_cannot_apply_assign_op, p_op_loc);
         const char* spelling = p_binop_get_spelling(p_opcode);
         diag_add_arg_str(d, spelling);
@@ -752,7 +770,7 @@ sema_act_on_binary_expr(PSema* p_s, PAstBinaryOp p_opcode, PSourceLocation p_op_
         diag_flush(d);
 
         // Dummy type to try to recover.
-        result_type = p_type_get_generic_int();
+        result_type = p_s->context.get_generic_int_ty();
         break;
       }
 
@@ -772,20 +790,20 @@ sema_act_on_binary_expr(PSema* p_s, PAstBinaryOp p_opcode, PSourceLocation p_op_
     case P_BINARY_SHR: {
       result_type = lhs_type;
 
-      if (!p_type_is_int(lhs_type)) {
+      if (!lhs_type->is_int_ty()) {
         PDiag* d = diag_at(P_DK_err_expected_type, p_op_loc);
-        diag_add_arg_type(d, p_type_get_generic_int());
+        diag_add_arg_type(d, p_s->context.get_generic_int_ty());
         diag_add_arg_type(d, lhs_type);
         diag_add_source_range(d, P_AST_GET_SOURCE_RANGE(p_lhs));
         diag_flush(d);
 
         // Dummy type to try to recover.
-        result_type = p_type_get_generic_int();
+        result_type = p_s->context.get_generic_int_ty();
       }
 
-      if (!p_type_is_int(rhs_type)) {
+      if (!rhs_type->is_int_ty()) {
         PDiag* d = diag_at(P_DK_err_expected_type, p_op_loc);
-        diag_add_arg_type(d, p_type_get_generic_int());
+        diag_add_arg_type(d, p_s->context.get_generic_int_ty());
         diag_add_arg_type(d, rhs_type);
         diag_add_source_range(d, P_AST_GET_SOURCE_RANGE(p_rhs));
         diag_flush(d);
@@ -794,7 +812,7 @@ sema_act_on_binary_expr(PSema* p_s, PAstBinaryOp p_opcode, PSourceLocation p_op_
     default:
       result_type = lhs_type;
 
-      if (!are_types_compatible(lhs_type, rhs_type) || !p_type_is_arithmetic(lhs_type)) {
+      if (!are_types_compatible(lhs_type, rhs_type) || !lhs_type->is_arithmetic_ty()) {
         PDiagKind diag_kind = P_DK_err_cannot_apply_bin_op_generic;
         switch (p_opcode) {
           case P_BINARY_ADD:
@@ -944,9 +962,9 @@ sema_act_on_call_expr(PSema* p_s,
 
   PSourceRange call_range = { P_AST_GET_SOURCE_RANGE(p_callee).begin, p_rparen_loc + 1 };
 
-  PDeclFunction* callee_decl = (PDeclFunction*)get_decl_ref_decl(p_callee);
-  PFunctionType* callee_type = (PFunctionType*)p_ast_get_type(p_callee);
-  if (!p_type_is_function((PType*)callee_type)) {
+  auto* callee_decl = (PDeclFunction*)get_decl_ref_decl(p_callee);
+  auto* callee_type = (PFunctionType*)p_ast_get_type(p_callee);
+  if (!callee_type->is_function_ty()) {
     PDiag* d;
 
     if (callee_decl != nullptr) {
@@ -989,7 +1007,7 @@ sema_act_on_member_expr(PSema* p_s,
     return nullptr;
 
   PType* base_type = p_ast_get_type(p_base_expr);
-  if (P_TYPE_GET_KIND(base_type) != P_TYPE_TAG || P_DECL_GET_KIND(((PTagType*)base_type)->decl) != P_DECL_STRUCT) {
+  if (base_type->get_kind() != P_TYPE_TAG || P_DECL_GET_KIND(((PTagType*)base_type)->decl) != P_DECL_STRUCT) {
     PDiag* d = diag_at(P_DK_err_member_not_struct, p_dot_loc);
     diag_add_arg_ident(d, p_name);
 
@@ -1034,7 +1052,7 @@ sema_act_on_unary_expr(PSema* p_s, PAstUnaryOp p_opcode, PSourceLocation p_op_lo
   PValueCategory result_vc;
   switch (p_opcode) {
     case P_UNARY_NEG: // '-' operator
-      if (!p_type_is_float(result_type) && !p_type_is_signed(result_type)) {
+      if (!result_type->is_float_ty() && !result_type->is_signed_int_ty()) {
         PDiag* d = diag_at(P_DK_err_cannot_apply_unary_op, p_op_loc);
         diag_add_arg_char(d, '-');
         diag_add_arg_type(d, result_type);
@@ -1047,7 +1065,7 @@ sema_act_on_unary_expr(PSema* p_s, PAstUnaryOp p_opcode, PSourceLocation p_op_lo
       result_vc = P_VC_RVALUE;
       break;
     case P_UNARY_NOT: // logical and bitwise '!' operator
-      if (!p_type_is_bool(result_type) && !p_type_is_int(result_type)) {
+      if (!result_type->is_bool_ty() && !result_type->is_int_ty()) {
         PDiag* d = diag_at(P_DK_err_cannot_apply_unary_op, p_op_loc);
         diag_add_arg_char(d, '!');
         diag_add_arg_type(d, result_type);
@@ -1068,11 +1086,11 @@ sema_act_on_unary_expr(PSema* p_s, PAstUnaryOp p_opcode, PSourceLocation p_op_lo
         return nullptr;
       }
 
-      result_type = p_type_get_pointer(result_type);
+      result_type = p_s->context.get_pointer_ty(result_type);
       result_vc = P_VC_RVALUE;
       break;
     case P_UNARY_DEREF: // '*' operator
-      if (!p_type_is_pointer(result_type)) {
+      if (!result_type->is_pointer_ty()) {
         PDiag* d = diag_at(P_DK_err_indirection_requires_ptr, p_op_loc);
         diag_add_arg_type(d, result_type);
         diag_add_source_range(d, P_AST_GET_SOURCE_RANGE(p_sub_expr));
@@ -1100,10 +1118,10 @@ sema_act_on_unary_expr(PSema* p_s, PAstUnaryOp p_opcode, PSourceLocation p_op_lo
 static PAstCastKind
 classify_int_cast(PType* p_from_type, PType* p_to_type)
 {
-  if (p_type_is_float(p_to_type))
+  if (p_to_type->is_float_ty())
     return P_CAST_INT2FLOAT;
 
-  if (p_type_is_int(p_to_type)) {
+  if (p_to_type->is_int_ty()) {
     int from_bitwidth = p_type_get_bitwidth(p_from_type);
     int to_bitwidth = p_type_get_bitwidth(p_to_type);
     if (from_bitwidth != to_bitwidth) {
@@ -1121,10 +1139,10 @@ classify_int_cast(PType* p_from_type, PType* p_to_type)
 static PAstCastKind
 classify_float_cast(PType* p_to_type)
 {
-  if (p_type_is_int(p_to_type))
+  if (p_to_type->is_int_ty())
     return P_CAST_FLOAT2INT;
 
-  if (p_type_is_float(p_to_type))
+  if (p_to_type->is_float_ty())
     return P_CAST_FLOAT2FLOAT;
 
   return P_CAST_INVALID;
@@ -1134,10 +1152,10 @@ classify_float_cast(PType* p_to_type)
 static PAstCastKind
 classify_bool_cast(PType* p_to_type)
 {
-  if (p_type_is_int(p_to_type))
+  if (p_to_type->is_int_ty())
     return P_CAST_BOOL2INT;
 
-  if (p_type_is_float(p_to_type))
+  if (p_to_type->is_float_ty())
     return P_CAST_BOOL2FLOAT;
 
   return P_CAST_INVALID;
@@ -1152,13 +1170,13 @@ sema_act_on_cast_expr(PSema* p_s, PSourceLocation p_as_loc, PType* p_to_type, PA
   PType* from_type = p_ast_get_type(p_sub_expr);
 
   PAstCastKind cast_kind = P_CAST_INVALID;
-  if (p_type_get_canonical(from_type) == p_type_get_canonical(p_to_type))
+  if (from_type->get_canonical_ty() == p_to_type->get_canonical_ty())
     cast_kind = P_CAST_NOOP; // from/to types are equivalent
-  else if (p_type_is_int(from_type))
+  else if (from_type->is_int_ty())
     cast_kind = classify_int_cast(from_type, p_to_type);
-  else if (p_type_is_int(from_type))
+  else if (from_type->is_float_ty())
     cast_kind = classify_float_cast(p_to_type);
-  else if (p_type_is_int(from_type))
+  else if (from_type->is_bool_ty())
     cast_kind = classify_bool_cast(p_to_type);
 
   // TODO: issue a warning when cast is noop

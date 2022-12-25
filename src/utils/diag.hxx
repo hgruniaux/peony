@@ -74,7 +74,7 @@ typedef struct PDiag
 #ifdef P_DEBUG
   // The following fields are used to print a useful error when the user forget to call diag_flush().
   bool debug_was_flushed;
-  // The source filename (as given by __FILE__) and line (__LINE__) where the diag() function was called.
+  // The source m_filename (as given by __FILE__) and line (__LINE__) where the diag() function was called.
   const char* debug_source_filename;
   int debug_source_line;
 #endif

@@ -56,7 +56,7 @@ add_library(peony_lib STATIC
     "src/literal_parser.hxx"
     "src/literal_parser.cxx"
     "src/name_mangling.cxx"
-    )
+        src/context.hxx src/context.cxx)
 
 target_compile_definitions(peony_lib PUBLIC "-DP_DEBUG")
 target_include_directories(peony_lib PUBLIC "thirdparty/hedley")
@@ -75,18 +75,18 @@ endif()
 find_program(RE2C_PROGRAM re2c)
 if(RE2C_PROGRAM)
     add_custom_command(
-        OUTPUT "${CMAKE_CURRENT_SOURCE_DIR}/src/lexer_re2c.c"
+        OUTPUT "${CMAKE_CURRENT_SOURCE_DIR}/src/lexer_re2c.cxx"
         COMMAND ${RE2C_PROGRAM}
-        ARGS "${CMAKE_CURRENT_SOURCE_DIR}/src/lexer_re2c.re" -o "${CMAKE_CURRENT_SOURCE_DIR}/src/lexer_re2c.c"
+        ARGS "${CMAKE_CURRENT_SOURCE_DIR}/src/lexer_re2c.re" -o "${CMAKE_CURRENT_SOURCE_DIR}/src/lexer_re2c.cxx"
         ARGS -W -Werror
         ARGS --no-version --no-generation-date --no-debug-info
         DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/lexer_re2c.re"  
     )
 
     add_custom_command(
-        OUTPUT "${CMAKE_CURRENT_SOURCE_DIR}/src/utils/diag_formatter.c"
+        OUTPUT "${CMAKE_CURRENT_SOURCE_DIR}/src/utils/diag_formatter.cxx"
         COMMAND ${RE2C_PROGRAM}
-        ARGS "${CMAKE_CURRENT_SOURCE_DIR}/src/utils/diag_formatter.re" -o "${CMAKE_CURRENT_SOURCE_DIR}/src/utils/diag_formatter.c"
+        ARGS "${CMAKE_CURRENT_SOURCE_DIR}/src/utils/diag_formatter.re" -o "${CMAKE_CURRENT_SOURCE_DIR}/src/utils/diag_formatter.cxx"
         ARGS -W -Werror
         ARGS --no-version --no-generation-date --no-debug-info
         DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/utils/diag_formatter.re"  

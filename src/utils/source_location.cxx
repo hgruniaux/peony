@@ -10,5 +10,5 @@ p_source_location_get_lineno_and_colno(PSourceFile* p_source_file,
 {
   assert(p_source_file != nullptr);
 
-  p_source_file->line_map.get_lineno_and_colno(p_position, p_lineno, p_colno);
+  p_source_file->get_line_map().get_lineno_and_colno(p_position, p_lineno, p_colno);
 }

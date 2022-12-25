@@ -1,13 +1,16 @@
 #pragma once
 
 #include "ast.hxx"
+#include "context.hxx"
 #include "lexer.hxx"
 #include "sema.hxx"
 
 struct PParser
 {
+  PContext& context;
+
   // The lexer to use by the parser to get the tokens.
-  PLexer* lexer;
+  PLexer& lexer;
   // If not nullptr then the tokens will be taken from it until there is no more
   // tokens in the run. Then this will be set to nullptr.
   // This is used for example to parse lazily function bodies.
@@ -23,13 +26,10 @@ struct PParser
   PSourceLocation prev_lookahead_end_loc;
 
   PSema sema;
+
+  PParser(PContext& p_context, PLexer& p_lexer);
+  ~PParser();
 };
-
-void
-p_parser_init(struct PParser* p_parser);
-
-void
-p_parser_destroy(struct PParser* p_parser);
 
 PAst*
 p_parse(struct PParser* p_parser);

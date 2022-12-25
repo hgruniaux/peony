@@ -1,8 +1,9 @@
 #include "diag_formatter.hxx"
 
 #include "../identifier_table.hxx"
-#include "../type.hxx"
 #include "../options.hxx"
+#include "../type.hxx"
+#include "context.hxx"
 
 #include <gtest/gtest.h>
 
@@ -90,30 +91,48 @@ TEST(diag_formatter, ident_arg)
 
 TEST(diag_formatter, type_arg)
 {
+  auto& ctx = PContext::get_global();
+
   // Builtin type.
   PDiagArgument builtin_type;
   builtin_type.type = P_DAT_TYPE;
-  builtin_type.value_type = p_type_get_i32();
+  builtin_type.value_type = ctx.get_i32_ty();
   check_arg_format(&builtin_type, "i32");
 
   // Pointer type.
   PDiagArgument pointer_type;
   pointer_type.type = P_DAT_TYPE;
-  pointer_type.value_type = p_type_get_pointer(p_type_get_i32());
+  pointer_type.value_type = ctx.get_pointer_ty(ctx.get_i32_ty());
   check_arg_format(&pointer_type, "*i32");
 
   // Parenthesized type.
   PDiagArgument paren_type;
   paren_type.type = P_DAT_TYPE;
-  paren_type.value_type = p_type_get_paren(p_type_get_i32());
+  paren_type.value_type = ctx.get_paren_ty(ctx.get_i32_ty());
   check_arg_format(&paren_type, "i32"); // do not display parentheses
 
-  // Function type.
-  PType* func_args[] = { p_type_get_bool(), p_type_get_f32() };
-  PDiagArgument func_type;
-  func_type.type = P_DAT_TYPE;
-  func_type.value_type = p_type_get_function(p_type_get_i32(), func_args, 2);
-  check_arg_format(&func_type, "fn (bool, f32) -> i32");
+  {
+    // Function type.
+    PType* func_args[] = { ctx.get_bool_ty(), ctx.get_f32_ty() };
+    PDiagArgument func_type;
+    func_type.type = P_DAT_TYPE;
+    func_type.value_type = ctx.get_function_ty(ctx.get_i32_ty(), func_args, std::size(func_args));
+    check_arg_format(&func_type, "fn (bool, f32) -> i32");
+  }
+
+  {
+    // Function type with no return type.
+    PType* func_args[] = { ctx.get_char_ty() };
+    PDiagArgument func_type;
+    func_type.type = P_DAT_TYPE;
+    func_type.value_type = ctx.get_function_ty(ctx.get_void_ty(), func_args, std::size(func_args));
+    check_arg_format(&func_type, "fn (char)");
+  }
+
+  // TODO: add test for function without any argument
+  // TODO: add test for array types
+  // TODO: add test for all builtin types
+  // TODO: add test for tag types
 }
 
 TEST(diag_formatter, plural_s)
@@ -131,7 +150,7 @@ TEST(diag_formatter, plural_s)
   zero.value_int = 0;
 
   PDiagArgument args[] = { two, one, zero };
-  check_format("%0s %1s %2s", args, 3, "s  ");
+  check_format("%0s %1s %2s", args, std::size(args), "s  ");
 }
 
 TEST(diag_formatter, quote)
@@ -157,5 +176,5 @@ TEST(diag_formatter, args)
   arg2.value_str = "bar";
 
   PDiagArgument args[] = { arg1, arg2 };
-  check_format("{1} {0} {1} {0}", args, 2, "bar 42 bar 42");
+  check_format("{1} {0} {1} {0}", args, std::size(args), "bar 42 bar 42");
 }

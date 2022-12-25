@@ -24,7 +24,7 @@ lexer_set_source_file(PLexer* p_lexer, PSourceFile* p_source_file)
   g_current_source_location = 0;
 
   p_lexer->source_file = p_source_file;
-  p_lexer->cursor = p_lexer->source_file->buffer;
+  p_lexer->cursor = p_lexer->source_file->get_buffer_raw();
 }
 
 void

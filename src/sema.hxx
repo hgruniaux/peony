@@ -2,6 +2,7 @@
 
 #include "ast.hxx"
 #include "scope.hxx"
+#include "context.hxx"
 
 /*
  * This file contains the interface of the semantic analyzer.
@@ -18,11 +19,15 @@
 
 typedef struct PSema
 {
+  PContext& context;
   PFunctionType* curr_func_type;
 
   size_t current_scope_cache_idx;
   PScope* scope_cache[P_MAX_SCOPE_CACHE];
   PScope* current_scope;
+
+  PSema(PContext& context);
+  ~PSema();
 } PSema;
 
 void

@@ -25,8 +25,8 @@ fill_token(PLexer* p_lexer, PToken* p_token, PTokenKind p_kind)
 static void
 register_new_line(PLexer* p_lexer)
 {
-    uint32_t line_pos = p_lexer->cursor - p_lexer->source_file->buffer;
-    p_line_map_add(&p_lexer->source_file->line_map, line_pos);
+    uint32_t line_pos = p_lexer->cursor - p_lexer->source_file->get_buffer_raw();
+    p_lexer->source_file->get_line_map().add(line_pos);
 }
 
 static void
@@ -89,7 +89,7 @@ lexer_next(PLexer* p_lexer, PToken* p_token)
 
     for (;;) {
         p_lexer->marked_cursor = p_lexer->cursor;
-        p_lexer->marked_source_location = p_lexer->marked_cursor - p_lexer->source_file->buffer;
+        p_lexer->marked_source_location = p_lexer->marked_cursor - p_lexer->source_file->get_buffer_raw();
         g_current_source_location = p_lexer->marked_source_location;
 
 

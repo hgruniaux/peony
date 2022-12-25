@@ -1,12 +1,14 @@
 #pragma once
 
 #include "ast.hxx"
+#include "context.hxx"
 
 #include <llvm-c/Types.h>
 #include <llvm-c/TargetMachine.h>
 
 struct PCodegenLLVM
 {
+  PContext& context;
   LLVMModuleRef module;
   LLVMBuilderRef builder;
   LLVMValueRef current_function;
@@ -15,13 +17,10 @@ struct PCodegenLLVM
   LLVMTargetMachineRef target_machine;
 
   int opt_level;
+
+  PCodegenLLVM(PContext& p_context);
+  ~PCodegenLLVM();
 };
-
-void
-p_cg_init(struct PCodegenLLVM* p_cg);
-
-void
-p_cg_destroy(struct PCodegenLLVM* p_cg);
 
 void
 p_cg_dump(struct PCodegenLLVM* p_cg);

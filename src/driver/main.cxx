@@ -1,11 +1,9 @@
 #include "../codegen_llvm.hxx"
 #include "../parser.hxx"
-#include "../utils/bump_allocator.hxx"
 #include "../utils/diag.hxx"
 
 #include "../options.hxx"
 
-#include <cassert>
 #include <clocale>
 #include <cstdlib>
 
@@ -21,19 +19,15 @@ compile_to(PSourceFile* p_source_file, const char* p_output_filename)
   lexer_init(&lexer);
   lexer_set_source_file(&lexer, p_source_file);
 
-  PParser parser{};
-  parser.lexer = &lexer;
-  p_parser_init(&parser);
+  PContext& context = PContext::get_global();
+  PParser parser(context, lexer);
 
   PAst* ast = p_parse(&parser);
   if (g_diag_context.diagnostic_count[P_DIAG_ERROR] == 0 && !g_options.opt_syntax_only) {
-    PCodegenLLVM codegen{};
-    p_cg_init(&codegen);
+    PCodegenLLVM codegen(context);
     codegen.opt_level = 0;
 
     p_cg_compile(&codegen, ast, p_output_filename);
-
-    p_cg_destroy(&codegen);
   }
 
   lexer_destroy(&lexer);
@@ -54,11 +48,9 @@ main(int p_argc, char* p_argv[])
   if (g_diag_context.diagnostic_count[P_DIAG_ERROR] > 0)
     return EXIT_FAILURE;
 
-  p_init_types();
-
   bool has_error = false;
   for (const auto& filename : g_options.input_files) {
-    PSourceFile* source_file = p_source_file_open(filename.c_str());
+    auto source_file = PSourceFile::open(filename);
     if (source_file == nullptr) {
       PDiag* d = diag(P_DK_err_fail_open_file);
       diag_add_arg_str(d, p_argv[1]);
@@ -66,9 +58,7 @@ main(int p_argc, char* p_argv[])
       return EXIT_FAILURE;
     }
 
-    has_error |= compile_to(source_file, g_options.output_file);
-
-    p_source_file_close(source_file);
+    has_error |= compile_to(source_file.get(), g_options.output_file);
   }
 
   return EXIT_FAILURE ? has_error : EXIT_SUCCESS;

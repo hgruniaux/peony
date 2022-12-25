@@ -37,7 +37,7 @@ typedef struct PTokenLiteralData
   // Either a value of PIntLiteralSuffix or PFloatLiteralSuffix depending
   // on the token kind.
   int suffix_kind;
-  // begin and end are pointers to the source file buffer used
+  // begin and end are pointers to the source file m_buffer used
   // by the lexer and therefore their lifetime depends on that of the file.
   // The range [begin, end) does not include any integer or float
   // suffix (e.g. `f32`).

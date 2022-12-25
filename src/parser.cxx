@@ -6,7 +6,6 @@
 #include "utils/diag.hxx"
 
 #include <cassert>
-#include <cstdarg>
 #include <cstring>
 #include <vector>
 
@@ -16,16 +15,6 @@
 #define SET_NODE_LOC_RANGE(p_node, p_loc_beg, p_loc_end)                                                               \
   (P_AST_GET_SOURCE_RANGE(p_node).begin = (p_loc_beg));                                                                \
   (P_AST_GET_SOURCE_RANGE(p_node).end = (p_loc_end))
-
-#define AST_LIST_INIT(p_array) DYN_ARRAY_INIT(PAst*, p_array)
-#define AST_LIST_DESTROY(p_array) DYN_ARRAY_DESTROY(PAst*, p_array)
-#define AST_LIST_APPEND(p_array, p_item) DYN_ARRAY_APPEND(PAst*, p_array, p_item)
-#define AST_LIST_AT(p_array, p_idx) DYN_ARRAY_AT(PAst*, p_array, p_idx)
-
-#define DECL_LIST_INIT(p_array) DYN_ARRAY_INIT(PDecl*, p_array)
-#define DECL_LIST_DESTROY(p_array) DYN_ARRAY_DESTROY(PDecl*, p_array)
-#define DECL_LIST_APPEND(p_array, p_item) DYN_ARRAY_APPEND(PDecl*, p_array, p_item)
-#define DECL_LIST_AT(p_array, p_idx) DYN_ARRAY_AT(PDecl*, p_array, p_idx)
 
 static void
 consume_token(struct PParser* p_parser)
@@ -39,7 +28,7 @@ consume_token(struct PParser* p_parser)
       p_parser->current_idx_in_token_run = 0;
     }
   } else {
-    lexer_next(p_parser->lexer, &p_parser->lookahead);
+    lexer_next(&p_parser->lexer, &p_parser->lookahead);
   }
 }
 
@@ -132,30 +121,17 @@ skip_until(struct PParser* p_parser, PTokenKind p_kind)
   skip_until_any(p_parser, &p_kind, 1);
 }
 
-void
-p_parser_init(struct PParser* p_parser)
+PParser::PParser(PContext& p_context, PLexer& p_lexer)
+: context(p_context)
+, lexer(p_lexer)
+, sema(p_context)
+, token_run(nullptr)
+, current_idx_in_token_run(0)
 {
-  assert(p_parser != nullptr);
-
-  p_parser->token_run = nullptr;
-  p_parser->current_idx_in_token_run = 0;
-
-  p_parser->sema.current_scope_cache_idx = 0;
-  p_parser->sema.current_scope = nullptr;
-  memset(p_parser->sema.scope_cache, 0, sizeof(p_parser->sema.scope_cache));
 }
 
-void
-p_parser_destroy(struct PParser* p_parser)
+PParser::~PParser()
 {
-  assert(p_parser != nullptr);
-
-  assert(p_parser->sema.current_scope == nullptr);
-
-  for (size_t i = 0; i < P_MAX_SCOPE_CACHE; ++i) {
-    if (p_parser->sema.scope_cache[i] != nullptr)
-      p_scope_destroy(p_parser->sema.scope_cache[i]);
-  }
 }
 
 static PAst*
@@ -186,13 +162,13 @@ parse_type(struct PParser* p_parser)
 {
   if (LOOKAHEAD_IS(P_TOK_STAR)) {
     consume_token(p_parser);
-    return p_type_get_pointer(parse_type(p_parser));
+    return p_parser->context.get_pointer_ty(parse_type(p_parser));
   }
   if (LOOKAHEAD_IS(P_TOK_LPAREN)) {
     consume_token(p_parser);
     PType* sub_type = parse_type(p_parser);
     expect_token(p_parser, P_TOK_RPAREN);
-    return p_type_get_paren(sub_type);
+    return p_parser->context.get_paren_ty(sub_type);
   }
   if (LOOKAHEAD_IS(P_TOK_IDENTIFIER)) {
     // TODO
@@ -216,40 +192,40 @@ parse_type(struct PParser* p_parser)
   PType* type;
   switch (p_parser->lookahead.kind) {
     case P_TOK_KEY_char:
-      type = p_type_get_char();
+      type = p_parser->context.get_char_ty();
       break;
     case P_TOK_KEY_i8:
-      type = p_type_get_i8();
+      type = p_parser->context.get_i8_ty();
       break;
     case P_TOK_KEY_i16:
-      type = p_type_get_i16();
+      type = p_parser->context.get_i16_ty();
       break;
     case P_TOK_KEY_i32:
-      type = p_type_get_i32();
+      type = p_parser->context.get_i32_ty();
       break;
     case P_TOK_KEY_i64:
-      type = p_type_get_i64();
+      type = p_parser->context.get_i64_ty();
       break;
     case P_TOK_KEY_u8:
-      type = p_type_get_u8();
+      type = p_parser->context.get_u8_ty();
       break;
     case P_TOK_KEY_u16:
-      type = p_type_get_u16();
+      type = p_parser->context.get_u16_ty();
       break;
     case P_TOK_KEY_u32:
-      type = p_type_get_u32();
+      type = p_parser->context.get_u32_ty();
       break;
     case P_TOK_KEY_u64:
-      type = p_type_get_u64();
+      type = p_parser->context.get_u64_ty();
       break;
     case P_TOK_KEY_f32:
-      type = p_type_get_f32();
+      type = p_parser->context.get_f32_ty();
       break;
     case P_TOK_KEY_f64:
-      type = p_type_get_f64();
+      type = p_parser->context.get_f64_ty();
       break;
     case P_TOK_KEY_bool:
-      type = p_type_get_bool();
+      type = p_parser->context.get_bool_ty();
       break;
     default:
       unexpected_token(p_parser);
@@ -650,27 +626,27 @@ parse_bool_literal(struct PParser* p_parser)
 }
 
 static PType*
-get_type_for_int_literal_suffix(PIntLiteralSuffix p_suffix_kind)
+get_type_for_int_literal_suffix(PParser* p_parser, PIntLiteralSuffix p_suffix_kind)
 {
   switch (p_suffix_kind) {
     case P_ILS_NO_SUFFIX:
       return nullptr; // let semantic analyzer choose
     case P_ILS_I8:
-      return p_type_get_i8();
+      return p_parser->context.get_i8_ty();
     case P_ILS_I16:
-      return p_type_get_i16();
+      return p_parser->context.get_i16_ty();
     case P_ILS_I32:
-      return p_type_get_i32();
+      return p_parser->context.get_i32_ty();
     case P_ILS_I64:
-      return p_type_get_i64();
+      return p_parser->context.get_i64_ty();
     case P_ILS_U8:
-      return p_type_get_u8();
+      return p_parser->context.get_u8_ty();
     case P_ILS_U16:
-      return p_type_get_u16();
+      return p_parser->context.get_u16_ty();
     case P_ILS_U32:
-      return p_type_get_u32();
+      return p_parser->context.get_u32_ty();
     case P_ILS_U64:
-      return p_type_get_u64();
+      return p_parser->context.get_u64_ty();
     default:
       HEDLEY_UNREACHABLE_RETURN(nullptr);
   }
@@ -711,7 +687,7 @@ parse_int_literal(struct PParser* p_parser)
     value = 0; // set a default value to recover
   }
 
-  PType* type = get_type_for_int_literal_suffix(static_cast<PIntLiteralSuffix>(p_parser->lookahead.data.literal.suffix_kind));
+  PType* type = get_type_for_int_literal_suffix(p_parser, static_cast<PIntLiteralSuffix>(p_parser->lookahead.data.literal.suffix_kind));
 
   consume_token(p_parser);
 
@@ -723,15 +699,15 @@ parse_int_literal(struct PParser* p_parser)
 }
 
 static PType*
-get_type_for_float_literal_suffix(PFloatLiteralSuffix p_suffix_kind)
+get_type_for_float_literal_suffix(PParser* p_parser, PFloatLiteralSuffix p_suffix_kind)
 {
   switch (p_suffix_kind) {
     case P_FLS_NO_SUFFIX:
       return nullptr; // let semantic analyzer choose
     case P_FLS_F32:
-      return p_type_get_f32();
+      return p_parser->context.get_f32_ty();
     case P_FLS_F64:
-      return p_type_get_f64();
+      return p_parser->context.get_f64_ty();
     default:
       HEDLEY_UNREACHABLE_RETURN(nullptr);
   }
@@ -759,7 +735,7 @@ parse_float_literal(struct PParser* p_parser)
     value = 0.0; // set a default value to recover
   }
 
-  PType* type = get_type_for_float_literal_suffix(static_cast<PFloatLiteralSuffix>(p_parser->lookahead.data.literal.suffix_kind));
+  PType* type = get_type_for_float_literal_suffix(p_parser, static_cast<PFloatLiteralSuffix>(p_parser->lookahead.data.literal.suffix_kind));
 
   consume_token(p_parser);
 
@@ -1308,7 +1284,7 @@ p_parse(struct PParser* p_parser)
   // We do not call consume_token() because it sets p_parser->prev_lookahead_end_loc
   // to the end position of lookahead which is undefined here.
   p_parser->prev_lookahead_end_loc = 0;
-  lexer_next(p_parser->lexer, &p_parser->lookahead);
+  lexer_next(&p_parser->lexer, &p_parser->lookahead);
 
   PAst* ast = parse_translation_unit(p_parser);
   return ast;

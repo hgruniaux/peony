@@ -209,9 +209,9 @@ diag_flush(PDiag* p_diag)
     colno += g_options.opt_diagnostics_column_origin;
 
     if (g_options.opt_diagnostics_show_column) {
-      fprintf(stderr, "%s:%d:%d: ", g_current_source_file->filename, lineno, colno);
+      fprintf(stderr, "%s:%d:%d: ", g_current_source_file->get_filename().c_str(), lineno, colno);
     } else {
-      fprintf(stderr, "%s:%d: ", g_current_source_file->filename, lineno);
+      fprintf(stderr, "%s:%d: ", g_current_source_file->get_filename().c_str(), lineno);
     }
   }
 

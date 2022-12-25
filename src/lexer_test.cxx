@@ -7,7 +7,7 @@ class lexer_test : public ::testing::Test
 protected:
   PIdentifierTable identifier_table;
   PLexer lexer;
-  PSourceFile source_file;
+  std::unique_ptr<PSourceFile> source_file;
 
   void SetUp() override
   {
@@ -15,7 +15,6 @@ protected:
     p_identifier_table_register_keywords(&identifier_table);
     lexer.identifier_table = &identifier_table;
     lexer_init(&lexer);
-    source_file.filename = "<test-input>";
   }
 
   void TearDown() override
@@ -26,9 +25,8 @@ protected:
 
   void set_input(const char* p_input)
   {
-    source_file.line_map = {};
-    source_file.buffer = (char*)p_input;
-    lexer_set_source_file(&lexer, &source_file);
+    source_file = std::make_unique<PSourceFile>("<test-input>", p_input);
+    lexer_set_source_file(&lexer, source_file.get());
   }
 
   PToken check_token(PTokenKind p_kind,
@@ -46,8 +44,8 @@ protected:
 
     uint32_t begin_line, begin_col;
     uint32_t end_line, end_col;
-    p_source_location_get_lineno_and_colno(&source_file, begin_loc, &begin_line, &begin_col);
-    p_source_location_get_lineno_and_colno(&source_file, end_loc, &end_line, &end_col);
+    p_source_location_get_lineno_and_colno(source_file.get(), begin_loc, &begin_line, &begin_col);
+    p_source_location_get_lineno_and_colno(source_file.get(), end_loc, &end_line, &end_col);
 
     EXPECT_EQ(begin_line, p_expected_begin_line);
     EXPECT_EQ(begin_col, p_expected_begin_col);

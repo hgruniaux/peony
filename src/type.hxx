@@ -3,8 +3,7 @@
 #include <hedley.h>
 
 #include <cstddef>
-
-HEDLEY_BEGIN_C_DECLS
+#include <cstring>
 
 // WARNING: If you change the order of the following enum, you
 // must update the functions:
@@ -35,181 +34,141 @@ typedef enum PTypeKind
   P_TYPE_TAG,      // A tag (referencing a declaration) type implemented by PTagType
 } PTypeKind;
 
-typedef struct PTypeCommon
+class PType
 {
+public:
   PTypeKind kind;
-  struct PType* canonical_type;
+  PType* canonical_type;
   void* _llvm_cached_type;
-} PTypeCommon;
 
-typedef struct PType
-{
-  PTypeCommon common;
-} PType;
+  [[nodiscard]] PTypeKind get_kind() const { return kind; }
+  /// Shorthand for `get_canonical_ty()->get_kind()`
+  [[nodiscard]] PTypeKind get_canonical_kind() const { return get_canonical_ty()->kind; }
 
-typedef struct PParenType
+  /// Checks if the type it is a canonical type or not, that is if `get_canonical_ty() == this`.
+  [[nodiscard]] bool is_canonical_ty() const { return canonical_type == this; }
+  [[nodiscard]] PType* get_canonical_ty() const { return canonical_type; }
+
+  /// Returns `true` if this is canonically the `void` type.
+  [[nodiscard]] bool is_void_ty() const { return get_canonical_kind() == P_TYPE_VOID; }
+  /// Returns `true` if this is canonically the `bool` type.
+  [[nodiscard]] bool is_bool_ty() const { return get_canonical_kind() == P_TYPE_BOOL; }
+  /// Returns `true` if this is canonically a pointer type.
+  [[nodiscard]] bool is_pointer_ty() const { return get_canonical_kind() == P_TYPE_POINTER; }
+  /// Returns `true` if this is canonically a function type.
+  [[nodiscard]] bool is_function_ty() const { return get_canonical_kind() == P_TYPE_FUNCTION; }
+
+  /// Returns `true` if this is canonically a signed integer type (one of the `i*` types).
+  [[nodiscard]] bool is_signed_int_ty() const;
+  /// Returns `true` if this is canonically an unsigned integer type (one of the `u*` types).
+  [[nodiscard]] bool is_unsigned_int_ty() const;
+  [[nodiscard]] bool is_int_ty() const { return is_signed_int_ty() || is_unsigned_int_ty(); }
+  [[nodiscard]] bool is_float_ty() const { return is_signed_int_ty() || is_unsigned_int_ty(); }
+  /// Returns `true` if this is canonically an arithmetic type (either integer or float).
+  [[nodiscard]] bool is_arithmetic_ty() const { return is_int_ty() || is_float_ty(); }
+
+protected:
+  friend class PContext;
+  explicit PType(PTypeKind p_kind)
+    : kind(p_kind)
+    , canonical_type(this)
+    , _llvm_cached_type(nullptr)
+  {
+  }
+};
+
+/// A parenthesized type (e.g. `i32`).
+/// Unlike other types, parenthesized types are unique and therefore pointer
+/// comparison may not be appropriate.
+class PParenType : public PType
 {
-  PTypeCommon common;
+public:
   PType* sub_type;
-} PParenType;
 
-typedef struct PFunctionType
+private:
+  friend class PContext;
+  explicit PParenType(PType* p_sub_type)
+    : PType(P_TYPE_PAREN)
+    , sub_type(p_sub_type)
+  {
+    canonical_type = p_sub_type->get_canonical_ty();
+  }
+};
+
+class PFunctionType : public PType
 {
-  PTypeCommon common;
-  PType* ret_type;
+public:
+  [[nodiscard]] PType* get_ret_ty() const { return ret_ty; }
+
+  PType* ret_ty;
   size_t arg_count;
   PType* args[1]; /* tail-allocated */
-} PFunctionType;
 
-typedef struct PPointerType
+private:
+  friend class PContext;
+  explicit PFunctionType(PType* p_ret_ty, PType** p_args_ty, size_t p_arg_count)
+    : PType(P_TYPE_FUNCTION)
+    , arg_count(p_arg_count)
+  {
+    ret_ty = p_ret_ty;
+    std::memcpy(args, p_args_ty, sizeof(PType*) * p_arg_count);
+  }
+};
+
+class PPointerType : public PType
 {
-  PTypeCommon common;
+public:
   PType* element_type;
-} PPointerType;
 
-typedef struct PArrayType
+private:
+  friend class PContext;
+  PPointerType(PType* p_elt_ty)
+    : PType(P_TYPE_POINTER)
+    , element_type(p_elt_ty)
+  {
+  }
+};
+
+class PArrayType : public PType
 {
-  PTypeCommon common;
+public:
   PType* element_type;
   size_t num_elements;
-} PArrayType;
+
+private:
+  friend class PContext;
+  PArrayType(PType* p_elt_ty, size_t p_num_elt)
+    : PType(P_TYPE_ARRAY)
+    , element_type(p_elt_ty)
+    , num_elements(p_num_elt)
+  {
+  }
+};
 
 // Type that is intimately linked to a statement. The type
 // itself is defined implicitly by the attached declaration.
-typedef struct PTagType
+struct PTagType : public PType
 {
-  PTypeCommon common;
   struct PDecl* decl;
-} PTagType;
-
-#define P_TYPE_GET_KIND(p_type) (((PType*)(p_type))->common.kind)
-
-void
-p_init_types(void);
-
-/** @brief Checks if the type is already a canonical type. */
-HEDLEY_ALWAYS_INLINE static bool
-p_type_is_canonical(PType* p_type)
-{
-  return p_type == p_type->common.canonical_type;
-}
-/** @brief Gets the canonical type of the given type.
- *
- * Canonical types are cached so this function is just a pointer access. */
-HEDLEY_ALWAYS_INLINE static PType*
-p_type_get_canonical(PType* p_type)
-{
-  return p_type->common.canonical_type;
-}
-
-HEDLEY_ALWAYS_INLINE static bool
-p_type_is_bool(PType* p_type)
-{
-  return P_TYPE_GET_KIND(p_type_get_canonical(p_type)) == P_TYPE_BOOL;
-}
-
-HEDLEY_ALWAYS_INLINE static bool
-p_type_is_void(PType* p_type)
-{
-  return P_TYPE_GET_KIND(p_type_get_canonical(p_type)) == P_TYPE_VOID;
-}
-
-HEDLEY_ALWAYS_INLINE static bool
-p_type_is_char(PType* p_type)
-{
-  return P_TYPE_GET_KIND(p_type_get_canonical(p_type)) == P_TYPE_CHAR;
-}
-
-HEDLEY_ALWAYS_INLINE static bool
-p_type_is_pointer(PType* p_type)
-{
-  return P_TYPE_GET_KIND(p_type_get_canonical(p_type)) == P_TYPE_POINTER;
-}
-
-HEDLEY_ALWAYS_INLINE static bool
-p_type_is_array(PType* p_type)
-{
-  return P_TYPE_GET_KIND(p_type_get_canonical(p_type)) == P_TYPE_ARRAY;
-}
-
-HEDLEY_ALWAYS_INLINE static bool
-p_type_is_function(PType* p_type)
-{
-  return P_TYPE_GET_KIND(p_type_get_canonical(p_type)) == P_TYPE_FUNCTION;
-}
+};
 
 HEDLEY_ALWAYS_INLINE static bool
 p_type_is_generic_int(PType* p_type)
 {
-  return P_TYPE_GET_KIND(p_type_get_canonical(p_type)) == P_TYPE_GENERIC_INT;
+  return p_type->get_canonical_ty()->get_kind() == P_TYPE_GENERIC_INT;
 }
 
 HEDLEY_ALWAYS_INLINE static bool
 p_type_is_generic_float(PType* p_type)
 {
-  return P_TYPE_GET_KIND(p_type_get_canonical(p_type)) == P_TYPE_GENERIC_FLOAT;
+  return p_type->get_canonical_ty()->get_kind() == P_TYPE_GENERIC_FLOAT;
 }
 
 bool
-p_type_is_int(PType* p_type);
-bool
-p_type_is_signed(PType* p_type);
-bool
-p_type_is_unsigned(PType* p_type);
-bool
-p_type_is_float(PType* p_type);
-bool
-p_type_is_arithmetic(PType* p_type);
-bool
 p_type_is_generic(PType* p_type);
-
 int
 p_type_get_bitwidth(PType* p_type);
-
-PType*
-p_type_get_void(void);
-PType*
-p_type_get_char(void);
-PType*
-p_type_get_i8(void);
-PType*
-p_type_get_i16(void);
-PType*
-p_type_get_i32(void);
-PType*
-p_type_get_i64(void);
-PType*
-p_type_get_u8(void);
-PType*
-p_type_get_u16(void);
-PType*
-p_type_get_u32(void);
-PType*
-p_type_get_u64(void);
-PType*
-p_type_get_generic_int(void);
-PType*
-p_type_get_f32(void);
-PType*
-p_type_get_f64(void);
-PType*
-p_type_get_generic_float(void);
 PType*
 p_type_get_bool(void);
-
-PType*
-p_type_get_paren(PType* p_sub_type);
-
-PType*
-p_type_get_function(PType* p_ret_ty, PType** p_args, size_t p_arg_count);
-
-PType*
-p_type_get_pointer(PType* p_element_ty);
-
-PType*
-p_type_get_array(PType* p_element_ty, size_t p_num_elements);
-
 PType*
 p_type_get_tag(struct PDecl* p_decl);
-
-HEDLEY_END_C_DECLS

@@ -45,7 +45,6 @@ p_ast_get_type(PAst* p_ast)
 {
   assert(p_ast != nullptr);
 
-#define DUMMY_TYPE p_type_get_i32()
   switch (P_AST_GET_KIND(p_ast)) {
     case P_AST_NODE_INT_LITERAL:
     case P_AST_NODE_FLOAT_LITERAL:
@@ -63,16 +62,16 @@ p_ast_get_type(PAst* p_ast)
     case P_AST_NODE_DECL_REF_EXPR: {
       PDecl* decl = CAST(p_ast, PAstDeclRefExpr)->decl;
       if (decl == nullptr)
-        return DUMMY_TYPE;
+        return nullptr;
 
       return P_DECL_GET_TYPE(decl);
     }
     case P_AST_NODE_CALL_EXPR: {
       PType* callee_type = p_ast_get_type(CAST(p_ast, PAstCallExpr)->callee);
-      if (!p_type_is_function(callee_type))
-        return DUMMY_TYPE;
+      if (!callee_type->is_function_ty())
+        return nullptr;
 
-      return CAST(callee_type, PFunctionType)->ret_type;
+      return CAST(callee_type, PFunctionType)->get_ret_ty();
     }
     case P_AST_NODE_MEMBER_EXPR: {
       return P_DECL_GET_TYPE(CAST(p_ast, PAstMemberExpr)->member);

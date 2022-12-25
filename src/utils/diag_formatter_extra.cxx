@@ -66,7 +66,7 @@ format_arg_type(PMsgBuffer* p_buffer, PType* p_type, PIdentifierInfo* p_name_hin
   static const char* builtin_types[] = { "void", "char", "bool", "i8",  "i16", "i32",       "i64",    "u8",
                                          "u16",  "u32",  "u64",  "f32", "f64", "{integer}", "{float}" };
 
-  if (P_TYPE_GET_KIND(p_type) == P_TYPE_FUNCTION) {
+  if (p_type->get_kind() == P_TYPE_FUNCTION) {
     PFunctionType* func_type = (PFunctionType*)p_type;
     write_buffer_str(p_buffer, "fn ");
     if (p_name_hint != nullptr)
@@ -78,15 +78,15 @@ format_arg_type(PMsgBuffer* p_buffer, PType* p_type, PIdentifierInfo* p_name_hin
         write_buffer_str(p_buffer, ", ");
     }
     write_buffer_str(p_buffer, ") -> ");
-    format_arg_type(p_buffer, func_type->ret_type, nullptr);
-  } else if (P_TYPE_GET_KIND(p_type) == P_TYPE_POINTER) {
+    format_arg_type(p_buffer, func_type->get_ret_ty(), nullptr);
+  } else if (p_type->get_kind() == P_TYPE_POINTER) {
     PPointerType* ptr_type = (PPointerType*)p_type;
     write_buffer_str(p_buffer, "*");
     format_arg_type(p_buffer, ptr_type->element_type, nullptr); // do not propagate the hint
-  } else if (P_TYPE_GET_KIND(p_type) == P_TYPE_PAREN) {
+  } else if (p_type->get_kind() == P_TYPE_PAREN) {
     PParenType* paren_type = (PParenType*)p_type;
     format_arg_type(p_buffer, paren_type->sub_type, p_name_hint);
-  } else if (P_TYPE_GET_KIND(p_type) == P_TYPE_TAG) {
+  } else if (p_type->get_kind() == P_TYPE_TAG) {
     PDecl* decl = ((PTagType*)p_type)->decl;
     switch (P_DECL_GET_KIND(decl)) {
       case P_DECL_STRUCT:
@@ -97,7 +97,7 @@ format_arg_type(PMsgBuffer* p_buffer, PType* p_type, PIdentifierInfo* p_name_hin
         HEDLEY_UNREACHABLE();
     }
   } else {
-    write_buffer_str(p_buffer, builtin_types[(int)P_TYPE_GET_KIND(p_type)]);
+    write_buffer_str(p_buffer, builtin_types[(int)p_type->get_kind()]);
   }
 }
 
@@ -289,17 +289,17 @@ p_diag_print_source_line(PSourceFile* p_file, uint32_t p_lineno)
 {
   assert(p_file != nullptr);
 
-  uint32_t start_position = p_file->line_map.get_line_start_pos(p_lineno);
+  uint32_t start_position = p_file->get_line_map().get_line_start_pos(p_lineno);
 
   size_t line_length = 0;
-  const char* it = p_file->buffer + start_position;
+  auto it = std::next(p_file->get_buffer().cbegin(), start_position);
   while (*it != '\0' && *it != '\n' && *it != '\r') {
     ++line_length;
     ++it;
   }
 
   print_line_margin(p_lineno);
-  fwrite(p_file->buffer + start_position, sizeof(char), line_length, stderr);
+  fwrite(p_file->get_buffer_raw() + start_position, sizeof(char), line_length, stderr);
   fputs("\n", stderr);
   return line_length;
 }

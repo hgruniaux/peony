@@ -27,7 +27,7 @@ cg_llvm_type_of_func_type(PFunctionType* p_type)
     args[i] = cg_to_llvm_type(p_type->args[i]);
   }
 
-  LLVMTypeRef llvm_type = LLVMFunctionType(cg_to_llvm_type(p_type->ret_type), args, p_type->arg_count, false);
+  LLVMTypeRef llvm_type = LLVMFunctionType(cg_to_llvm_type(p_type->get_ret_ty()), args, p_type->arg_count, false);
   free(args);
   return llvm_type;
 }
@@ -64,14 +64,14 @@ cg_to_llvm_type(PType* p_type)
 {
   assert(p_type != nullptr);
 
-  p_type = p_type_get_canonical(p_type);
+  p_type = p_type->get_canonical_ty();
   assert(!p_type_is_generic(p_type));
 
-  if (p_type->common._llvm_cached_type != nullptr)
-    return static_cast<LLVMTypeRef>(p_type->common._llvm_cached_type);
+  if (p_type->_llvm_cached_type != nullptr)
+    return static_cast<LLVMTypeRef>(p_type->_llvm_cached_type);
 
   LLVMTypeRef type;
-  switch (P_TYPE_GET_KIND(p_type)) {
+  switch (p_type->get_kind()) {
     case P_TYPE_VOID:
       type = LLVMVoidType();
       break;
@@ -124,7 +124,7 @@ cg_to_llvm_type(PType* p_type)
       HEDLEY_UNREACHABLE_RETURN(nullptr);
   }
 
-  p_type->common._llvm_cached_type = type;
+  p_type->_llvm_cached_type = type;
   return type;
 }
 
@@ -451,9 +451,9 @@ cg_unary_expr(struct PCodegenLLVM* p_cg, PAstUnaryExpr* p_node)
   LLVMValueRef sub_expr = cg_visit(p_cg, p_node->sub_expr);
   switch (p_node->opcode) {
     case P_UNARY_NEG:
-      if (p_type_is_signed(p_node->type))
+      if (p_node->type->is_signed_int_ty())
         return LLVMBuildNeg(p_cg->builder, sub_expr, "");
-      else if (p_type_is_float(p_node->type))
+      else if (p_node->type->is_float_ty())
         return LLVMBuildFNeg(p_cg->builder, sub_expr, "");
       else
         HEDLEY_UNREACHABLE_RETURN(nullptr);
@@ -476,14 +476,14 @@ cg_binary_expr_impl(struct PCodegenLLVM* p_cg, PType* p_type, PAstBinaryOp p_op,
 {
   switch (p_op) {
 #define DISPATCH(p_signed_fn, p_unsigned_fn, p_float_fn)                                                               \
-  if (p_type_is_signed(p_type)) {                                                                                      \
+  if (p_type->is_signed_int_ty()) {                                                                                      \
     return p_signed_fn(p_cg->builder, p_lhs, p_rhs, "");                                                               \
-  } else if (p_type_is_unsigned(p_type)) {                                                                             \
+  } else if (p_type->is_unsigned_int_ty()) {                                                                             \
     return p_unsigned_fn(p_cg->builder, p_lhs, p_rhs, "");                                                             \
-  } else if (p_type_is_float(p_type)) {                                                                                \
+  } else if (p_type->is_float_ty()) {                                                                                \
     return p_float_fn(p_cg->builder, p_lhs, p_rhs, "");                                                                \
   } else {                                                                                                             \
-    HEDLEY_UNREACHABLE_RETURN(nullptr);                                                                                   \
+    HEDLEY_UNREACHABLE_RETURN(nullptr);                                                                                \
   }
 
     case P_BINARY_ADD:
@@ -498,12 +498,12 @@ cg_binary_expr_impl(struct PCodegenLLVM* p_cg, PType* p_type, PAstBinaryOp p_op,
       DISPATCH(LLVMBuildSRem, LLVMBuildURem, LLVMBuildFRem)
 
 #define DISPATCH_ONLY_INT(p_signed_fn, p_unsigned_fn)                                                                  \
-  if (p_type_is_signed(p_type)) {                                                                                      \
+  if (p_type->is_signed_int_ty()) {                                                                                      \
     return p_signed_fn(p_cg->builder, p_lhs, p_rhs, "");                                                               \
-  } else if (p_type_is_unsigned(p_type)) {                                                                             \
+  } else if (p_type->is_unsigned_int_ty()) {                                                                             \
     return p_unsigned_fn(p_cg->builder, p_lhs, p_rhs, "");                                                             \
   } else {                                                                                                             \
-    HEDLEY_UNREACHABLE_RETURN(nullptr);                                                                                   \
+    HEDLEY_UNREACHABLE_RETURN(nullptr);                                                                                \
   }
 
     case P_BINARY_SHL:
@@ -518,14 +518,14 @@ cg_binary_expr_impl(struct PCodegenLLVM* p_cg, PType* p_type, PAstBinaryOp p_op,
       DISPATCH_ONLY_INT(LLVMBuildOr, LLVMBuildOr)
 
 #define DISPATCH_COMP(p_signed_op, p_unsigned_op, p_float_op)                                                          \
-  if (p_type_is_signed(p_type)) {                                                                                      \
+  if (p_type->is_signed_int_ty()) {                                                                                      \
     return LLVMBuildICmp(p_cg->builder, p_signed_op, p_lhs, p_rhs, "");                                                \
-  } else if (p_type_is_unsigned(p_type)) {                                                                             \
+  } else if (p_type->is_unsigned_int_ty()) {                                                                             \
     return LLVMBuildICmp(p_cg->builder, p_unsigned_op, p_lhs, p_rhs, "");                                              \
-  } else if (p_type_is_float(p_type)) {                                                                                \
+  } else if (p_type->is_float_ty()) {                                                                                \
     return LLVMBuildFCmp(p_cg->builder, p_float_op, p_lhs, p_rhs, "");                                                 \
   } else {                                                                                                             \
-    HEDLEY_UNREACHABLE_RETURN(nullptr);                                                                                   \
+    HEDLEY_UNREACHABLE_RETURN(nullptr);                                                                                \
   }
 
     case P_BINARY_LT:
@@ -699,7 +699,7 @@ cg_cast_expr(struct PCodegenLLVM* p_cg, PAstCastExpr* p_node)
       if (from_bitwidth > target_bitwidth) {
         return LLVMBuildTrunc(p_cg->builder, sub_expr, llvm_target_ty, "");
       } else { /* from_bitwidth < target_bitwidth */
-        if (p_type_is_unsigned(source_ty)) {
+        if (source_ty->is_unsigned_int_ty()) {
           return LLVMBuildZExt(p_cg->builder, sub_expr, llvm_target_ty, "");
         } else {
           return LLVMBuildSExt(p_cg->builder, sub_expr, llvm_target_ty, "");
@@ -707,7 +707,7 @@ cg_cast_expr(struct PCodegenLLVM* p_cg, PAstCastExpr* p_node)
       }
     }
     case P_CAST_INT2FLOAT:
-      if (p_type_is_unsigned(source_ty))
+      if (source_ty->is_unsigned_int_ty())
         return LLVMBuildUIToFP(p_cg->builder, sub_expr, llvm_target_ty, "");
       else
         return LLVMBuildSIToFP(p_cg->builder, sub_expr, llvm_target_ty, "");
@@ -722,7 +722,7 @@ cg_cast_expr(struct PCodegenLLVM* p_cg, PAstCastExpr* p_node)
       }
     }
     case P_CAST_FLOAT2INT:
-      if (p_type_is_unsigned(p_node->type))
+      if (p_node->type->is_unsigned_int_ty())
         return LLVMBuildFPToUI(p_cg->builder, sub_expr, llvm_target_ty, "");
       else
         return LLVMBuildFPToSI(p_cg->builder, sub_expr, llvm_target_ty, "");
@@ -793,41 +793,36 @@ cg_visit(struct PCodegenLLVM* p_cg, PAst* p_node)
   }
 }
 
-void
-p_cg_init(struct PCodegenLLVM* p_cg)
+PCodegenLLVM::PCodegenLLVM(PContext& p_context)
+  : context(p_context)
 {
-  assert(p_cg != nullptr);
-
   LLVMInitializeNativeTarget();
   LLVMInitializeNativeAsmPrinter();
 
-  p_cg->module = LLVMModuleCreateWithName("");
-  p_cg->builder = LLVMCreateBuilder();
+  module = LLVMModuleCreateWithName("");
+  builder = LLVMCreateBuilder();
 
-  p_cg->opt_level = 0;
+  opt_level = 0;
 
   char* target_triple = LLVMGetDefaultTargetTriple();
   char* host_cpu = LLVMGetHostCPUName();
   char* host_features = LLVMGetHostCPUFeatures();
   LLVMTargetRef target = nullptr;
   char* error = nullptr;
-  LLVMSetTarget(p_cg->module, target_triple);
+  LLVMSetTarget(module, target_triple);
   LLVMGetTargetFromTriple(target_triple, &target, &error);
   LLVMDisposeMessage(error);
-  p_cg->target_machine = LLVMCreateTargetMachine(
+  target_machine = LLVMCreateTargetMachine(
     target, target_triple, host_cpu, host_features, LLVMCodeGenLevelAggressive, LLVMRelocDefault, LLVMCodeModelDefault);
   LLVMDisposeMessage(host_cpu);
   LLVMDisposeMessage(host_features);
   LLVMDisposeMessage(target_triple);
 }
 
-void
-p_cg_destroy(struct PCodegenLLVM* p_cg)
+PCodegenLLVM::~PCodegenLLVM()
 {
-  assert(p_cg != nullptr);
-
-  LLVMDisposeBuilder(p_cg->builder);
-  LLVMDisposeModule(p_cg->module);
+  LLVMDisposeBuilder(builder);
+  LLVMDisposeModule(module);
 }
 
 void

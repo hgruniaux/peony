@@ -4,52 +4,35 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <memory>
 
-PSourceFile*
-p_source_file_open(const char* p_filename)
+PSourceFile::PSourceFile(std::string p_filename, std::string p_content)
+  : m_line_map()
+  , m_filename(std::move(p_filename))
+  , m_buffer(std::move(p_content))
 {
-  assert(p_filename != nullptr);
 
-  FILE* file = fopen(p_filename, "rb");
-  if (file == nullptr)
-    return nullptr;
-
-  fseek(file, 0, SEEK_END);
-  const auto bufsize = (size_t)ftell(file);
-  fseek(file, 0, SEEK_SET);
-
-  auto* source_file = new PSourceFile;
-  assert(source_file != nullptr);
-
-  const size_t filename_len = strlen(p_filename) + 1 /* NUL-terminated */;
-  source_file->filename = static_cast<char*>(malloc(sizeof(char) * filename_len));
-  assert(source_file->filename != nullptr);
-  memcpy(source_file->filename, p_filename, sizeof(char) * filename_len);
-
-  char* buffer = static_cast<char*>(malloc(sizeof(char) * (bufsize + 1)));
-  const size_t read_bytes = fread(buffer, sizeof(char), bufsize, file);
-  buffer[bufsize] = '\0';
-
-  fclose(file);
-
-  if (read_bytes != bufsize) {
-    free(source_file->filename);
-    free(buffer);
-    free(source_file);
-    return nullptr;
-  }
-
-  source_file->buffer = buffer;
-  return source_file;
 }
 
-void
-p_source_file_close(PSourceFile* p_file)
+std::unique_ptr<PSourceFile>
+PSourceFile::open(std::string p_filename)
 {
-  if (p_file == nullptr)
-    return;
+  FILE* stream = fopen(p_filename.c_str(), "rb");
+  if (stream == nullptr)
+    return nullptr;
 
-  free((void*)p_file->buffer);
-  free(p_file->filename);
-  delete p_file;
+  fseek(stream, 0, SEEK_END);
+  const auto bufsize = (size_t)ftell(stream);
+  fseek(stream, 0, SEEK_SET);
+
+  std::string buffer;
+  buffer.resize(bufsize);
+  const size_t read_bytes = fread(buffer.data(), sizeof(char), bufsize, stream);
+  fclose(stream);
+
+  if (read_bytes != bufsize) {
+    return nullptr;
+  } else {
+    return std::make_unique<PSourceFile>(std::move(p_filename), std::move(buffer));
+  }
 }

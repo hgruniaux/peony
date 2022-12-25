@@ -6,8 +6,6 @@
 int
 main(int p_argc, char** p_argv)
 {
-  p_init_types();
-
   ::testing::InitGoogleTest(&p_argc, p_argv);
   int result = RUN_ALL_TESTS();
 

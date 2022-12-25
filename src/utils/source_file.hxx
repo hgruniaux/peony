@@ -2,21 +2,27 @@
 
 #include "line_map.hxx"
 
-/*
- * A file that can be used as input for the lexer.
- *
- * Use p_source_file_open() to open a file and do not forget to
- * call p_source_file_close() when the file is no more used.
- */
+#include <string>
+#include <memory>
+
+/// A file that can be used as input for the lexer.
 struct PSourceFile
 {
-  char* filename;
-  PLineMap line_map; // populated by the lexer
-  const char* buffer; // the source file code, NUL-terminated
+  PSourceFile(std::string p_filename, std::string p_content);
+
+  static std::unique_ptr<PSourceFile> open(std::string p_filename);
+
+  [[nodiscard]] const char* get_buffer_raw() const { return m_buffer.data(); }
+  [[nodiscard]] const std::string& get_buffer() const { return m_buffer; }
+  [[nodiscard]] const std::string& get_filename() const { return m_filename; }
+
+  [[nodiscard]] PLineMap& get_line_map() { return m_line_map; }
+  [[nodiscard]] const PLineMap& get_line_map() const { return m_line_map; }
+
+private:
+  // Populated by the lexer
+  PLineMap m_line_map;
+  // UTF-8 encoded m_filename and file source code m_buffer.
+  std::string m_filename;
+  std::string m_buffer;
 };
-
-PSourceFile*
-p_source_file_open(const char* p_filename);
-
-void
-p_source_file_close(PSourceFile* p_file);

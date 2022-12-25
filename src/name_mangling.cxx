@@ -41,7 +41,7 @@ append_ident(std::string& p_output, PIdentifierInfo* p_ident)
 static void
 append_type(std::string& p_output, PType* p_type)
 {
-  assert(p_type_is_canonical(p_type) && !p_type_is_generic(p_type));
+  assert(p_type->is_canonical_ty() && !p_type_is_generic(p_type));
 
   const char* builtin_types[] = {
     "v", // 'void'
@@ -59,14 +59,14 @@ append_type(std::string& p_output, PType* p_type)
     "d"  // 'f64'
   };
 
-  switch (P_TYPE_GET_KIND(p_type)) {
+  switch (p_type->get_kind()) {
     case P_TYPE_POINTER:
       p_output.push_back('P');
       append_type(p_output, ((PPointerType*)p_type)->element_type);
       break;
     case P_TYPE_FUNCTION:
       p_output.push_back('F');
-      append_type(p_output, ((PFunctionType*)p_type)->ret_type);
+      append_type(p_output, ((PFunctionType*)p_type)->get_ret_ty());
       for (int i = 0; i < ((PFunctionType*)p_type)->arg_count; ++i) {
         append_type(p_output, ((PFunctionType*)p_type)->args[i]);
       }
@@ -77,7 +77,8 @@ append_type(std::string& p_output, PType* p_type)
       break;
     default:
       // Is a builtin type
-      p_output.append(builtin_types[P_TYPE_GET_KIND(p_type)]);
+      assert(static_cast<size_t>(p_type->get_kind()) < std::size(builtin_types));
+      p_output.append(builtin_types[p_type->get_kind()]);
       break;
   }
 }
@@ -126,12 +127,12 @@ append_type(std::string& p_output, PType* p_type)
 void
 name_mangle(PIdentifierInfo* p_name, PFunctionType* p_func_type, std::string& p_output)
 {
-  p_func_type = (PFunctionType*)p_type_get_canonical((PType*)p_func_type);
+  p_func_type = (PFunctionType*)p_func_type->get_canonical_ty();
 
   p_output.append("_P");
   append_ident(p_output, p_name);
 
-  append_type(p_output, p_func_type->ret_type);
+  append_type(p_output, p_func_type->get_ret_ty());
   for (int i = 0; i < p_func_type->arg_count; ++i) {
     append_type(p_output, p_func_type->args[i]);
   }
