@@ -1,37 +1,43 @@
-#pragma once
+#ifndef PEONY_LEXER_HXX
+#define PEONY_LEXER_HXX
 
 #include "identifier_table.hxx"
 #include "token.hxx"
 #include "utils/source_file.hxx"
 
 /// The lexical analyzer interface.
-struct PLexer
+class PLexer
 {
+public:
+  PLexer();
+
   PIdentifierTable* identifier_table;
   PSourceFile* source_file;
 
-  bool keep_comments;
+  void set_source_file(PSourceFile* p_source_file);
+
+  /// Gets the next token from the lexer and stores it in p_token.
+  /// If end of file is reached, then p_token is of m_kind P_TOK_EOF
+  /// and all following calls will also return P_TOK_EOF.
+  /// All unknown characters are ignored however a diagnosis will
+  /// still be issued.
+  void tokenize(PToken& p_token);
+
+  void set_keep_comments(bool p_keep) { m_keep_comments = p_keep; }
+
+private:
+  void fill_token(PToken& p_token, PTokenKind p_kind);
+  void register_newline();
+
+
+private:
+  bool m_keep_comments = false;
 
   // For re2c:
-  const char* cursor;
-  const char* marker;
-  const char* marked_cursor;
-  PSourceLocation marked_source_location;
+  const char* m_cursor = nullptr;
+  const char* m_marker = nullptr;
+  const char* m_marked_cursor = nullptr;
+  PSourceLocation m_marked_source_location;
 };
 
-void
-lexer_init(PLexer* p_lexer);
-
-void
-lexer_set_source_file(PLexer* p_lexer, PSourceFile* p_source_file);
-
-void
-lexer_destroy(PLexer* p_lexer);
-
-/// Gets the next token from the lexer and stores it in p_token.
-/// If end of file is reached, then p_token is of m_kind P_TOK_EOF
-/// and all following calls will also return P_TOK_EOF.
-/// All unknown characters are ignored however a diagnosis will
-/// still be issued.
-void
-lexer_next(PLexer* p_lexer, PToken* p_token);
+#endif // PEONY_LEXER_HXX

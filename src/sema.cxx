@@ -801,7 +801,7 @@ PSema::act_on_var_decl(PType* p_type,
     }
   }
 
-  auto* node = m_context.new_object<PVarDecl>(p_type, p_name, p_init_expr);
+  auto* node = m_context.new_object<PVarDecl>(p_type, p_name, p_init_expr, p_src_range);
   symbol = p_scope_add_symbol(m_current_scope, p_name);
   symbol->decl = node;
   return node;
@@ -835,7 +835,7 @@ PSema::act_on_param_decl(PType* p_type, PIdentifierInfo* p_name, PSourceRange p_
     return m_context.new_object<PParamDecl>(p_type, p_name);
   }
 
-  auto* node = m_context.new_object<PParamDecl>(p_type, p_name);
+  auto* node = m_context.new_object<PParamDecl>(p_type, p_name, p_src_range);
   symbol = p_scope_add_symbol(m_current_scope, p_name);
   symbol->decl = node;
   return node;
@@ -933,7 +933,7 @@ PDecl*
 PSema::try_get_ref_decl(PAstExpr* p_expr)
 {
   p_expr = p_expr->ignore_parens();
-  if (p_expr->get_kind() == P_AST_NODE_DECL_REF_EXPR)
+  if (p_expr->get_kind() == P_SK_DECL_REF_EXPR)
     return p_expr->as<PAstDeclRefExpr>()->decl;
   return nullptr;
 }

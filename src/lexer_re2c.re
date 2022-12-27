@@ -14,33 +14,33 @@
     re2c:define:YYCTYPE   = "char";
  */
 
-static void
-fill_token(PLexer* p_lexer, PToken* p_token, PTokenKind p_kind)
+void
+PLexer::fill_token(PToken& p_token, PTokenKind p_kind)
 {
-    p_token->kind = p_kind;
-    p_token->source_location = p_lexer->marked_source_location;
-    p_token->token_length = p_lexer->cursor - p_lexer->marked_cursor;
+    p_token.kind = p_kind;
+    p_token.source_location = m_marked_source_location;
+    p_token.token_length = m_cursor - m_marked_cursor;
+}
+
+void
+PLexer::register_newline()
+{
+    uint32_t line_pos = m_cursor - source_file->get_buffer_raw();
+    source_file->get_line_map().add(line_pos);
 }
 
 static void
-register_new_line(PLexer* p_lexer)
-{
-    uint32_t line_pos = p_lexer->cursor - p_lexer->source_file->get_buffer_raw();
-    p_lexer->source_file->get_line_map().add(line_pos);
-}
-
-static void
-parse_int_suffix(PToken* p_token)
+parse_int_suffix(PToken& p_token)
 {
     PIntLiteralSuffix suffix = P_ILS_NO_SUFFIX;
 
-    if (p_token->data.literal.end - p_token->data.literal.begin >= 2) {
-        const char* suffix_start = p_token->data.literal.end - 2;
+    if (p_token.data.literal.end - p_token.data.literal.begin >= 2) {
+        const char* suffix_start = p_token.data.literal.end - 2;
         if (*suffix_start == 'i' || *suffix_start == 'u') {
             bool is_unsigned = *suffix_start == 'u';
             ++suffix_start;
             assert(*suffix_start == '8');
-            p_token->data.literal.end -= 2;
+            p_token.data.literal.end -= 2;
             if (is_unsigned)
                 suffix = P_ILS_U8;
             else
@@ -48,8 +48,8 @@ parse_int_suffix(PToken* p_token)
         }
     }
 
-    if (p_token->data.literal.end - p_token->data.literal.begin >= 3) {
-        const char* suffix_start = p_token->data.literal.end - 3;
+    if (p_token.data.literal.end - p_token.data.literal.begin >= 3) {
+        const char* suffix_start = p_token.data.literal.end - 3;
         if (*suffix_start == 'i' || *suffix_start == 'u') {
             bool is_unsigned = *suffix_start == 'u';
             ++suffix_start;
@@ -73,45 +73,42 @@ parse_int_suffix(PToken* p_token)
                     suffix = P_ILS_I16;
             }
 
-            p_token->data.literal.end -= 3;
+            p_token.data.literal.end -= 3;
         }
     }
 
-    p_token->data.literal.suffix_kind = suffix;
+    p_token.data.literal.suffix_kind = suffix;
 }
 
 void
-lexer_next(PLexer* p_lexer, PToken* p_token)
+PLexer::tokenize(PToken& p_token)
 {
-    assert(p_lexer != nullptr && p_token != nullptr);
-
-#define FILL_TOKEN(p_kind) (fill_token(p_lexer, p_token, p_kind))
+#define FILL_TOKEN(p_kind) (fill_token(p_token, p_kind))
 
     for (;;) {
-        p_lexer->marked_cursor = p_lexer->cursor;
-        p_lexer->marked_source_location = p_lexer->marked_cursor - p_lexer->source_file->get_buffer_raw();
-        g_current_source_location = p_lexer->marked_source_location;
+        m_marked_cursor = m_cursor;
+        m_marked_source_location = m_marked_cursor - source_file->get_buffer_raw();
 
 
         /*!re2c
-            re2c:define:YYCURSOR   = "p_lexer->cursor";
-            re2c:define:YYMARKER   = "p_lexer->marker";
+            re2c:define:YYCURSOR   = "m_cursor";
+            re2c:define:YYMARKER   = "m_marker";
 
             new_line = "\n"|"\r\n";
             new_line {
-                register_new_line(p_lexer);
+                register_newline();
                 continue;
             }
 
             [ \t\v\f\r]+ { continue; }
 
             "//"[^\x00\n\r]* {
-                if (!p_lexer->keep_comments)
+                if (!m_keep_comments)
                     continue;
 
                 FILL_TOKEN(P_TOK_COMMENT);
-                p_token->data.literal.begin = p_lexer->marked_cursor;
-                p_token->data.literal.end = p_lexer->cursor;
+                p_token.data.literal.begin = m_marked_cursor;
+                p_token.data.literal.end = m_cursor;
                 break;
             }
 
@@ -120,27 +117,27 @@ lexer_next(PLexer* p_lexer, PToken* p_token)
             ident = [a-zA-Z_][a-zA-Z0-9_]*;
             ident {
                 struct PIdentifierInfo* ident = p_identifier_table_get(
-                    p_lexer->identifier_table,
-                    p_lexer->marked_cursor,
-                    p_lexer->cursor
+                    identifier_table,
+                    m_marked_cursor,
+                    m_cursor
                 );
 
                 assert(ident != nullptr);
                 FILL_TOKEN(ident->token_kind);
-                p_token->data.identifier = ident;
+                p_token.data.identifier = ident;
                 break;
             }
 
             "r#" ident {
                 struct PIdentifierInfo* ident = p_identifier_table_get(
-                    p_lexer->identifier_table,
-                    p_lexer->marked_cursor + 2,
-                    p_lexer->cursor
+                    identifier_table,
+                    m_marked_cursor + 2,
+                    m_cursor
                 );
 
                 assert(ident != nullptr);
                 FILL_TOKEN(P_TOK_IDENTIFIER);
-                p_token->data.identifier = ident;
+                p_token.data.identifier = ident;
                 break;
             }
 
@@ -151,9 +148,9 @@ lexer_next(PLexer* p_lexer, PToken* p_token)
             bin_literal = '0b' (bin_digit|digit_sep)* bin_digit (bin_digit|digit_sep)*;
             bin_literal int_suffix? {
                 FILL_TOKEN(P_TOK_INT_LITERAL);
-                p_token->data.literal.int_radix = 2;
-                p_token->data.literal.begin = p_lexer->marked_cursor;
-                p_token->data.literal.end = p_lexer->cursor;
+                p_token.data.literal.int_radix = 2;
+                p_token.data.literal.begin = m_marked_cursor;
+                p_token.data.literal.end = m_cursor;
                 parse_int_suffix(p_token);
                 break;
             }
@@ -162,9 +159,9 @@ lexer_next(PLexer* p_lexer, PToken* p_token)
             oct_literal = '0o' (oct_digit|digit_sep)* oct_digit (oct_digit|digit_sep)*;
             oct_literal int_suffix? {
                 FILL_TOKEN(P_TOK_INT_LITERAL);
-                p_token->data.literal.int_radix = 8;
-                p_token->data.literal.begin = p_lexer->marked_cursor;
-                p_token->data.literal.end = p_lexer->cursor;
+                p_token.data.literal.int_radix = 8;
+                p_token.data.literal.begin = m_marked_cursor;
+                p_token.data.literal.end = m_cursor;
                 parse_int_suffix(p_token);
                 break;
             }
@@ -173,9 +170,9 @@ lexer_next(PLexer* p_lexer, PToken* p_token)
             hex_literal = '0x' (hex_digit|digit_sep)* hex_digit (hex_digit|digit_sep)*;
             hex_literal int_suffix? {
                 FILL_TOKEN(P_TOK_INT_LITERAL);
-                p_token->data.literal.int_radix = 16;
-                p_token->data.literal.begin = p_lexer->marked_cursor;
-                p_token->data.literal.end = p_lexer->cursor;
+                p_token.data.literal.int_radix = 16;
+                p_token.data.literal.begin = m_marked_cursor;
+                p_token.data.literal.end = m_cursor;
                 parse_int_suffix(p_token);
                 break;
             }
@@ -184,9 +181,9 @@ lexer_next(PLexer* p_lexer, PToken* p_token)
             dec_literal = dec_digit (dec_digit|digit_sep)*;
             dec_literal int_suffix? {
                 FILL_TOKEN(P_TOK_INT_LITERAL);
-                p_token->data.literal.int_radix = 10;
-                p_token->data.literal.begin = p_lexer->marked_cursor;
-                p_token->data.literal.end = p_lexer->cursor;
+                p_token.data.literal.int_radix = 10;
+                p_token.data.literal.begin = m_marked_cursor;
+                p_token.data.literal.end = m_cursor;
                 parse_int_suffix(p_token);
                 break;
             }
@@ -197,22 +194,22 @@ lexer_next(PLexer* p_lexer, PToken* p_token)
             | dec_literal "." dec_literal float_exp?
             | dec_literal ("." dec_literal)? float_exp? float_suffix {
                 FILL_TOKEN(P_TOK_FLOAT_LITERAL);
-                p_token->data.literal.begin = p_lexer->marked_cursor;
-                p_token->data.literal.end = p_lexer->cursor;
+                p_token.data.literal.begin = m_marked_cursor;
+                p_token.data.literal.end = m_cursor;
 
                 PFloatLiteralSuffix suffix = P_FLS_NO_SUFFIX;
-                if (p_token->data.literal.end - p_token->data.literal.begin >= 3) {
-                    const char* suffix_start = p_token->data.literal.end - 3;
+                if (p_token.data.literal.end - p_token.data.literal.begin >= 3) {
+                    const char* suffix_start = p_token.data.literal.end - 3;
                     if (memcmp(suffix_start, "f32", 3) == 0) {
                         suffix = P_FLS_F32;
-                        p_token->data.literal.end -= 3;
+                        p_token.data.literal.end -= 3;
                     } else if (memcmp(suffix_start, "f64", 3) == 0) {
                         suffix = P_FLS_F64;
-                        p_token->data.literal.end -= 3;
+                        p_token.data.literal.end -= 3;
                     }
                 }
 
-                p_token->data.literal.suffix_kind = suffix;
+                p_token.data.literal.suffix_kind = suffix;
 
                 break;
             }
@@ -261,14 +258,14 @@ lexer_next(PLexer* p_lexer, PToken* p_token)
 
             "\x00" {
                 FILL_TOKEN(P_TOK_EOF);
-                p_token->token_length = 0;
-                p_lexer->cursor--;
+                p_token.token_length = 0;
+                m_cursor--;
                 break;
             }
 
             * {
-                PDiag* d = diag_at(P_DK_err_unknown_character, p_lexer->marked_source_location);
-                diag_add_arg_char(d, p_lexer->cursor[-1]);
+                PDiag* d = diag_at(P_DK_err_unknown_character, m_marked_source_location);
+                diag_add_arg_char(d, m_cursor[-1]);
                 diag_flush(d);
                 continue;
             }
@@ -277,24 +274,24 @@ lexer_next(PLexer* p_lexer, PToken* p_token)
         block_comment:
         /*!re2c
             new_line {
-                register_new_line(p_lexer);
+                register_newline();
                 goto block_comment;
             }
 
             "*/" {
-                if (!p_lexer->keep_comments)
+                if (!m_keep_comments)
                     continue;
 
                 FILL_TOKEN(P_TOK_COMMENT);
-                p_token->data.literal.begin = p_lexer->marked_cursor;
-                p_token->data.literal.end = p_lexer->cursor;
+                p_token.data.literal.begin = m_marked_cursor;
+                p_token.data.literal.end = m_cursor;
                 break;
             }
 
             "\x00" {
                 // Unterminated block comment
                 FILL_TOKEN(P_TOK_EOF);
-                p_lexer->cursor--;
+                m_cursor--;
                 break;
             }
 

@@ -4,7 +4,7 @@ PAstExpr*
 PAstExpr::ignore_parens()
 {
   PAstExpr* node = this;
-  while (node != nullptr && node->get_kind() == P_AST_NODE_PAREN_EXPR) {
+  while (node != nullptr && node->get_kind() == P_SK_PAREN_EXPR) {
     node = node->as<PAstParenExpr>()->sub_expr;
   }
   return node;

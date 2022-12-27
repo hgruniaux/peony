@@ -18,26 +18,26 @@ class PAstExpr;
 
 enum PStmtKind
 {
-  P_AST_NODE_TRANSLATION_UNIT,
-  P_AST_NODE_COMPOUND_STMT,
-  P_AST_NODE_LET_STMT,
-  P_AST_NODE_BREAK_STMT,
-  P_AST_NODE_CONTINUE_STMT,
-  P_AST_NODE_RETURN_STMT,
-  P_AST_NODE_LOOP_STMT,
-  P_AST_NODE_WHILE_STMT,
-  P_AST_NODE_IF_STMT,
-  P_AST_NODE_BOOL_LITERAL,
-  P_AST_NODE_INT_LITERAL,
-  P_AST_NODE_FLOAT_LITERAL,
-  P_AST_NODE_PAREN_EXPR,
-  P_AST_NODE_DECL_REF_EXPR,
-  P_AST_NODE_UNARY_EXPR,
-  P_AST_NODE_BINARY_EXPR,
-  P_AST_NODE_MEMBER_EXPR,
-  P_AST_NODE_CALL_EXPR,
-  P_AST_NODE_CAST_EXPR,
-  P_AST_NODE_L2RVALUE_EXPR
+  P_SK_TRANSLATION_UNIT,
+  P_SK_COMPOUND_STMT,
+  P_SK_LET_STMT,
+  P_SK_BREAK_STMT,
+  P_SK_CONTINUE_STMT,
+  P_SK_RETURN_STMT,
+  P_SK_LOOP_STMT,
+  P_SK_WHILE_STMT,
+  P_SK_IF_STMT,
+  P_SK_BOOL_LITERAL,
+  P_SK_INT_LITERAL,
+  P_SK_FLOAT_LITERAL,
+  P_SK_PAREN_EXPR,
+  P_SK_DECL_REF_EXPR,
+  P_SK_UNARY_EXPR,
+  P_SK_BINARY_EXPR,
+  P_SK_MEMBER_EXPR,
+  P_SK_CALL_EXPR,
+  P_SK_CAST_EXPR,
+  P_SK_L2RVALUE_EXPR
 };
 
 /// \brief Base class for all statements (including expressions).
@@ -78,11 +78,14 @@ private:
 class PAstTranslationUnit : public PAst
 {
 public:
+  static constexpr auto STMT_KIND = P_SK_TRANSLATION_UNIT;
+
+  PSourceFile* p_src_file;
   PDecl** decls;
   size_t decl_count;
 
   PAstTranslationUnit(PDecl** p_decls, size_t decl_count, PSourceRange p_src_range = {})
-    : PAst(P_AST_NODE_TRANSLATION_UNIT, p_src_range)
+    : PAst(STMT_KIND, p_src_range)
     , decls(p_decls)
     , decl_count(decl_count)
   {
@@ -93,11 +96,13 @@ public:
 class PAstCompoundStmt : public PAst
 {
 public:
+  static constexpr auto STMT_KIND = P_SK_COMPOUND_STMT;
+
   PAst** stmts;
   size_t stmt_count;
 
   PAstCompoundStmt(PAst** p_stmts, size_t p_stmt_count, PSourceRange p_src_range = {})
-    : PAst(P_AST_NODE_COMPOUND_STMT, p_src_range)
+    : PAst(STMT_KIND, p_src_range)
     , stmts(p_stmts)
     , stmt_count(p_stmt_count)
   {
@@ -108,11 +113,13 @@ public:
 class PAstLetStmt : public PAst
 {
 public:
+  static constexpr auto STMT_KIND = P_SK_LET_STMT;
+
   PVarDecl** var_decls;
   size_t var_decl_count;
 
   explicit PAstLetStmt(PVarDecl** p_var_decls, size_t p_var_decl_count, PSourceRange p_src_range = {})
-    : PAst(P_AST_NODE_LET_STMT, p_src_range)
+    : PAst(STMT_KIND, p_src_range)
     , var_decls(p_var_decls)
     , var_decl_count(p_var_decl_count)
   {
@@ -123,8 +130,10 @@ public:
 class PAstBreakStmt : public PAst
 {
 public:
+  static constexpr auto STMT_KIND = P_SK_BREAK_STMT;
+
   explicit PAstBreakStmt(PSourceRange p_src_range = {})
-    : PAst(P_AST_NODE_BREAK_STMT, p_src_range)
+    : PAst(STMT_KIND, p_src_range)
   {
   }
 };
@@ -133,8 +142,10 @@ public:
 class PAstContinueStmt : public PAst
 {
 public:
+  static constexpr auto STMT_KIND = P_SK_CONTINUE_STMT;
+
   explicit PAstContinueStmt(PSourceRange p_src_range = {})
-    : PAst(P_AST_NODE_CONTINUE_STMT, p_src_range)
+    : PAst(STMT_KIND, p_src_range)
   {
   }
 };
@@ -143,10 +154,12 @@ public:
 class PAstReturnStmt : public PAst
 {
 public:
+  static constexpr auto STMT_KIND = P_SK_RETURN_STMT;
+
   PAstExpr* ret_expr;
 
   explicit PAstReturnStmt(PAstExpr* p_ret_expr, PSourceRange p_src_range = {})
-    : PAst(P_AST_NODE_RETURN_STMT, p_src_range)
+    : PAst(STMT_KIND, p_src_range)
     , ret_expr(p_ret_expr)
   {
   }
@@ -156,12 +169,14 @@ public:
 class PAstIfStmt : public PAst
 {
 public:
+  static constexpr auto STMT_KIND = P_SK_IF_STMT;
+
   PAstExpr* cond_expr;
   PAst* then_stmt;
   PAst* else_stmt;
 
   PAstIfStmt(PAstExpr* p_cond_expr, PAst* p_then_stmt, PAst* p_else_stmt, PSourceRange p_src_range = {})
-    : PAst(P_AST_NODE_IF_STMT, p_src_range)
+    : PAst(STMT_KIND, p_src_range)
     , cond_expr(p_cond_expr)
     , then_stmt(p_then_stmt)
     , else_stmt(p_else_stmt)
@@ -174,10 +189,12 @@ public:
 class PAstLoopStmt : public PAst
 {
 public:
+  static constexpr auto STMT_KIND = P_SK_LOOP_STMT;
+
   PAst* body_stmt;
 
   explicit PAstLoopStmt(PAst* p_body, PSourceRange p_src_range = {})
-    : PAstLoopStmt(P_AST_NODE_LOOP_STMT, p_body, p_src_range)
+    : PAstLoopStmt(STMT_KIND, p_body, p_src_range)
   {
   }
 
@@ -193,10 +210,12 @@ protected:
 class PAstWhileStmt : public PAstLoopStmt
 {
 public:
+  static constexpr auto STMT_KIND = P_SK_WHILE_STMT;
+
   PAstExpr* cond_expr;
 
   PAstWhileStmt(PAstExpr* p_cond_expr, PAst* p_body, PSourceRange p_src_range = {})
-    : PAstLoopStmt(P_AST_NODE_WHILE_STMT, p_body, p_src_range)
+    : PAstLoopStmt(STMT_KIND, p_body, p_src_range)
     , cond_expr(p_cond_expr)
   {
   }

@@ -13,6 +13,8 @@ PAstPrinter::PAstPrinter(PContext& p_ctx, bool p_use_colors)
 void
 PAstPrinter::visit_translation_unit(const PAstTranslationUnit* p_node)
 {
+  m_src_file = p_node->p_src_file;
+
   print_stmt_header(p_node, "PAstTranslationUnit");
   std::fputs("\n", m_output);
 
@@ -146,9 +148,9 @@ PAstPrinter::visit_decl_ref_expr(const PAstDeclRefExpr* p_node)
   std::fputs("\n", m_output);
 
   ++m_indent;
-  m_hide_decl = true;
+  m_elide_decls = true;
   visit(p_node->decl);
-  m_hide_decl = false;
+  m_elide_decls = false;
   --m_indent;
 }
 
@@ -214,16 +216,11 @@ PAstPrinter::visit_func_decl(const PFunctionDecl* p_node)
 {
   print_decl_header(p_node, "PFunctionDecl");
   print_type(p_node->type);
-  std::fputs("\n", m_output);
 
-  ++m_indent;
-  if (m_hide_decl) {
-    print("[...]\n");
-  } else {
+  print_decl_body([this, p_node]() {
     visit_iter(p_node->params, p_node->params + p_node->param_count);
     visit(p_node->body);
-  }
-  --m_indent;
+  });
 }
 
 void
@@ -239,23 +236,17 @@ PAstPrinter::visit_var_decl(const PVarDecl* p_node)
 {
   print_decl_header(p_node, "PVarDecl");
   print_type(p_node->type);
-  std::fputs("\n", m_output);
 
-  ++m_indent;
-  if (m_hide_decl) {
-    print("[...]\n");
-  } else {
-    if (p_node->init_expr != nullptr) {
+  print_decl_body([this, p_node]() {
+    if (p_node->init_expr != nullptr)
       visit(p_node->init_expr);
-    }
-  }
-  --m_indent;
+  });
 }
 
 void
 PAstPrinter::visit_ty(const PType* p_node)
 {
-  std::fprintf(m_output, "UNKNOWN TYPE");
+  std::fprintf(m_output, "{unknown}");
 }
 
 void
@@ -347,6 +338,7 @@ void
 PAstPrinter::print_decl_header(const PDecl* p_node, const char* p_name)
 {
   print_header(p_node, p_name, false);
+  print_range(p_node->source_range);
 
   if (m_show_used && p_node->used) {
     std::fprintf(m_output, " used");
@@ -359,12 +351,14 @@ void
 PAstPrinter::print_stmt_header(const PAst* p_node, const char* p_name)
 {
   print_header(p_node, p_name, true);
+  print_range(p_node->get_source_range());
 }
 
 void
 PAstPrinter::print_expr_header(const PAstExpr* p_node, const char* p_name)
 {
   print_header(p_node, p_name, true);
+  print_range(p_node->get_source_range());
 
   if (m_show_value_categories && p_node->is_lvalue()) {
     color("34");
@@ -373,6 +367,34 @@ PAstPrinter::print_expr_header(const PAstExpr* p_node, const char* p_name)
   }
 
   print_type(p_node->get_type(m_ctx));
+}
+
+void
+PAstPrinter::print_range(PSourceRange p_src_range)
+{
+  if (!m_show_locations || m_src_file == nullptr)
+    return;
+
+  std::fputs(" <", m_output);
+  color("33");
+  if (p_src_range.begin == p_src_range.end) {
+    // Really a source location.
+    uint32_t lineno, colno;
+    p_source_location_get_lineno_and_colno(m_src_file, p_src_range.begin, &lineno, &colno);
+    std::fprintf(m_output, "%d:%d", lineno, colno);
+  } else {
+    uint32_t start_lineno, start_colno;
+    uint32_t end_lineno, end_colno;
+    p_source_location_get_lineno_and_colno(m_src_file, p_src_range.begin, &start_lineno, &start_colno);
+    p_source_location_get_lineno_and_colno(m_src_file, p_src_range.end, &end_lineno, &end_colno);
+    std::fprintf(m_output, "%d:%d", start_lineno, start_colno);
+    color_reset();
+    std::fputs(" -> ", m_output);
+    color("33");
+    std::fprintf(m_output, "%d:%d", end_lineno, end_colno);
+  }
+  color_reset();
+  std::fputs(">", m_output);
 }
 
 void

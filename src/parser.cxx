@@ -16,7 +16,7 @@ static void
 consume_token(PParser* p_parser)
 {
   p_parser->prev_lookahead_end_loc = LOOKAHEAD_END_LOC;
-  lexer_next(&p_parser->lexer, &p_parser->m_token);
+  p_parser->lexer.tokenize(p_parser->m_token);
 }
 
 static void
@@ -183,7 +183,8 @@ PParser::parse_param_decl()
     type = parse_type();
   }
 
-  auto* node = m_sema.act_on_param_decl(type, name, { name_range.begin, prev_lookahead_end_loc }, name_range);
+  const auto range = PSourceRange { name_range.begin, prev_lookahead_end_loc };
+  auto* node = m_sema.act_on_param_decl(type, name, range, name_range);
   return node;
 }
 
@@ -219,7 +220,8 @@ PParser::parse_var_decl()
     default_expr = parse_expr();
   }
 
-  return m_sema.act_on_var_decl(type, name, default_expr, name_range);
+  const auto range = PSourceRange { name_range.begin, prev_lookahead_end_loc };
+  return m_sema.act_on_var_decl(type, name, default_expr, range, name_range);
 }
 
 // param_decl_list:
@@ -292,7 +294,8 @@ PParser::parse_compound_stmt()
   auto* raw_stmts = context.alloc_object<PAst*>(stmts.size());
   std::copy(stmts.begin(), stmts.end(), raw_stmts);
 
-  auto* node = context.new_object<PAstCompoundStmt>(raw_stmts, stmts.size(), PSourceRange{ lbrace_loc, rbrace_loc + 1 });
+  auto* node =
+    context.new_object<PAstCompoundStmt>(raw_stmts, stmts.size(), PSourceRange{ lbrace_loc, rbrace_loc + 1 });
   m_sema.pop_scope();
   return node;
 }
@@ -828,7 +831,7 @@ parse_func_decl(PParser* p_parser)
 {
   assert(p_parser->lookahead(P_TOK_KEY_fn));
 
-  PSourceLocation key_fn_end_loc = LOOKAHEAD_END_LOC;
+  PSourceLocation loc_begin = LOOKAHEAD_BEGIN_LOC;
   consume_token(p_parser);
 
   PSourceRange name_range = { LOOKAHEAD_BEGIN_LOC, LOOKAHEAD_END_LOC };
@@ -863,7 +866,8 @@ parse_func_decl(PParser* p_parser)
     ret_ty = p_parser->parse_type();
   }
 
-  PFunctionDecl* decl = p_parser->m_sema.act_on_func_decl(name, ret_ty, params, name_range, key_fn_end_loc);
+  PFunctionDecl* decl = p_parser->m_sema.act_on_func_decl(name, ret_ty, params, name_range, loc_begin + 2);
+  decl->source_range = { loc_begin, p_parser->prev_lookahead_end_loc };
 
   // Parse body
   if (!p_parser->lookahead(P_TOK_LBRACE)) {
@@ -877,6 +881,7 @@ parse_func_decl(PParser* p_parser)
   decl->body = p_parser->parse_compound_stmt();
   p_parser->m_sema.end_func_decl_analysis();
 
+  decl->source_range = { loc_begin, decl->body->get_source_range().end };
   return decl;
 }
 
@@ -997,6 +1002,7 @@ parse_translation_unit(PParser* p_parser)
 
   auto* node = p_parser->context.new_object<PAstTranslationUnit>(
     raw_decls, decls.size(), PSourceRange{ loc_begin, LOOKAHEAD_BEGIN_LOC });
+  node->p_src_file = p_parser->lexer.source_file;
   p_parser->m_sema.pop_scope();
   return node;
 }
@@ -1006,10 +1012,8 @@ p_parse(PParser* p_parser)
 {
   assert(p_parser != nullptr);
 
-  // We do not call consume_token() because it sets p_parser->prev_lookahead_end_loc
-  // to the end position of m_token which is undefined here.
+  consume_token(p_parser);
   p_parser->prev_lookahead_end_loc = 0;
-  lexer_next(&p_parser->lexer, &p_parser->m_token);
 
   PAst* ast = parse_translation_unit(p_parser);
   return ast;
@@ -1019,5 +1023,5 @@ void
 PParser::consume()
 {
   prev_lookahead_end_loc = m_token.source_location + m_token.token_length;
-  lexer_next(&lexer, &m_token);
+  lexer.tokenize(m_token);
 }

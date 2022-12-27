@@ -90,7 +90,6 @@ typedef struct PDiagContext
 
 extern PDiagContext g_diag_context;
 
-extern PSourceLocation g_current_source_location;
 extern PSourceFile* g_current_source_file;
 
 #ifdef P_DEBUG

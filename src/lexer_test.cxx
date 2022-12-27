@@ -14,19 +14,17 @@ protected:
     p_identifier_table_init(&identifier_table);
     p_identifier_table_register_keywords(&identifier_table);
     lexer.identifier_table = &identifier_table;
-    lexer_init(&lexer);
   }
 
   void TearDown() override
   {
     p_identifier_table_destroy(&identifier_table);
-    lexer_destroy(&lexer);
   }
 
   void set_input(const char* p_input)
   {
     source_file = std::make_unique<PSourceFile>("<test-input>", p_input);
-    lexer_set_source_file(&lexer, source_file.get());
+    lexer.set_source_file(source_file.get());
   }
 
   PToken check_token(PTokenKind p_kind,
@@ -36,7 +34,7 @@ protected:
                      uint32_t p_expected_end_col)
   {
     PToken token;
-    lexer_next(&lexer, &token);
+    lexer.tokenize(token);
     EXPECT_EQ(token.kind, p_kind);
 
     PSourceLocation begin_loc = token.source_location;
@@ -91,14 +89,14 @@ TEST_F(lexer_test, comments)
 {
   // Single line comment with lexer.keep_comments = false
   set_input("foo // foo\nbar");
-  lexer.keep_comments = false;
+  lexer.set_keep_comments(false);
   check_token(P_TOK_IDENTIFIER, 1, 1, 1, 4);
   check_token(P_TOK_IDENTIFIER, 2, 1, 2, 4);
   check_token(P_TOK_EOF, 2, 4, 2, 4);
 
   // Single line comment with lexer.keep_comments = true
   set_input("foo // foo\nbar");
-  lexer.keep_comments = true;
+  lexer.set_keep_comments(true);
   check_token(P_TOK_IDENTIFIER, 1, 1, 1, 4);
   check_token(P_TOK_COMMENT, 1, 5, 1, 11);
   check_token(P_TOK_IDENTIFIER, 2, 1, 2, 4);
@@ -106,14 +104,14 @@ TEST_F(lexer_test, comments)
 
   // Block comment with lexer.keep_comments = false
   set_input("foo /* foo\nbar\nfoo */ bar");
-  lexer.keep_comments = false;
+  lexer.set_keep_comments(false);
   check_token(P_TOK_IDENTIFIER, 1, 1, 1, 4);
   check_token(P_TOK_IDENTIFIER, 3, 8, 3, 11);
   check_token(P_TOK_EOF, 3, 11, 3, 11);
 
   // Block comment with lexer.keep_comments = true
   set_input("foo /* foo\nbar\nfoo */ bar");
-  lexer.keep_comments = true;
+  lexer.set_keep_comments(true);
   check_token(P_TOK_IDENTIFIER, 1, 1, 1, 4);
   check_token(P_TOK_COMMENT, 1, 5, 3, 7);
   check_token(P_TOK_IDENTIFIER, 3, 8, 3, 11);

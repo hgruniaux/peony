@@ -1,4 +1,5 @@
-#pragma once
+#ifndef PEONY_SCOPE_HXX
+#define PEONY_SCOPE_HXX
 
 #include "identifier_table.hxx"
 
@@ -43,3 +44,5 @@ p_scope_local_lookup(PScope* p_scope, PIdentifierInfo* p_name);
 
 PSymbol*
 p_scope_add_symbol(PScope* p_scope, PIdentifierInfo* p_name);
+
+#endif // PEONY_SCOPE_HXX

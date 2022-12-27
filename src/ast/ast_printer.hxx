@@ -51,23 +51,41 @@ private:
   void print_stmt_header(const PAst* p_node, const char* p_name);
   void print_expr_header(const PAstExpr* p_node, const char* p_name);
 
+  void print_range(PSourceRange p_src_range);
   void print_type(PType* p_type);
   void print_ident_info(PIdentifierInfo* p_name);
 
   void color(const char* p_color);
   void color_reset();
 
+  template<class Fn>
+  void print_decl_body(Fn p_fn)
+  {
+    if (m_elide_decls) {
+      std::fputs(" [...]\n", m_output);
+    } else {
+      std::fputs("\n", m_output);
+
+      ++m_indent;
+      p_fn();
+      --m_indent;
+    }
+  }
+
 private:
   PContext& m_ctx;
   std::FILE* m_output;
+  PSourceFile* m_src_file = nullptr;
 
   unsigned m_indent = 0;
-  bool m_hide_decl = false;
+  bool m_elide_decls = false;
 
   bool m_use_colors = true;
 
   // Should we show the memory address of each node?
   bool m_show_addresses = true;
+  // Should we show source ranges and locations of each node?
+  bool m_show_locations = true;
   // Should we show if declarations were used or not?
   bool m_show_used = true;
   // Should we show the types of each expression?

@@ -2,19 +2,25 @@
 
 #include <llvm/Analysis/CGSCCPassManager.h>
 #include <llvm/Analysis/LoopAnalysisManager.h>
+#include <llvm/IR/DIBuilder.h>
 #include <llvm/IR/IRBuilder.h>
-#include <llvm/IR/Verifier.h>
 #include <llvm/IR/LegacyPassManager.h>
+#include <llvm/IR/Verifier.h>
 #include <llvm/MC/TargetRegistry.h>
 #include <llvm/Passes/PassBuilder.h>
 #include <llvm/Support/Host.h>
-#include <llvm/Support/TargetSelect.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Target/TargetMachine.h>
 #include <llvm/Transforms/Utils/BasicBlockUtils.h>
 
 #include <stack>
 #include <string>
+
+static llvm::StringRef
+to_str_ref(PIdentifierInfo* p_name)
+{
+  return llvm::StringRef(p_name->spelling, p_name->spelling_len);
+}
 
 struct PCodeGenLLVM::D
 {
@@ -24,9 +30,16 @@ struct PCodeGenLLVM::D
   std::unique_ptr<llvm::LLVMContext> llvm_ctx;
   std::unique_ptr<llvm::Module> llvm_module;
   std::unique_ptr<llvm::IRBuilder<>> builder;
+  std::unique_ptr<llvm::DIBuilder> debug_builder;
 
   std::unordered_map<PType*, llvm::Type*> types_cache;
+  std::unordered_map<PType*, llvm::DIType*> debug_types_cache;
   std::unordered_map<const PDecl*, llvm::Value*> decls;
+
+  llvm::DICompileUnit* debug_compile_unit;
+  llvm::DIFile* debug_file;
+  PSourceFile* current_file;
+  std::stack<llvm::DIScope*> lexical_blocks;
 
   struct LoopInfoEntry
   {
@@ -44,9 +57,89 @@ struct PCodeGenLLVM::D
     llvm_ctx = std::make_unique<llvm::LLVMContext>();
     llvm_module = std::make_unique<llvm::Module>("", *llvm_ctx);
     builder = std::make_unique<llvm::IRBuilder<>>(*llvm_ctx);
+    debug_builder = std::make_unique<llvm::DIBuilder>(*llvm_module);
   }
 
-  llvm::Type* convert_type_impl(PType* p_can_type)
+  llvm::DIType* to_debug_ty_impl(PType* p_type)
+  {
+    using namespace llvm::dwarf;
+    switch (p_type->get_kind()) {
+      case P_TK_VOID:
+        return nullptr;
+      case P_TK_BOOL:
+        return debug_builder->createBasicType("bool", 1, DW_ATE_boolean);
+      case P_TK_CHAR:
+        return debug_builder->createBasicType("char", 32, DW_ATE_unsigned_char);
+      case P_TK_I8:
+        return debug_builder->createBasicType("i8", 8, DW_ATE_signed);
+      case P_TK_I16:
+        return debug_builder->createBasicType("i16", 16, DW_ATE_signed);
+      case P_TK_I32:
+        return debug_builder->createBasicType("i32", 32, DW_ATE_signed);
+      case P_TK_I64:
+        return debug_builder->createBasicType("i64", 64, DW_ATE_signed);
+      case P_TK_U8:
+        return debug_builder->createBasicType("u8", 8, DW_ATE_unsigned);
+      case P_TK_U16:
+        return debug_builder->createBasicType("u16", 16, DW_ATE_unsigned);
+      case P_TK_U32:
+        return debug_builder->createBasicType("u32", 32, DW_ATE_unsigned);
+      case P_TK_U64:
+        return debug_builder->createBasicType("u64", 64, DW_ATE_unsigned);
+      case P_TK_F32:
+        return debug_builder->createBasicType("f32", 32, DW_ATE_float);
+      case P_TK_F64:
+        return debug_builder->createBasicType("f64", 64, DW_ATE_float);
+
+      case P_TK_PAREN:
+        return to_debug_ty(p_type->as<PParenType>()->get_sub_type());
+
+      case P_TK_FUNCTION: {
+        auto* fn_ty = p_type->as<PFunctionType>();
+
+        std::vector<llvm::Metadata*> param_types(fn_ty->get_param_count() + 1);
+        param_types[0] = to_debug_ty(fn_ty->get_ret_ty());
+        for (size_t i = 0; i < fn_ty->get_param_count(); ++i) {
+          param_types[i + 1] = to_debug_ty(fn_ty->get_params()[i]);
+        }
+
+        return debug_builder->createSubroutineType(debug_builder->getOrCreateTypeArray(param_types));
+      }
+
+      case P_TK_POINTER: {
+        auto* pointee_ty = to_debug_ty(p_type->as<PPointerType>()->get_element_ty());
+        return debug_builder->createPointerType(pointee_ty, target_machine->getPointerSizeInBits(0));
+      }
+
+      case P_TK_ARRAY:
+        assert(false && "array types not yet implemented");
+        return nullptr;
+
+      default:
+        assert(false && "unimplemented type");
+        return nullptr;
+    }
+  }
+
+  /// Converts a Peony type to a LLVM debug DWARF type.
+  llvm::DIType* to_debug_ty(PType* p_type)
+  {
+    assert(p_type != nullptr);
+
+    // Unlike to_llvm_ty() we do not use canonical type for lookup because
+    // for debugging we really want the type as written by the user.
+
+    const auto it = debug_types_cache.find(p_type);
+    if (it != debug_types_cache.end())
+      return it->second;
+
+    auto* llvm_type = to_debug_ty_impl(p_type);
+    assert(llvm_type != nullptr);
+    debug_types_cache.insert({ p_type, llvm_type });
+    return llvm_type;
+  }
+
+  llvm::Type* to_llvm_ty_impl(PType* p_can_type)
   {
     switch (p_can_type->get_kind()) {
       case P_TK_VOID:
@@ -78,11 +171,11 @@ struct PCodeGenLLVM::D
 
       case P_TK_FUNCTION: {
         auto* fn_ty = p_can_type->as<PFunctionType>();
-        auto* ret_ty = convert_type(fn_ty->get_ret_ty());
+        auto* ret_ty = to_llvm_ty(fn_ty->get_ret_ty());
 
         std::vector<llvm::Type*> param_types(fn_ty->get_param_count());
         for (size_t i = 0; i < fn_ty->get_param_count(); ++i) {
-          param_types[i] = convert_type(fn_ty->get_params()[i]);
+          param_types[i] = to_llvm_ty(fn_ty->get_params()[i]);
         }
 
         return llvm::FunctionType::get(ret_ty, param_types, false);
@@ -94,7 +187,7 @@ struct PCodeGenLLVM::D
 
       case P_TK_ARRAY: {
         auto* array_ty = p_can_type->as<PArrayType>();
-        auto* elt_ty = convert_type(array_ty->get_element_ty());
+        auto* elt_ty = to_llvm_ty(array_ty->get_element_ty());
         return llvm::ArrayType::get(elt_ty, array_ty->get_num_elements());
       }
 
@@ -105,7 +198,7 @@ struct PCodeGenLLVM::D
   }
 
   /// Converts a Peony type to a LLVM type.
-  llvm::Type* convert_type(PType* p_type)
+  llvm::Type* to_llvm_ty(PType* p_type)
   {
     assert(p_type != nullptr);
 
@@ -115,7 +208,7 @@ struct PCodeGenLLVM::D
     if (it != types_cache.end())
       return it->second;
 
-    auto* llvm_type = convert_type_impl(p_type);
+    auto* llvm_type = to_llvm_ty_impl(p_type);
     assert(llvm_type != nullptr);
     types_cache.insert({ p_type, llvm_type });
     return llvm_type;
@@ -128,6 +221,7 @@ struct PCodeGenLLVM::D
   /// LLVM prefers that alloca instruction are inserted in the entry block
   /// because in that case they are guaranteed to be executed only once and
   /// makes mem2reg pass simpler.
+  /// This function returns the inserted llvm::AllocaInst*.
   llvm::Value* insert_alloc_in_entry_bb(llvm::Type* p_type)
   {
     auto* func = get_function();
@@ -144,6 +238,39 @@ struct PCodeGenLLVM::D
     auto* func = get_function();
     auto* bb = llvm::BasicBlock::Create(*llvm_ctx, "", func);
     builder->SetInsertPoint(bb);
+  }
+
+  void reset_location() { builder->SetCurrentDebugLocation(llvm::DebugLoc()); }
+  void emit_location(PSourceLocation p_src_loc)
+  {
+    if (current_file == nullptr)
+      return;
+
+    auto* scope = get_current_di_scope();
+
+    uint32_t lineno, colno;
+    p_source_location_get_lineno_and_colno(current_file, p_src_loc, &lineno, &colno);
+    builder->SetCurrentDebugLocation(llvm::DILocation::get(scope->getContext(), lineno, colno, scope));
+  }
+
+  llvm::DIScope* get_current_di_scope()
+  {
+    if (lexical_blocks.empty())
+      return debug_compile_unit;
+    else
+      return lexical_blocks.top();
+  }
+  llvm::DILocation* get_di_location(PSourceLocation p_src_loc)
+  {
+    uint32_t lineno, colno;
+    p_source_location_get_lineno_and_colno(current_file, p_src_loc, &lineno, &colno);
+    return llvm::DILocation::get(*llvm_ctx, lineno, colno, get_current_di_scope());
+  }
+
+  llvm::DILocalVariable* emit_var_info(const PVarDecl* p_decl)
+  {
+    return debug_builder->createAutoVariable(
+      get_current_di_scope(), to_str_ref(p_decl->name), debug_file, 0, to_debug_ty(p_decl->type));
   }
 
   void finish_func_codegen()
@@ -164,8 +291,6 @@ struct PCodeGenLLVM::D
       }
     }
 
-    assert(!llvm::verifyFunction(*func, &llvm::errs()));
-
     // Our code generation and the above fix for degenerate blocks tends to
     // generate many unreachable blocks. Remove them now. This is not strictly
     // necessary as optimization passes will do it, but yet we do it nevertheless
@@ -184,31 +309,38 @@ PCodeGenLLVM::~PCodeGenLLVM() = default;
 bool
 PCodeGenLLVM::codegen(PAstTranslationUnit* p_ast)
 {
-  auto TargetTriple = llvm::sys::getDefaultTargetTriple();
-  m_d->llvm_module->setTargetTriple(TargetTriple);
+  m_d->current_file = p_ast->p_src_file;
+  m_d->debug_file = m_d->debug_builder->createFile(p_ast->p_src_file->get_filename(), ".");
+  m_d->debug_compile_unit =
+    m_d->debug_builder->createCompileUnit(llvm::dwarf::DW_LANG_C, m_d->debug_file, "Peony Compiler", true, "", 0);
 
-  std::string Error;
-  auto Target = llvm::TargetRegistry::lookupTarget(TargetTriple, Error);
+  auto target_triple = llvm::sys::getDefaultTargetTriple();
+  m_d->llvm_module->setTargetTriple(target_triple);
+
+  std::string error;
+  auto target = llvm::TargetRegistry::lookupTarget(target_triple, error);
 
   // Print an error and exit if we couldn't find the requested target.
   // This generally occurs if we've forgotten to initialise the
   // TargetRegistry or we have a bogus target triple.
-  if (!Target) {
-    llvm::errs() << Error;
+  if (!target) {
+    llvm::errs() << error;
     return false;
   }
 
-  auto CPU = "generic";
-  auto Features = "";
+  auto cpu = "generic";
+  auto features = "";
 
   llvm::TargetOptions opt;
-  auto RM = llvm::Optional<llvm::Reloc::Model>();
-  m_d->target_machine = Target->createTargetMachine(TargetTriple, CPU, Features, opt, RM);
+  auto rm = llvm::Optional<llvm::Reloc::Model>();
+  m_d->target_machine = target->createTargetMachine(target_triple, cpu, features, opt, rm);
 
   m_d->llvm_module->setDataLayout(m_d->target_machine->createDataLayout());
-  m_d->llvm_module->setTargetTriple(TargetTriple);
+  m_d->llvm_module->setTargetTriple(target_triple);
 
   visit(p_ast);
+  m_d->llvm_module->dump();
+  m_d->debug_builder->finalize();
   assert(!llvm::verifyModule(*m_d->llvm_module, &llvm::errs()));
   return true;
 }
@@ -278,6 +410,7 @@ PCodeGenLLVM::write_object_file(const std::string& p_filename)
 void*
 PCodeGenLLVM::visit_translation_unit(const PAstTranslationUnit* p_node)
 {
+  m_d->emit_location(p_node->get_source_range().begin);
   visit_iter(p_node->decls, p_node->decls + p_node->decl_count);
   return nullptr;
 }
@@ -285,13 +418,21 @@ PCodeGenLLVM::visit_translation_unit(const PAstTranslationUnit* p_node)
 void*
 PCodeGenLLVM::visit_compound_stmt(const PAstCompoundStmt* p_node)
 {
+  uint32_t lineno, colno;
+  p_source_location_get_lineno_and_colno(m_d->current_file, p_node->get_source_range().begin, &lineno, &colno);
+  m_d->lexical_blocks.push(m_d->debug_builder->createLexicalBlock(m_d->get_current_di_scope(), m_d->debug_file, lineno, colno));
+
+  m_d->emit_location(p_node->get_source_range().begin);
   visit_iter(p_node->stmts, p_node->stmts + p_node->stmt_count);
+
+  m_d->lexical_blocks.pop();
   return nullptr;
 }
 
 void*
 PCodeGenLLVM::visit_let_stmt(const PAstLetStmt* p_node)
 {
+  m_d->emit_location(p_node->get_source_range().begin);
   visit_iter(p_node->var_decls, p_node->var_decls + p_node->var_decl_count);
   return nullptr;
 }
@@ -301,6 +442,7 @@ PCodeGenLLVM::visit_break_stmt(const PAstBreakStmt* p_node)
 {
   assert(!m_d->loop_infos.empty());
 
+  m_d->emit_location(p_node->get_source_range().begin);
   auto* break_bb = m_d->loop_infos.top().break_bb;
   assert(break_bb != nullptr);
   m_d->builder->CreateBr(break_bb);
@@ -313,6 +455,7 @@ PCodeGenLLVM::visit_continue_stmt(const PAstContinueStmt* p_node)
 {
   assert(!m_d->loop_infos.empty());
 
+  m_d->emit_location(p_node->get_source_range().begin);
   auto* continue_bb = m_d->loop_infos.top().break_bb;
   assert(continue_bb != nullptr);
   m_d->builder->CreateBr(continue_bb);
@@ -323,6 +466,8 @@ PCodeGenLLVM::visit_continue_stmt(const PAstContinueStmt* p_node)
 void*
 PCodeGenLLVM::visit_return_stmt(const PAstReturnStmt* p_node)
 {
+  m_d->emit_location(p_node->get_source_range().begin);
+
   if (p_node->ret_expr == nullptr) {
     m_d->builder->CreateRetVoid();
     return nullptr;
@@ -347,6 +492,7 @@ PCodeGenLLVM::visit_loop_stmt(const PAstLoopStmt* p_node)
   //  4 | exit_bb: ; used to implement the break instruction
   //  5 |     ; ...
 
+  m_d->emit_location(p_node->get_source_range().begin);
   auto* func = m_d->get_function();
 
   auto* body_bb = llvm::BasicBlock::Create(*m_d->llvm_ctx, "", func);
@@ -387,6 +533,7 @@ PCodeGenLLVM::visit_while_stmt(const PAstWhileStmt* p_node)
   //  4 |     % body...
   //  5 | }
 
+  m_d->emit_location(p_node->get_source_range().begin);
   auto* func = m_d->get_function();
 
   auto* entry_bb = llvm::BasicBlock::Create(*m_d->llvm_ctx, "", func);
@@ -427,6 +574,7 @@ PCodeGenLLVM::visit_if_stmt(const PAstIfStmt* p_node)
   //  8 | continue_bb:
   //  9 |     ; ...
 
+  m_d->emit_location(p_node->get_source_range().begin);
   auto* func = m_d->get_function();
 
   auto* then_bb = llvm::BasicBlock::Create(*m_d->llvm_ctx, "", func);
@@ -458,13 +606,15 @@ PCodeGenLLVM::visit_if_stmt(const PAstIfStmt* p_node)
 void*
 PCodeGenLLVM::visit_bool_literal(const PAstBoolLiteral* p_node)
 {
+  m_d->emit_location(p_node->get_source_range().begin);
   return llvm::ConstantInt::get(llvm::IntegerType::getInt1Ty(*m_d->llvm_ctx), p_node->value);
 }
 
 void*
 PCodeGenLLVM::visit_int_literal(const PAstIntLiteral* p_node)
 {
-  auto* llvm_type = m_d->convert_type(p_node->get_type(m_d->ctx));
+  m_d->emit_location(p_node->get_source_range().begin);
+  auto* llvm_type = m_d->to_llvm_ty(p_node->get_type(m_d->ctx));
   const auto value = p_node->value;
   return llvm::ConstantInt::get(llvm_type, value);
 }
@@ -472,7 +622,8 @@ PCodeGenLLVM::visit_int_literal(const PAstIntLiteral* p_node)
 void*
 PCodeGenLLVM::visit_float_literal(const PAstFloatLiteral* p_node)
 {
-  auto* llvm_type = m_d->convert_type(p_node->get_type(m_d->ctx));
+  m_d->emit_location(p_node->get_source_range().begin);
+  auto* llvm_type = m_d->to_llvm_ty(p_node->get_type(m_d->ctx));
   const auto value = p_node->value;
   return llvm::ConstantFP::get(llvm_type, value);
 }
@@ -486,6 +637,7 @@ PCodeGenLLVM::visit_paren_expr(const PAstParenExpr* p_node)
 void*
 PCodeGenLLVM::visit_decl_ref_expr(const PAstDeclRefExpr* p_node)
 {
+  m_d->emit_location(p_node->get_source_range().begin);
   const auto it = m_d->decls.find(p_node->decl);
   assert(it != m_d->decls.end());
   return it->second;
@@ -494,6 +646,7 @@ PCodeGenLLVM::visit_decl_ref_expr(const PAstDeclRefExpr* p_node)
 void*
 PCodeGenLLVM::visit_unary_expr(const PAstUnaryExpr* p_node)
 {
+  m_d->emit_location(p_node->get_source_range().begin);
   auto* value = static_cast<llvm::Value*>(visit(p_node->sub_expr));
   switch (p_node->opcode) {
     case P_UNARY_NEG: {
@@ -501,7 +654,7 @@ PCodeGenLLVM::visit_unary_expr(const PAstUnaryExpr* p_node)
       if (type->is_signed_int_ty()) {
         return m_d->builder->CreateNSWNeg(value);
       } else if (type->is_unsigned_int_ty()) {
-        auto* llvm_type = m_d->convert_type(p_node->get_type(m_d->ctx));
+        auto* llvm_type = m_d->to_llvm_ty(p_node->get_type(m_d->ctx));
         auto* zero = llvm::ConstantInt::get(llvm_type, 0);
         return m_d->builder->CreateSub(zero, value);
       } else if (type->is_float_ty()) {
@@ -516,7 +669,7 @@ PCodeGenLLVM::visit_unary_expr(const PAstUnaryExpr* p_node)
       return m_d->builder->CreateNot(value);
 
     case P_UNARY_DEREF: {
-      auto* llvm_type = m_d->convert_type(p_node->get_type(m_d->ctx));
+      auto* llvm_type = m_d->to_llvm_ty(p_node->get_type(m_d->ctx));
       return m_d->builder->CreateLoad(llvm_type, value);
     }
 
@@ -676,6 +829,7 @@ PCodeGenLLVM::emit_trivial_bin_op(PType* p_type, void* p_llvm_lhs, void* p_llvm_
 void*
 PCodeGenLLVM::visit_binary_expr(const PAstBinaryExpr* p_node)
 {
+  m_d->emit_location(p_node->get_source_range().begin);
   const auto opcode = p_node->opcode;
 
   if (opcode == P_BINARY_LOG_AND || opcode == P_BINARY_LOG_OR)
@@ -688,7 +842,7 @@ PCodeGenLLVM::visit_binary_expr(const PAstBinaryExpr* p_node)
       return m_d->builder->CreateStore(rhs, lhs);
     } else {
       auto* lhs_type = p_node->lhs->get_type(m_d->ctx);
-      auto* type = m_d->convert_type(lhs_type);
+      auto* type = m_d->to_llvm_ty(lhs_type);
       auto* lhs_value = m_d->builder->CreateLoad(type, lhs);
 
       auto* result = static_cast<llvm::Value*>(emit_trivial_bin_op(lhs_type, lhs_value, rhs, opcode));
@@ -703,7 +857,8 @@ PCodeGenLLVM::visit_binary_expr(const PAstBinaryExpr* p_node)
 void*
 PCodeGenLLVM::visit_call_expr(const PAstCallExpr* p_node)
 {
-  auto* callee_type = m_d->convert_type(p_node->callee->get_type(m_d->ctx));
+  m_d->emit_location(p_node->get_source_range().begin);
+  auto* callee_type = m_d->to_llvm_ty(p_node->callee->get_type(m_d->ctx));
   assert(callee_type->isFunctionTy());
   auto* callee = static_cast<llvm::Value*>(visit(p_node->callee));
 
@@ -718,9 +873,10 @@ PCodeGenLLVM::visit_call_expr(const PAstCallExpr* p_node)
 void*
 PCodeGenLLVM::visit_cast_expr(const PAstCastExpr* p_node)
 {
+  m_d->emit_location(p_node->get_source_range().begin);
   auto* source_ty = p_node->sub_expr->get_type(m_d->ctx);
   auto* sub_expr = static_cast<llvm::Value*>(visit(p_node->sub_expr));
-  auto* llvm_target_ty = m_d->convert_type(p_node->target_ty);
+  auto* llvm_target_ty = m_d->to_llvm_ty(p_node->target_ty);
   switch (p_node->cast_kind) {
     case P_CAST_NOOP:
       return sub_expr;
@@ -771,7 +927,8 @@ PCodeGenLLVM::visit_cast_expr(const PAstCastExpr* p_node)
 void*
 PCodeGenLLVM::visit_l2rvalue_expr(const PAstL2RValueExpr* p_node)
 {
-  auto* type = m_d->convert_type(p_node->get_type(m_d->ctx));
+  m_d->emit_location(p_node->get_source_range().begin);
+  auto* type = m_d->to_llvm_ty(p_node->get_type(m_d->ctx));
   auto* ptr = static_cast<llvm::Value*>(visit(p_node->sub_expr));
   return m_d->builder->CreateLoad(type, ptr);
 }
@@ -779,31 +936,58 @@ PCodeGenLLVM::visit_l2rvalue_expr(const PAstL2RValueExpr* p_node)
 void*
 PCodeGenLLVM::visit_func_decl(const PFunctionDecl* p_node)
 {
-  auto func_name = std::string(p_node->name->spelling, p_node->name->spelling + p_node->name->spelling_len);
-
-  auto* func_ty = m_d->convert_type(p_node->type);
+  auto* func_ty = m_d->to_llvm_ty(p_node->type);
   assert(func_ty->isFunctionTy());
-  auto func_callee = m_d->llvm_module->getOrInsertFunction(func_name, static_cast<llvm::FunctionType*>(func_ty));
+  auto func_callee =
+    m_d->llvm_module->getOrInsertFunction(to_str_ref(p_node->name), static_cast<llvm::FunctionType*>(func_ty));
 
   auto* func = llvm::cast<llvm::Function>(func_callee.getCallee());
   assert(func != nullptr);
 
   m_d->decls.insert({ p_node, func });
 
+  // Generate debug info for the function
+  auto* debug_subprogram =
+    m_d->debug_builder->createFunction(m_d->debug_file,
+                                       to_str_ref(p_node->name),
+                                       "",
+                                       m_d->debug_file,
+                                       0,
+                                       static_cast<llvm::DISubroutineType*>(m_d->to_debug_ty(p_node->type)),
+                                       0,
+                                       llvm::DINode::FlagPrototyped,
+                                       llvm::DISubprogram::SPFlagDefinition);
+  func->setSubprogram(debug_subprogram);
+
   if (p_node->body != nullptr) {
+    m_d->lexical_blocks.push(debug_subprogram);
+    m_d->reset_location();
+
     auto* entry_bb = llvm::BasicBlock::Create(*m_d->llvm_ctx, "", func);
     m_d->builder->SetInsertPoint(entry_bb);
 
     // Allocate all parameters on the stack so the user can modify them.
     for (size_t i = 0; i < p_node->param_count; ++i) {
-      auto* param_ty = m_d->convert_type(p_node->params[i]->type);
+      auto* param = p_node->params[i];
+      auto* param_ty = m_d->to_llvm_ty(param->type);
       auto* param_addr = m_d->builder->CreateAlloca(param_ty);
       m_d->builder->CreateStore(func->getArg(i), param_addr);
-      m_d->decls.insert({ p_node->params[i], param_addr });
+      m_d->decls.insert({ param, param_addr });
+
+      // Generate debug info for the parameter
+      auto* param_info = m_d->debug_builder->createParameterVariable(
+        debug_subprogram, to_str_ref(param->name), i, nullptr, 0, m_d->to_debug_ty(param->type));
+      m_d->debug_builder->insertDeclare(param_addr,
+                                        param_info,
+                                        m_d->debug_builder->createExpression(),
+                                        m_d->get_di_location(param->source_range.begin),
+                                        m_d->builder->GetInsertBlock());
     }
 
+    m_d->emit_location(p_node->body->get_source_range().begin);
     visit(p_node->body);
     m_d->finish_func_codegen();
+    m_d->lexical_blocks.pop();
   }
 
   return nullptr;
@@ -812,10 +996,17 @@ PCodeGenLLVM::visit_func_decl(const PFunctionDecl* p_node)
 void*
 PCodeGenLLVM::visit_var_decl(const PVarDecl* p_node)
 {
-  auto* type = m_d->convert_type(p_node->type);
+  auto* type = m_d->to_llvm_ty(p_node->type);
   auto* ptr = m_d->insert_alloc_in_entry_bb(type);
 
   m_d->decls.insert({ p_node, ptr });
+
+  auto* var_info = m_d->emit_var_info(p_node);
+  m_d->debug_builder->insertDeclare(ptr,
+                                    var_info,
+                                    m_d->debug_builder->createExpression(),
+                                    m_d->get_di_location(p_node->source_range.begin),
+                                    m_d->builder->GetInsertBlock());
 
   if (p_node->init_expr != nullptr) {
     auto* init_value = static_cast<llvm::Value*>(visit(p_node->init_expr));

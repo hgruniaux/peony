@@ -25,8 +25,7 @@ compile_to(PSourceFile* p_source_file, const char* p_output_filename)
 
   PLexer lexer;
   lexer.identifier_table = &identifier_table;
-  lexer_init(&lexer);
-  lexer_set_source_file(&lexer, p_source_file);
+  lexer.set_source_file(p_source_file);
 
   PContext& context = PContext::get_global();
   PParser parser(context, lexer);
@@ -39,12 +38,11 @@ compile_to(PSourceFile* p_source_file, const char* p_output_filename)
     codegen.codegen(ast->as<PAstTranslationUnit>());
     fs::create_directory("out");
     codegen.write_llvm_ir("out/" + p_source_file->get_filename() + ".ir");
-    codegen.optimize();
+    //codegen.optimize();
     codegen.write_llvm_ir("out/" + p_source_file->get_filename() + ".opt.ir");
     codegen.write_object_file("out/" + p_source_file->get_filename() + ".o");
   }
 
-  lexer_destroy(&lexer);
   p_identifier_table_destroy(&identifier_table);
   return g_diag_context.diagnostic_count[P_DIAG_ERROR] != 0;
 }

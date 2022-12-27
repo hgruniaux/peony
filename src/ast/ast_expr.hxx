@@ -38,10 +38,12 @@ protected:
 class PAstBoolLiteral : public PAstExpr
 {
 public:
+  static constexpr auto STMT_KIND = P_SK_BOOL_LITERAL;
+
   bool value;
 
   explicit PAstBoolLiteral(bool p_value, PSourceRange p_src_range = {})
-    : PAstExpr(P_AST_NODE_BOOL_LITERAL, p_src_range)
+    : PAstExpr(STMT_KIND, p_src_range)
     , value(p_value)
   {
   }
@@ -53,11 +55,13 @@ public:
 class PAstIntLiteral : public PAstExpr
 {
 public:
+  static constexpr auto STMT_KIND = P_SK_INT_LITERAL;
+
   PType* type;
   uintmax_t value;
 
   PAstIntLiteral(uintmax_t p_value, PType* p_type, PSourceRange p_src_range = {})
-    : PAstExpr(P_AST_NODE_INT_LITERAL, p_src_range)
+    : PAstExpr(STMT_KIND, p_src_range)
     , value(p_value)
   {
     type = p_type;
@@ -70,11 +74,13 @@ public:
 class PAstFloatLiteral : public PAstExpr
 {
 public:
+  static constexpr auto STMT_KIND = P_SK_FLOAT_LITERAL;
+
   PType* type;
   double value;
 
   PAstFloatLiteral(double p_value, PType* p_type, PSourceRange p_src_range = {})
-    : PAstExpr(P_AST_NODE_FLOAT_LITERAL, p_src_range)
+    : PAstExpr(STMT_KIND, p_src_range)
     , value(p_value)
   {
     type = p_type;
@@ -87,10 +93,12 @@ public:
 class PAstParenExpr : public PAstExpr
 {
 public:
+  static constexpr auto STMT_KIND = P_SK_PAREN_EXPR;
+
   PAstExpr* sub_expr;
 
   PAstParenExpr(PAstExpr* p_sub_expr, PSourceRange p_src_range = {})
-    : PAstExpr(P_AST_NODE_PAREN_EXPR, p_src_range)
+    : PAstExpr(STMT_KIND, p_src_range)
     , sub_expr(p_sub_expr)
   {
     assert(p_sub_expr != nullptr);
@@ -105,10 +113,12 @@ public:
 class PAstDeclRefExpr : public PAstExpr
 {
 public:
+  static constexpr auto STMT_KIND = P_SK_DECL_REF_EXPR;
+
   PDecl* decl;
 
   PAstDeclRefExpr(PDecl* p_decl, PSourceRange p_src_range = {})
-    : PAstExpr(P_AST_NODE_DECL_REF_EXPR, p_src_range)
+    : PAstExpr(STMT_KIND, p_src_range)
     , decl(p_decl)
   {
     assert(p_decl != nullptr);
@@ -134,12 +144,14 @@ const char* p_get_spelling(PAstUnaryOp p_opcode);
 class PAstUnaryExpr : public PAstExpr
 {
 public:
+  static constexpr auto STMT_KIND = P_SK_UNARY_EXPR;
+
   PType* type;
   PAstExpr* sub_expr;
   PAstUnaryOp opcode;
 
   PAstUnaryExpr(PAstExpr* p_sub_expr, PType* p_type, PAstUnaryOp p_opcode, PSourceRange p_src_range = {})
-    : PAstExpr(P_AST_NODE_UNARY_EXPR, p_src_range)
+    : PAstExpr(STMT_KIND, p_src_range)
     , type(p_type)
     , sub_expr(p_sub_expr)
     , opcode(p_opcode)
@@ -177,13 +189,15 @@ const char* p_get_spelling(PAstBinaryOp p_opcode);
 class PAstBinaryExpr : public PAstExpr
 {
 public:
+  static constexpr auto STMT_KIND = P_SK_BINARY_EXPR;
+
   PType* type;
   PAstExpr* lhs;
   PAstExpr* rhs;
   PAstBinaryOp opcode;
 
   PAstBinaryExpr(PAstExpr* p_lhs, PAstExpr* p_rhs, PType* p_type, PAstBinaryOp p_opcode, PSourceRange p_src_range = {})
-    : PAstExpr(P_AST_NODE_BINARY_EXPR, p_src_range)
+    : PAstExpr(STMT_KIND, p_src_range)
     , type(p_type)
     , lhs(p_lhs)
     , rhs(p_rhs)
@@ -209,6 +223,8 @@ class PStructFieldDecl;
 class PAstMemberExpr : public PAstExpr
 {
 public:
+  static constexpr auto STMT_KIND = P_SK_PAREN_EXPR;
+
   PAstExpr* base_expr;
   PStructFieldDecl* member;
 
@@ -219,12 +235,14 @@ public:
 class PAstCallExpr : public PAstExpr
 {
 public:
+  static constexpr auto STMT_KIND = P_SK_CALL_EXPR;
+
   PAstExpr* callee;
   PAstExpr** args;
   size_t arg_count;
 
   PAstCallExpr(PAstExpr* p_callee, PAstExpr** p_args, size_t p_arg_count, PSourceRange p_src_range = {})
-    : PAstExpr(P_AST_NODE_CALL_EXPR, p_src_range)
+    : PAstExpr(STMT_KIND, p_src_range)
     , callee(p_callee)
     , args(p_args)
     , arg_count(p_arg_count)
@@ -252,12 +270,14 @@ enum PAstCastKind
 class PAstCastExpr : public PAstExpr
 {
 public:
+  static constexpr auto STMT_KIND = P_SK_CAST_EXPR;
+
   PType* target_ty;
   PAstExpr* sub_expr;
   PAstCastKind cast_kind;
 
   PAstCastExpr(PAstExpr* p_sub_expr, PType* p_target_type, PAstCastKind p_kind, PSourceRange p_src_range)
-    : PAstExpr(P_AST_NODE_CAST_EXPR, p_src_range)
+    : PAstExpr(STMT_KIND, p_src_range)
     , target_ty(p_target_type)
     , sub_expr(p_sub_expr)
     , cast_kind(p_kind)
@@ -274,10 +294,12 @@ public:
 class PAstL2RValueExpr : public PAstExpr
 {
 public:
+  static constexpr auto STMT_KIND = P_SK_L2RVALUE_EXPR;
+
   PAstExpr* sub_expr;
 
   explicit PAstL2RValueExpr(PAstExpr* p_sub_expr)
-    : PAstExpr(P_AST_NODE_L2RVALUE_EXPR, p_sub_expr->get_source_range())
+    : PAstExpr(STMT_KIND, p_sub_expr->get_source_range())
     , sub_expr(p_sub_expr)
   {
   }

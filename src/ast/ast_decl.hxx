@@ -29,13 +29,10 @@ class PDecl
 {
 public:
   PDeclKind kind;
+  PSourceRange source_range;
   // Some declarations may be unnamed, in that case this is nullptr.
   PIdentifierInfo* name;
   PType* type;
-  // Private field used by the LLVM codegen backend to store the address
-  // of the declaration instance (for variables and instances).
-  // This is a LLVMValueRef (e.g. returned by LLVMBuildAlloca()).
-  void* _llvm_address;
   // Is there at least one reference to this type?
   bool used;
 
@@ -55,11 +52,11 @@ public:
   void dump(PContext& p_ctx);
 
 protected:
-  PDecl(PDeclKind p_kind, PType* p_type, PIdentifierInfo* p_name)
+  PDecl(PDeclKind p_kind, PType* p_type, PIdentifierInfo* p_name, PSourceRange p_src_range)
     : kind(p_kind)
+    , source_range(p_src_range)
     , type(p_type)
     , name(p_name)
-    , _llvm_address(nullptr)
     , used(false)
   {
   }
@@ -74,7 +71,7 @@ public:
   PAstExpr* init_expr;
 
   PVarDecl(PType* p_type, PIdentifierInfo* p_name, PAstExpr* p_init_expr = nullptr, PSourceRange p_src_range = {})
-    : PDecl(DECL_KIND, p_type, p_name)
+    : PDecl(DECL_KIND, p_type, p_name, p_src_range)
     , init_expr(p_init_expr)
   {
   }
@@ -87,7 +84,7 @@ public:
   static constexpr auto DECL_KIND = P_DK_PARAM;
 
   PParamDecl(PType* p_type, PIdentifierInfo* p_name, PSourceRange p_src_range = {})
-    : PDecl(DECL_KIND, p_type, p_name)
+    : PDecl(DECL_KIND, p_type, p_name, p_src_range)
   {
   }
 };
@@ -108,7 +105,7 @@ public:
                 size_t p_param_count,
                 PAst* p_body = nullptr,
                 PSourceRange p_src_range = {})
-    : PDecl(DECL_KIND, p_type, p_name)
+    : PDecl(DECL_KIND, p_type, p_name, p_src_range)
     , body(nullptr)
     , params(p_params)
     , param_count(p_param_count)

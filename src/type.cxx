@@ -30,12 +30,6 @@ p_type_get_bitwidth(PType* p_type)
   }
 }
 
-PType*
-p_type_get_bool(void)
-{
-  return PContext::get_global().get_bool_ty();
-}
-
 bool
 PType::is_signed_int_ty() const
 {

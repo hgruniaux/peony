@@ -61,45 +61,45 @@ public:
     assert(p_node != nullptr);
     switch (p_node->get_kind()) {
         // Statements
-      case P_AST_NODE_TRANSLATION_UNIT:
+      case P_SK_TRANSLATION_UNIT:
         return DISPATCH(PAstTranslationUnit, visit_translation_unit);
-      case P_AST_NODE_COMPOUND_STMT:
+      case P_SK_COMPOUND_STMT:
         return DISPATCH(PAstCompoundStmt, visit_compound_stmt);
-      case P_AST_NODE_LET_STMT:
+      case P_SK_LET_STMT:
         return DISPATCH(PAstLetStmt, visit_let_stmt);
-      case P_AST_NODE_BREAK_STMT:
+      case P_SK_BREAK_STMT:
         return DISPATCH(PAstBreakStmt, visit_break_stmt);
-      case P_AST_NODE_CONTINUE_STMT:
+      case P_SK_CONTINUE_STMT:
         return DISPATCH(PAstContinueStmt, visit_continue_stmt);
-      case P_AST_NODE_RETURN_STMT:
+      case P_SK_RETURN_STMT:
         return DISPATCH(PAstReturnStmt, visit_return_stmt);
-      case P_AST_NODE_LOOP_STMT:
+      case P_SK_LOOP_STMT:
         return DISPATCH(PAstLoopStmt, visit_loop_stmt);
-      case P_AST_NODE_WHILE_STMT:
+      case P_SK_WHILE_STMT:
         return DISPATCH(PAstWhileStmt, visit_while_stmt);
-      case P_AST_NODE_IF_STMT:
+      case P_SK_IF_STMT:
         return DISPATCH(PAstIfStmt, visit_if_stmt);
 
       // Expressions
-      case P_AST_NODE_BOOL_LITERAL:
+      case P_SK_BOOL_LITERAL:
         return DISPATCH(PAstBoolLiteral, visit_bool_literal);
-      case P_AST_NODE_INT_LITERAL:
+      case P_SK_INT_LITERAL:
         return DISPATCH(PAstIntLiteral, visit_int_literal);
-      case P_AST_NODE_FLOAT_LITERAL:
+      case P_SK_FLOAT_LITERAL:
         return DISPATCH(PAstFloatLiteral, visit_float_literal);
-      case P_AST_NODE_PAREN_EXPR:
+      case P_SK_PAREN_EXPR:
         return DISPATCH(PAstParenExpr, visit_paren_expr);
-      case P_AST_NODE_DECL_REF_EXPR:
+      case P_SK_DECL_REF_EXPR:
         return DISPATCH(PAstDeclRefExpr, visit_decl_ref_expr);
-      case P_AST_NODE_UNARY_EXPR:
+      case P_SK_UNARY_EXPR:
         return DISPATCH(PAstUnaryExpr, visit_unary_expr);
-      case P_AST_NODE_BINARY_EXPR:
+      case P_SK_BINARY_EXPR:
         return DISPATCH(PAstBinaryExpr, visit_binary_expr);
-      case P_AST_NODE_CALL_EXPR:
+      case P_SK_CALL_EXPR:
         return DISPATCH(PAstCallExpr, visit_call_expr);
-      case P_AST_NODE_CAST_EXPR:
+      case P_SK_CAST_EXPR:
         return DISPATCH(PAstCastExpr, visit_cast_expr);
-      case P_AST_NODE_L2RVALUE_EXPR:
+      case P_SK_L2RVALUE_EXPR:
         return DISPATCH(PAstL2RValueExpr, visit_l2rvalue_expr);
 
       default:

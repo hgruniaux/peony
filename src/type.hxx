@@ -1,4 +1,5 @@
-#pragma once
+#ifndef PEONY_TYPE_HXX
+#define PEONY_TYPE_HXX
 
 #include <hedley.h>
 
@@ -152,5 +153,4 @@ private:
 int
 p_type_get_bitwidth(PType* p_type);
 
-PType*
-p_type_get_bool();
+#endif // PEONY_TYPE_HXX
