@@ -20,7 +20,7 @@ PAstPrinter::visit_translation_unit(const PAstTranslationUnit* p_node)
   std::fputs("\n", m_output);
 
   ++m_indent;
-  visit_iter(p_node->decls, p_node->decls + p_node->decl_count);
+  visit(p_node->decls);
   --m_indent;
 }
 
@@ -31,7 +31,7 @@ PAstPrinter::visit_compound_stmt(const PAstCompoundStmt* p_node)
   std::fputs("\n", m_output);
 
   ++m_indent;
-  visit_iter(p_node->stmts, p_node->stmts + p_node->stmt_count);
+  visit(p_node->stmts);
   --m_indent;
 }
 
@@ -42,7 +42,7 @@ PAstPrinter::visit_let_stmt(const PAstLetStmt* p_node)
   std::fputs("\n", m_output);
 
   ++m_indent;
-  visit_iter(p_node->var_decls, p_node->var_decls + p_node->var_decl_count);
+  visit(p_node->var_decls);
   --m_indent;
 }
 
@@ -186,7 +186,7 @@ PAstPrinter::visit_call_expr(const PAstCallExpr* p_node)
 
   ++m_indent;
   visit(p_node->callee);
-  visit_iter(p_node->args, p_node->args + p_node->arg_count);
+  visit(p_node->args);
   --m_indent;
 }
 
@@ -219,7 +219,7 @@ PAstPrinter::visit_func_decl(const PFunctionDecl* p_node)
   print_type(p_node->type);
 
   print_decl_body([this, p_node]() {
-    visit_iter(p_node->params, p_node->params + p_node->param_count);
+    visit(p_node->params);
     visit(p_node->body);
   });
 }

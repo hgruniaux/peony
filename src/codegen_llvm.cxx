@@ -411,7 +411,7 @@ void*
 PCodeGenLLVM::visit_translation_unit(const PAstTranslationUnit* p_node)
 {
   m_d->emit_location(p_node->get_source_range().begin);
-  visit_iter(p_node->decls, p_node->decls + p_node->decl_count);
+  visit(p_node->decls);
   return nullptr;
 }
 
@@ -420,10 +420,11 @@ PCodeGenLLVM::visit_compound_stmt(const PAstCompoundStmt* p_node)
 {
   uint32_t lineno, colno;
   p_source_location_get_lineno_and_colno(m_d->current_file, p_node->get_source_range().begin, &lineno, &colno);
-  m_d->lexical_blocks.push(m_d->debug_builder->createLexicalBlock(m_d->get_current_di_scope(), m_d->debug_file, lineno, colno));
+  m_d->lexical_blocks.push(
+    m_d->debug_builder->createLexicalBlock(m_d->get_current_di_scope(), m_d->debug_file, lineno, colno));
 
   m_d->emit_location(p_node->get_source_range().begin);
-  visit_iter(p_node->stmts, p_node->stmts + p_node->stmt_count);
+  visit(p_node->stmts);
 
   m_d->lexical_blocks.pop();
   return nullptr;
@@ -433,7 +434,7 @@ void*
 PCodeGenLLVM::visit_let_stmt(const PAstLetStmt* p_node)
 {
   m_d->emit_location(p_node->get_source_range().begin);
-  visit_iter(p_node->var_decls, p_node->var_decls + p_node->var_decl_count);
+  visit(p_node->var_decls);
   return nullptr;
 }
 
@@ -862,8 +863,8 @@ PCodeGenLLVM::visit_call_expr(const PAstCallExpr* p_node)
   assert(callee_type->isFunctionTy());
   auto* callee = static_cast<llvm::Value*>(visit(p_node->callee));
 
-  std::vector<llvm::Value*> args(p_node->arg_count);
-  for (size_t i = 0; i < p_node->arg_count; ++i) {
+  std::vector<llvm::Value*> args(p_node->args.size());
+  for (size_t i = 0; i < p_node->args.size(); ++i) {
     args[i] = static_cast<llvm::Value*>(visit(p_node->args[i]));
   }
 
@@ -967,7 +968,7 @@ PCodeGenLLVM::visit_func_decl(const PFunctionDecl* p_node)
     m_d->builder->SetInsertPoint(entry_bb);
 
     // Allocate all parameters on the stack so the user can modify them.
-    for (size_t i = 0; i < p_node->param_count; ++i) {
+    for (size_t i = 0; i < p_node->params.size(); ++i) {
       auto* param = p_node->params[i];
       auto* param_ty = m_d->to_llvm_ty(param->type);
       auto* param_addr = m_d->builder->CreateAlloca(param_ty);

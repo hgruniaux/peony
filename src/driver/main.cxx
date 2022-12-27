@@ -30,7 +30,7 @@ compile_to(PSourceFile* p_source_file, const char* p_output_filename)
   PContext& context = PContext::get_global();
   PParser parser(context, lexer);
 
-  PAst* ast = p_parse(&parser);
+  PAstTranslationUnit* ast = parser.parse();
   ast->dump(context);
 
   if (g_diag_context.diagnostic_count[P_DIAG_ERROR] == 0 && !g_options.opt_syntax_only) {
@@ -38,7 +38,7 @@ compile_to(PSourceFile* p_source_file, const char* p_output_filename)
     codegen.codegen(ast->as<PAstTranslationUnit>());
     fs::create_directory("out");
     codegen.write_llvm_ir("out/" + p_source_file->get_filename() + ".ir");
-    //codegen.optimize();
+    // codegen.optimize();
     codegen.write_llvm_ir("out/" + p_source_file->get_filename() + ".opt.ir");
     codegen.write_object_file("out/" + p_source_file->get_filename() + ".o");
   }

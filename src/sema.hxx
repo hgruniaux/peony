@@ -46,8 +46,7 @@ public:
 
   [[nodiscard]] PAstParenExpr* act_on_paren_expr(PAstExpr* p_sub_expr, PSourceRange p_src_range = {});
 
-  [[nodiscard]] PAstLetStmt* act_on_let_stmt(PVarDecl** p_decls, size_t p_decl_count, PSourceRange p_src_range = {});
-  [[nodiscard]] PAstLetStmt* act_on_let_stmt(const std::vector<PVarDecl*>& p_decls, PSourceRange p_src_range = {});
+  [[nodiscard]] PAstLetStmt* act_on_let_stmt(PArrayView<PVarDecl*> p_decls, PSourceRange p_src_range = {});
 
   [[nodiscard]] PAstBreakStmt* act_on_break_stmt(PSourceRange p_src_range = {}, PSourceRange p_break_key_range = {});
   [[nodiscard]] PAstContinueStmt* act_on_continue_stmt(PSourceRange p_src_range = {},
@@ -93,17 +92,11 @@ public:
   /// Checks the arguments used in a call expression to a callee of the given type.
   /// The param func_decl is optional and it is used for better diagnostics.
   void check_call_args(PFunctionType* p_callee_ty,
-                       PAstExpr** p_args,
-                       size_t p_arg_count,
+                       PArrayView<PAstExpr*> p_args,
                        PFunctionDecl* p_func_decl = nullptr,
                        PSourceLocation p_lparen_loc = {});
   [[nodiscard]] PAstCallExpr* act_on_call_expr(PAstExpr* p_callee,
-                                               PAstExpr** p_args,
-                                               size_t p_arg_count,
-                                               PSourceRange p_src_range = {},
-                                               PSourceLocation p_lparen_loc = {});
-  [[nodiscard]] PAstCallExpr* act_on_call_expr(PAstExpr* p_callee,
-                                               const std::vector<PAstExpr*>& p_args,
+                                               PArrayView<PAstExpr*> p_args,
                                                PSourceRange p_src_range = {},
                                                PSourceLocation p_lparen_loc = {});
 
@@ -126,13 +119,7 @@ public:
   void end_func_decl_analysis();
   [[nodiscard]] PFunctionDecl* act_on_func_decl(PIdentifierInfo* p_name,
                                                 PType* p_ret_ty,
-                                                PParamDecl** p_params,
-                                                size_t p_param_count,
-                                                PSourceRange p_name_range = {},
-                                                PSourceLocation p_key_fn_end_loc = {});
-  [[nodiscard]] PFunctionDecl* act_on_func_decl(PIdentifierInfo* p_name,
-                                                PType* p_ret_ty,
-                                                const std::vector<PParamDecl*>& p_params,
+                                                PArrayView<PParamDecl*> p_params,
                                                 PSourceRange p_name_range = {},
                                                 PSourceLocation p_key_fn_end_loc = {});
 
@@ -148,6 +135,14 @@ private:
   /// For `((foo))` it will return the declaration referenced by `foo`.
   /// If we can not find such a declaration, null is returned.
   PDecl* try_get_ref_decl(PAstExpr* p_expr);
+
+  template<class T>
+  PArrayView<T> make_array_view_copy(PArrayView<T> p_other)
+  {
+    auto* data = m_context.alloc_object<T>(p_other.size());
+    std::copy(p_other.begin(), p_other.end(), data);
+    return { data, p_other.size() };
+  }
 
   PScope* find_nearest_scope_with_flag(PScopeFlags p_flag)
   {

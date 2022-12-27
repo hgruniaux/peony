@@ -5,6 +5,7 @@
 #include "identifier_table.hxx"
 #include "type.hxx"
 #include "utils/source_location.hxx"
+#include "utils/array_view.hxx"
 
 #include <cassert>
 
@@ -81,13 +82,11 @@ public:
   static constexpr auto STMT_KIND = P_SK_TRANSLATION_UNIT;
 
   PSourceFile* p_src_file;
-  PDecl** decls;
-  size_t decl_count;
+  PArrayView<PDecl*> decls;
 
-  PAstTranslationUnit(PDecl** p_decls, size_t decl_count, PSourceRange p_src_range = {})
+  PAstTranslationUnit(PArrayView<PDecl*> p_decls, PSourceRange p_src_range = {})
     : PAst(STMT_KIND, p_src_range)
     , decls(p_decls)
-    , decl_count(decl_count)
   {
   }
 };
@@ -98,13 +97,11 @@ class PAstCompoundStmt : public PAst
 public:
   static constexpr auto STMT_KIND = P_SK_COMPOUND_STMT;
 
-  PAst** stmts;
-  size_t stmt_count;
+  PArrayView<PAst*> stmts;
 
-  PAstCompoundStmt(PAst** p_stmts, size_t p_stmt_count, PSourceRange p_src_range = {})
+  PAstCompoundStmt(PArrayView<PAst*> p_stmts, PSourceRange p_src_range = {})
     : PAst(STMT_KIND, p_src_range)
     , stmts(p_stmts)
-    , stmt_count(p_stmt_count)
   {
   }
 };
@@ -115,13 +112,11 @@ class PAstLetStmt : public PAst
 public:
   static constexpr auto STMT_KIND = P_SK_LET_STMT;
 
-  PVarDecl** var_decls;
-  size_t var_decl_count;
+  PArrayView<PVarDecl*> var_decls;
 
-  explicit PAstLetStmt(PVarDecl** p_var_decls, size_t p_var_decl_count, PSourceRange p_src_range = {})
+  explicit PAstLetStmt(PArrayView<PVarDecl*> p_var_decls, PSourceRange p_src_range = {})
     : PAst(STMT_KIND, p_src_range)
     , var_decls(p_var_decls)
-    , var_decl_count(p_var_decl_count)
   {
   }
 };

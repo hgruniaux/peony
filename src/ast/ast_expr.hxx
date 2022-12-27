@@ -238,14 +238,12 @@ public:
   static constexpr auto STMT_KIND = P_SK_CALL_EXPR;
 
   PAstExpr* callee;
-  PAstExpr** args;
-  size_t arg_count;
+  PArrayView<PAstExpr*> args;
 
-  PAstCallExpr(PAstExpr* p_callee, PAstExpr** p_args, size_t p_arg_count, PSourceRange p_src_range = {})
+  PAstCallExpr(PAstExpr* p_callee, PArrayView<PAstExpr*> p_args, PSourceRange p_src_range = {})
     : PAstExpr(STMT_KIND, p_src_range)
     , callee(p_callee)
     , args(p_args)
-    , arg_count(p_arg_count)
   {
   }
 

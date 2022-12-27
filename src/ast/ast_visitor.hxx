@@ -124,7 +124,8 @@ public:
     }
   }
 
-  RetTy visit(Ptr<PType> p_node, Args&&... p_args) {
+  RetTy visit(Ptr<PType> p_node, Args&&... p_args)
+  {
     assert(p_node != nullptr);
     switch (p_node->get_kind()) {
       case P_TK_PAREN:
@@ -140,10 +141,8 @@ public:
     }
   }
 
-  /// Helper method that calls visit on each elements of p_nodes and discard its
-  /// return value.
   template<class T>
-  void visit_vector(const std::vector<Ptr<T>>& p_nodes, Args&&... p_args)
+  void visit(PArrayView<T*> p_nodes, Args&&... p_args)
   {
     static_assert(std::is_base_of_v<PDecl, T> || std::is_base_of_v<PAst, T>, "T must inherits from PAst or PDecl");
     for (auto node : p_nodes)

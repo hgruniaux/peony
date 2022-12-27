@@ -189,21 +189,9 @@ are_types_compatible(PType* p_from, PType* p_to)
 }
 
 PAstLetStmt*
-PSema::act_on_let_stmt(PVarDecl** p_decls, size_t p_decl_count, PSourceRange p_src_range)
+PSema::act_on_let_stmt(PArrayView<PVarDecl*> p_decls, PSourceRange p_src_range)
 {
-  assert(p_decls != nullptr && p_decl_count > 0);
-
-  auto* raw_decls = m_context.alloc_object<PVarDecl*>(p_decl_count);
-  std::copy(p_decls, p_decls + p_decl_count, raw_decls);
-
-  auto* node = m_context.new_object<PAstLetStmt>(raw_decls, p_decl_count);
-  return node;
-}
-
-PAstLetStmt*
-PSema::act_on_let_stmt(const std::vector<PVarDecl*>& p_decls, PSourceRange p_src_range)
-{
-  return act_on_let_stmt(const_cast<PVarDecl**>(p_decls.data()), p_decls.size(), p_src_range);
+  return m_context.new_object<PAstLetStmt>(make_array_view_copy(p_decls));
 }
 
 PAstBreakStmt*
@@ -591,15 +579,14 @@ PSema::act_on_binary_expr(PAstExpr* p_lhs,
 
 void
 PSema::check_call_args(PFunctionType* p_callee_ty,
-                       PAstExpr** p_args,
-                       size_t p_arg_count,
+                       PArrayView<PAstExpr*> p_args,
                        PFunctionDecl* p_func_decl,
                        PSourceLocation p_lparen_loc)
 {
   const size_t required_param_count = p_callee_ty->get_param_count();
-  if (p_arg_count != required_param_count) {
+  if (p_args.size() != required_param_count) {
     PDiag* d =
-      diag_at((p_arg_count < required_param_count) ? P_DK_err_too_few_args : P_DK_err_too_many_args, p_lparen_loc);
+      diag_at((p_args.size() < required_param_count) ? P_DK_err_too_few_args : P_DK_err_too_many_args, p_lparen_loc);
     if (p_func_decl != nullptr)
       diag_add_arg_type_with_name_hint(d, p_callee_ty, p_func_decl->name);
     else
@@ -609,7 +596,7 @@ PSema::check_call_args(PFunctionType* p_callee_ty,
   }
 
   PType** args_expected_type = p_callee_ty->get_params();
-  for (size_t i = 0; i < std::min(p_arg_count, required_param_count); ++i) {
+  for (size_t i = 0; i < std::min(p_args.size(), required_param_count); ++i) {
     if (p_args[i] == nullptr)
       continue;
 
@@ -626,12 +613,11 @@ PSema::check_call_args(PFunctionType* p_callee_ty,
 
 PAstCallExpr*
 PSema::act_on_call_expr(PAstExpr* p_callee,
-                        PAstExpr** p_args,
-                        size_t p_arg_count,
+                        PArrayView<PAstExpr*> p_args,
                         PSourceRange p_src_range,
                         PSourceLocation p_lparen_loc)
 {
-  assert(p_callee != nullptr && (p_args != nullptr || p_arg_count == 0));
+  assert(p_callee != nullptr);
 
   auto* callee_decl = try_get_ref_decl(p_callee);
   auto* callee_ty = p_callee->get_type(m_context);
@@ -651,28 +637,15 @@ PSema::act_on_call_expr(PAstExpr* p_callee,
     return nullptr;
   }
 
-  check_call_args(callee_ty->as<PFunctionType>(), p_args, p_arg_count, (PFunctionDecl*)callee_decl, p_lparen_loc);
-
-  auto** raw_args = m_context.alloc_object<PAstExpr*>(p_arg_count);
-  std::copy(p_args, p_args + p_arg_count, raw_args);
-
-  auto* node = m_context.new_object<PAstCallExpr>(p_callee, raw_args, p_arg_count, p_src_range);
+  check_call_args(callee_ty->as<PFunctionType>(), p_args, (PFunctionDecl*)callee_decl, p_lparen_loc);
+  auto* node = m_context.new_object<PAstCallExpr>(p_callee, make_array_view_copy(p_args), p_src_range);
 
   // Convert all lvalue arguments to rvalue
-  for (size_t i = 0; i < p_arg_count; ++i) {
+  for (size_t i = 0; i < p_args.size(); ++i) {
     node->args[i] = convert_to_rvalue(node->args[i]);
   }
 
   return node;
-}
-
-PAstCallExpr*
-PSema::act_on_call_expr(PAstExpr* p_callee,
-                        const std::vector<PAstExpr*>& p_args,
-                        PSourceRange p_src_range,
-                        PSourceLocation p_lparen_loc)
-{
-  return act_on_call_expr(p_callee, const_cast<PAstExpr**>(p_args.data()), p_args.size(), p_src_range, p_lparen_loc);
 }
 
 /* Classify {int} -> p_to_type cast. */
@@ -850,11 +823,11 @@ PSema::begin_func_decl_analysis(PFunctionDecl* p_decl)
 
   // Register parameters on the current scope.
   // All parameters have already been checked.
-  for (size_t i = 0; i < p_decl->param_count; ++i) {
+  for (auto param : p_decl->params) {
     // We are tolerant for nullptrs to try recover errors during parsing.
-    if (p_decl->params[i] != nullptr && p_decl->params[i]->name != nullptr) {
-      PSymbol* symbol = p_scope_add_symbol(m_current_scope, p_decl->params[i]->name);
-      symbol->decl = p_decl->params[i];
+    if (param != nullptr && param->name != nullptr) {
+      PSymbol* symbol = p_scope_add_symbol(m_current_scope, param->name);
+      symbol->decl = param;
     }
   }
 }
@@ -868,8 +841,7 @@ PSema::end_func_decl_analysis()
 PFunctionDecl*
 PSema::act_on_func_decl(PIdentifierInfo* p_name,
                         PType* p_ret_ty,
-                        PParamDecl** p_params,
-                        size_t p_param_count,
+                        PArrayView<PParamDecl*> p_params,
                         PSourceRange p_name_range,
                         PSourceLocation p_key_fn_end_loc)
 {
@@ -891,33 +863,18 @@ PSema::act_on_func_decl(PIdentifierInfo* p_name,
   if (p_ret_ty == nullptr)
     p_ret_ty = m_context.get_void_ty();
 
-  std::vector<PType*> param_tys(p_param_count);
-  for (size_t i = 0; i < p_param_count; ++i) {
+  std::vector<PType*> param_tys(p_params.size());
+  for (size_t i = 0; i < p_params.size(); ++i) {
     param_tys[i] = p_params[i]->type;
   }
 
   auto* func_ty = m_context.get_function_ty(p_ret_ty, param_tys);
-
-  auto* raw_params = m_context.alloc_object<PParamDecl*>(p_param_count);
-  std::copy(p_params, p_params + p_param_count, raw_params);
-
-  auto* decl = m_context.new_object<PFunctionDecl>(func_ty, p_name, raw_params, p_param_count);
+  auto* decl = m_context.new_object<PFunctionDecl>(func_ty, p_name, make_array_view_copy(p_params));
 
   symbol = p_scope_add_symbol(m_current_scope, p_name);
   symbol->decl = decl;
 
   return decl;
-}
-
-PFunctionDecl*
-PSema::act_on_func_decl(PIdentifierInfo* p_name,
-                        PType* p_ret_ty,
-                        const std::vector<PParamDecl*>& p_params,
-                        PSourceRange p_name_range,
-                        PSourceLocation p_key_fn_end_loc)
-{
-  return act_on_func_decl(
-    p_name, p_ret_ty, const_cast<PParamDecl**>(p_params.data()), p_params.size(), p_name_range, p_key_fn_end_loc);
 }
 
 PAstExpr*

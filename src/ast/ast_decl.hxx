@@ -5,6 +5,7 @@
 #include "identifier_table.hxx"
 #include "type.hxx"
 #include "utils/source_location.hxx"
+#include "utils/array_view.hxx"
 
 class PAst;
 class PAstExpr;
@@ -96,19 +97,16 @@ public:
   static constexpr auto DECL_KIND = P_DK_FUNCTION;
 
   PAst* body;
-  PParamDecl** params;
-  size_t param_count;
+  PArrayView<PParamDecl*> params;
 
   PFunctionDecl(PType* p_type,
                 PIdentifierInfo* p_name,
-                PParamDecl** p_params,
-                size_t p_param_count,
+                PArrayView<PParamDecl*> p_params,
                 PAst* p_body = nullptr,
                 PSourceRange p_src_range = {})
     : PDecl(DECL_KIND, p_type, p_name, p_src_range)
     , body(nullptr)
     , params(p_params)
-    , param_count(p_param_count)
   {
   }
 };
@@ -133,8 +131,7 @@ class PStructDecl : public PDecl
 public:
   static constexpr auto DECL_KIND = P_DK_STRUCT;
 
-  size_t field_count;
-  PStructFieldDecl* fields[1]; // tail-allocated
+  PArrayView<PStructFieldDecl*> fields;
 };
 
 #endif // PEONY_AST_DECL_HXX

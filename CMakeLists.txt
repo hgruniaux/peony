@@ -50,7 +50,7 @@ add_library(peony_lib STATIC
     "src/options.cxx"
     "src/literal_parser.hxx"
     "src/literal_parser.cxx"
-        src/context.hxx src/context.cxx src/ast/ast_visitor.hxx src/ast/ast_printer.cxx src/ast/ast_printer.hxx src/codegen_llvm.cxx src/codegen_llvm.hxx src/ast/ast_expr.hxx src/ast/ast_stmt.hxx src/ast/ast_decl.hxx src/ast/ast_expr.cxx src/ast/ast_decl.cxx src/ast/ast_stmt.cxx)
+        src/context.hxx src/context.cxx src/ast/ast_visitor.hxx src/ast/ast_printer.cxx src/ast/ast_printer.hxx src/codegen_llvm.cxx src/codegen_llvm.hxx src/ast/ast_expr.hxx src/ast/ast_stmt.hxx src/ast/ast_decl.hxx src/ast/ast_expr.cxx src/ast/ast_decl.cxx src/ast/ast_stmt.cxx src/utils/array_view.hxx)
 
 target_compile_options(peony_lib PUBLIC -fsanitize=address,undefined)
 target_link_options(peony_lib PUBLIC -fsanitize=address,undefined)

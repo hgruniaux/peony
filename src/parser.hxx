@@ -9,25 +9,17 @@
 class PParser
 {
 public:
-  PContext& context;
-  // The lexer to use by the parser to get the tokens.
-  PLexer& lexer;
-  // The token actually considered by the parser.
-  PToken m_token;
-  // The source location at end of the previous lookahead. At the first token,
-  // this is set to the start of file.
-  PSourceLocation prev_lookahead_end_loc;
-  PSema m_sema;
-
   PParser(PContext& p_context, PLexer& p_lexer);
   ~PParser();
 
   [[nodiscard]] bool lookahead(PTokenKind p_kind) const { return m_token.kind == p_kind; }
 
+  PAstTranslationUnit* parse();
   PType* parse_type();
   PAst* parse_stmt();
   PAstExpr* parse_expr();
 
+private:
   PParamDecl* parse_param_decl();
   std::vector<PParamDecl*> parse_param_list();
   PVarDecl* parse_var_decl();
@@ -56,6 +48,10 @@ public:
   PAstExpr* parse_cast_expr();
   PAstExpr* parse_binary_expr(PAstExpr* p_lhs, int p_expr_prec);
 
+  PDecl* parse_func_decl();
+  PDecl* parse_top_level_decl();
+  PAstTranslationUnit* parse_translation_unit();
+
 private:
   [[nodiscard]] PSourceRange get_token_range() const
   {
@@ -63,9 +59,21 @@ private:
   }
 
   void consume();
-};
+  bool expect_token(PTokenKind p_kind);
+  void unexpected_token();
 
-PAst*
-p_parse(struct PParser* p_parser);
+  void print_expect_tok_diag(PTokenKind p_kind, PSourceLocation p_loc);
+
+private:
+  PContext& m_context;
+  PLexer& m_lexer;
+  PSema m_sema;
+
+  // The token actually considered by the parser.
+  PToken m_token;
+  // The source location at end of the previous lookahead. At the first token,
+  // this is set to the start of file.
+  PSourceLocation m_prev_lookahead_end_loc;
+};
 
 #endif // PEONY_PARSER_HXX
