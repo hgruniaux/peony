@@ -1,6 +1,0 @@
-<source>:6:11: error: mismatched types; expected 'bool', found 'i32'
-    6 |     while 5i32 {}
-      |           ~~~~
-<source>:9:12: error: expected expression
-    9 |     while () {}
-      |            ^

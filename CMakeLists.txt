@@ -117,5 +117,3 @@ add_executable(peony_test
 target_link_libraries(peony_test PRIVATE peony_lib)
 target_link_libraries(peony_test PRIVATE gtest gtest_main)
 gtest_discover_tests(peony_test)
-
-add_subdirectory(test)

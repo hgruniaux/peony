@@ -1,3 +1,0 @@
-<source>:6:6: error: cannot add 'i32' to 'bool'
-    6 |     5 + true;
-      |     ~ ^ ~~~~

@@ -1,3 +1,0 @@
-<source>:7:14: error: float literal too large
-    7 |     let f3 = 8_2e+_986_;
-      |              ~~~~~~~~~~
