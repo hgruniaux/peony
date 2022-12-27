@@ -4,10 +4,11 @@
 #include <cstdarg>
 #include <cstdio>
 
-PAstPrinter::PAstPrinter(PContext& p_ctx, bool p_use_colors)
+PAstPrinter::PAstPrinter(PContext& p_ctx, std::FILE* p_output)
   : m_ctx(p_ctx)
-  , m_output(stderr)
+  , m_output(p_output)
 {
+  m_use_colors = should_use_colors(m_output);
 }
 
 void
@@ -435,4 +436,23 @@ void
 PAstPrinter::color_reset()
 {
   color("0");
+}
+
+#if __has_include(<unistd.h>)
+#include <unistd.h>
+#define IS_POSIX
+#endif
+
+bool
+PAstPrinter::should_use_colors(std::FILE* p_output)
+{
+  // Actually we only use colors (by default) on POSIX systems when
+  // p_output refers to a terminal (see isatty).
+
+#ifdef IS_POSIX
+  int file = fileno(p_output);
+  return isatty(file);
+#endif
+
+  return false;
 }

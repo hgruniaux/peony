@@ -10,7 +10,7 @@
 class PAstPrinter : public PAstConstVisitor<PAstPrinter>
 {
 public:
-  PAstPrinter(PContext& p_ctx, bool p_use_colors = true);
+  PAstPrinter(PContext& p_ctx, std::FILE* p_output = stdout);
 
   void visit_translation_unit(const PAstTranslationUnit* p_node);
   void visit_compound_stmt(const PAstCompoundStmt* p_node);
@@ -71,6 +71,8 @@ private:
       --m_indent;
     }
   }
+
+  static bool should_use_colors(std::FILE* p_output);
 
 private:
   PContext& m_ctx;
