@@ -160,6 +160,7 @@ parse_int_literal_token(const char* p_begin, const char* p_end, int p_radix, uin
       return parse_hex_int_literal_token(p_begin, p_end, p_value);
     default:
       assert(false && "radix must be one of 2, 8, 10 or 16");
+      return false;
   }
 }
 

@@ -824,6 +824,7 @@ PCodeGenLLVM::emit_trivial_bin_op(PType* p_type, void* p_llvm_lhs, void* p_llvm_
 #undef DISPATCH
     default:
       assert(false && "binary operator not yet implemented");
+      return nullptr;
   }
 }
 
