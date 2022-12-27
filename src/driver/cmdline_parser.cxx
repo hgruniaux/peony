@@ -1,6 +1,7 @@
 #include "../options.hxx"
 #include "../utils/diag.hxx"
 
+#include <hedley.h>
 #include <cassert>
 #include <cstdio>
 #include <cstdlib>

@@ -1,29 +1,60 @@
-#pragma once
+#ifndef PEONY_CODEGEN_LLVM_HXX
+#define PEONY_CODEGEN_LLVM_HXX
 
-#include "ast.hxx"
-#include "context.hxx"
+#include "ast/ast_visitor.hxx"
 
-#include <llvm-c/Types.h>
-#include <llvm-c/TargetMachine.h>
+namespace llvm {
+class Module;
+}
 
-struct PCodegenLLVM
+/// LLVM code generator.
+class PCodeGenLLVM : public PAstConstVisitor<PCodeGenLLVM, void*>
 {
-  PContext& context;
-  LLVMModuleRef module;
-  LLVMBuilderRef builder;
-  LLVMValueRef current_function;
-  LLVMTypeRef current_function_type;
+public:
+  PCodeGenLLVM(PContext& p_ctx);
+  ~PCodeGenLLVM();
 
-  LLVMTargetMachineRef target_machine;
+  bool codegen(PAstTranslationUnit* p_ast);
+  void optimize();
+  bool write_llvm_ir(const std::string& p_filename);
+  bool write_object_file(const std::string& p_filename);
 
-  int opt_level;
+  // Statements:
+  void* visit_translation_unit(const PAstTranslationUnit* p_node);
+  void* visit_compound_stmt(const PAstCompoundStmt* p_node);
+  void* visit_let_stmt(const PAstLetStmt* p_node);
+  void* visit_break_stmt(const PAstBreakStmt* p_node);
+  void* visit_continue_stmt(const PAstContinueStmt* p_node);
+  void* visit_return_stmt(const PAstReturnStmt* p_node);
+  void* visit_loop_stmt(const PAstLoopStmt* p_node);
+  void* visit_while_stmt(const PAstWhileStmt* p_node);
+  void* visit_if_stmt(const PAstIfStmt* p_node);
 
-  PCodegenLLVM(PContext& p_context);
-  ~PCodegenLLVM();
+  // Expressions:
+  void* visit_bool_literal(const PAstBoolLiteral* p_node);
+  void* visit_int_literal(const PAstIntLiteral* p_node);
+  void* visit_float_literal(const PAstFloatLiteral* p_node);
+  void* visit_paren_expr(const PAstParenExpr* p_node);
+  void* visit_decl_ref_expr(const PAstDeclRefExpr* p_node);
+  void* visit_unary_expr(const PAstUnaryExpr* p_node);
+  void* visit_binary_expr(const PAstBinaryExpr* p_node);
+  void* visit_call_expr(const PAstCallExpr* p_node);
+  void* visit_cast_expr(const PAstCastExpr* p_node);
+  void* visit_l2rvalue_expr(const PAstL2RValueExpr* p_node);
+
+  // Declarations:
+  void* visit_func_decl(const PFunctionDecl* p_node);
+  void* visit_var_decl(const PVarDecl* p_node);
+
+private:
+  /// Emits code to implement the lazy binary operators '&&' and '||' (depending
+  /// on the parameter p_is_and).
+  void* emit_log_and(PAst* p_lhs, PAst* p_rhs, bool p_is_and);
+  void* emit_trivial_bin_op(PType* p_type, void* p_llvm_lhs, void* p_llvm_rhs, PAstBinaryOp p_op);
+
+private:
+  struct D;
+  std::unique_ptr<D> m_d;
 };
 
-void
-p_cg_dump(struct PCodegenLLVM* p_cg);
-
-void
-p_cg_compile(struct PCodegenLLVM* p_cg, PAst* p_ast, const char* p_output_filename);
+#endif // PEONY_CODEGEN_LLVM_HXX

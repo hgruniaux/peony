@@ -1,5 +1,6 @@
 #include "identifier_table.hxx"
 
+#include "context.hxx"
 #include "utils/bump_allocator.hxx"
 #include "utils/hash_table_common.hxx"
 
@@ -148,7 +149,7 @@ ident_info_new(const char* p_spelling_begin,
                size_t p_hash)
 {
   const size_t spelling_len = p_spelling_end - p_spelling_begin;
-  auto* identifier_info = p_global_bump_allocator.alloc_with_extra_size<PIdentifierInfo>(sizeof(char) * spelling_len);
+  auto* identifier_info = PContext::get_global().get_allocator().alloc_with_extra_size<PIdentifierInfo>(sizeof(char) * spelling_len);
   identifier_info->hash = p_hash;
   identifier_info->token_kind = P_TOK_IDENTIFIER;
   identifier_info->spelling_len = spelling_len;
@@ -211,5 +212,5 @@ p_identifier_table_register_keywords(PIdentifierTable* p_table)
 #define KEYWORD(p_spelling)                                                    \
   p_identifier_table_get(p_table, #p_spelling, nullptr)->token_kind =             \
     P_TOK_KEY_##p_spelling;
-#include "token_kinds.def"
+#include "token_kind.def"
 }

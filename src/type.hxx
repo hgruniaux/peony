@@ -4,59 +4,47 @@
 
 #include <cstddef>
 #include <cstring>
+#include <type_traits>
 
-// WARNING: If you change the order of the following enum, you
-// must update the functions:
-//     - append_type() in name_mangling.c
-//     - format_arg_type() in utils/diag_formatter_extra.c
-typedef enum PTypeKind
+enum PTypeKind
 {
-  P_TYPE_VOID, // 'void' type
-  P_TYPE_CHAR, // An Unicode scalar value (32-bit integer)
-  P_TYPE_BOOL,
-  P_TYPE_I8,
-  P_TYPE_I16,
-  P_TYPE_I32,
-  P_TYPE_I64,
-  P_TYPE_U8,
-  P_TYPE_U16,
-  P_TYPE_U32,
-  P_TYPE_U64,
-  P_TYPE_F32,
-  P_TYPE_F64,
-  P_TYPE_GENERIC_INT,
-  P_TYPE_GENERIC_FLOAT,
-  P_TYPE_LAST_BUILTIN = P_TYPE_GENERIC_FLOAT,
-  P_TYPE_PAREN,    // A parenthesized type (e.g. '(i32)') implemented by PParenType
-  P_TYPE_FUNCTION, // A function type implemented by PFunctionType
-  P_TYPE_POINTER,  // A pointer type implemented by PPointerType
-  P_TYPE_ARRAY,    // An array type implemented by PArrayType
-  P_TYPE_TAG,      // A tag (referencing a declaration) type implemented by PTagType
-} PTypeKind;
+#define TYPE(p_kind) p_kind,
+#include "type.def"
+};
 
 class PType
 {
 public:
-  PTypeKind kind;
-  PType* canonical_type;
-  void* _llvm_cached_type;
+  void* m_llvm_cached_type;
 
-  [[nodiscard]] PTypeKind get_kind() const { return kind; }
+  [[nodiscard]] PTypeKind get_kind() const { return m_kind; }
   /// Shorthand for `get_canonical_ty()->get_kind()`
-  [[nodiscard]] PTypeKind get_canonical_kind() const { return get_canonical_ty()->kind; }
+  [[nodiscard]] PTypeKind get_canonical_kind() const { return get_canonical_ty()->m_kind; }
 
   /// Checks if the type it is a canonical type or not, that is if `get_canonical_ty() == this`.
-  [[nodiscard]] bool is_canonical_ty() const { return canonical_type == this; }
-  [[nodiscard]] PType* get_canonical_ty() const { return canonical_type; }
+  [[nodiscard]] bool is_canonical_ty() const { return m_canonical_type == this; }
+  [[nodiscard]] PType* get_canonical_ty() const { return m_canonical_type; }
+
+  template<class T>
+  [[nodiscard]] T* as()
+  {
+    static_assert(std::is_base_of_v<PType, T>, "T must inherits from PType");
+    return static_cast<T*>(this);
+  }
+  template<class T>
+  [[nodiscard]] const T* as() const
+  {
+    return const_cast<PType*>(this)->as<T>();
+  }
 
   /// Returns `true` if this is canonically the `void` type.
-  [[nodiscard]] bool is_void_ty() const { return get_canonical_kind() == P_TYPE_VOID; }
+  [[nodiscard]] bool is_void_ty() const { return get_canonical_kind() == P_TK_VOID; }
   /// Returns `true` if this is canonically the `bool` type.
-  [[nodiscard]] bool is_bool_ty() const { return get_canonical_kind() == P_TYPE_BOOL; }
+  [[nodiscard]] bool is_bool_ty() const { return get_canonical_kind() == P_TK_BOOL; }
   /// Returns `true` if this is canonically a pointer type.
-  [[nodiscard]] bool is_pointer_ty() const { return get_canonical_kind() == P_TYPE_POINTER; }
+  [[nodiscard]] bool is_pointer_ty() const { return get_canonical_kind() == P_TK_POINTER; }
   /// Returns `true` if this is canonically a function type.
-  [[nodiscard]] bool is_function_ty() const { return get_canonical_kind() == P_TYPE_FUNCTION; }
+  [[nodiscard]] bool is_function_ty() const { return get_canonical_kind() == P_TK_FUNCTION; }
 
   /// Returns `true` if this is canonically a signed integer type (one of the `i*` types).
   [[nodiscard]] bool is_signed_int_ty() const;
@@ -70,11 +58,14 @@ public:
 protected:
   friend class PContext;
   explicit PType(PTypeKind p_kind)
-    : kind(p_kind)
-    , canonical_type(this)
-    , _llvm_cached_type(nullptr)
+    : m_kind(p_kind)
+    , m_canonical_type(this)
+    , m_llvm_cached_type(nullptr)
   {
   }
+
+  PTypeKind m_kind;
+  PType* m_canonical_type;
 };
 
 /// A parenthesized type (e.g. `i32`).
@@ -83,92 +74,83 @@ protected:
 class PParenType : public PType
 {
 public:
-  PType* sub_type;
+  [[nodiscard]] PType* get_sub_type() const { return m_sub_type; }
 
 private:
   friend class PContext;
   explicit PParenType(PType* p_sub_type)
-    : PType(P_TYPE_PAREN)
-    , sub_type(p_sub_type)
+    : PType(P_TK_PAREN)
+    , m_sub_type(p_sub_type)
   {
-    canonical_type = p_sub_type->get_canonical_ty();
+    m_canonical_type = p_sub_type->get_canonical_ty();
   }
+
+  PType* m_sub_type;
 };
 
 class PFunctionType : public PType
 {
 public:
-  [[nodiscard]] PType* get_ret_ty() const { return ret_ty; }
+  /// Gets the return type (always non null).
+  [[nodiscard]] PType* get_ret_ty() const { return m_ret_ty; }
 
-  PType* ret_ty;
-  size_t arg_count;
-  PType* args[1]; /* tail-allocated */
+  [[nodiscard]] size_t get_param_count() const { return m_param_count; }
+  [[nodiscard]] PType** get_params() const { return const_cast<PType**>(m_params); }
+  [[nodiscard]] PType** get_param_begin() const { return const_cast<PType**>(m_params); }
+  [[nodiscard]] PType** get_param_end() const { return const_cast<PType**>(m_params + m_param_count); }
 
 private:
   friend class PContext;
-  explicit PFunctionType(PType* p_ret_ty, PType** p_args_ty, size_t p_arg_count)
-    : PType(P_TYPE_FUNCTION)
-    , arg_count(p_arg_count)
+  PFunctionType(PType* p_ret_ty, PType** p_params_ty, size_t p_param_count)
+    : PType(P_TK_FUNCTION)
+    , m_ret_ty(p_ret_ty)
+    , m_params(p_params_ty)
+    , m_param_count(p_param_count)
   {
-    ret_ty = p_ret_ty;
-    std::memcpy(args, p_args_ty, sizeof(PType*) * p_arg_count);
   }
+
+  PType* m_ret_ty;
+  PType** m_params;
+  size_t m_param_count;
 };
 
 class PPointerType : public PType
 {
 public:
-  PType* element_type;
+  [[nodiscard]] PType* get_element_ty() const { return m_element_ty; }
 
 private:
   friend class PContext;
   PPointerType(PType* p_elt_ty)
-    : PType(P_TYPE_POINTER)
-    , element_type(p_elt_ty)
+    : PType(P_TK_POINTER)
+    , m_element_ty(p_elt_ty)
   {
   }
+
+  PType* m_element_ty;
 };
 
 class PArrayType : public PType
 {
 public:
-  PType* element_type;
-  size_t num_elements;
+  [[nodiscard]] PType* get_element_ty() const { return m_element_ty; }
+  [[nodiscard]] size_t get_num_elements() const { return m_num_elements; }
 
 private:
   friend class PContext;
   PArrayType(PType* p_elt_ty, size_t p_num_elt)
-    : PType(P_TYPE_ARRAY)
-    , element_type(p_elt_ty)
-    , num_elements(p_num_elt)
+    : PType(P_TK_ARRAY)
+    , m_element_ty(p_elt_ty)
+    , m_num_elements(p_num_elt)
   {
   }
+
+  size_t m_num_elements;
+  PType* m_element_ty;
 };
 
-// Type that is intimately linked to a statement. The type
-// itself is defined implicitly by the attached declaration.
-struct PTagType : public PType
-{
-  struct PDecl* decl;
-};
-
-HEDLEY_ALWAYS_INLINE static bool
-p_type_is_generic_int(PType* p_type)
-{
-  return p_type->get_canonical_ty()->get_kind() == P_TYPE_GENERIC_INT;
-}
-
-HEDLEY_ALWAYS_INLINE static bool
-p_type_is_generic_float(PType* p_type)
-{
-  return p_type->get_canonical_ty()->get_kind() == P_TYPE_GENERIC_FLOAT;
-}
-
-bool
-p_type_is_generic(PType* p_type);
 int
 p_type_get_bitwidth(PType* p_type);
+
 PType*
-p_type_get_bool(void);
-PType*
-p_type_get_tag(struct PDecl* p_decl);
+p_type_get_bool();

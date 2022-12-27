@@ -15,11 +15,9 @@ p_get_new_hash_table_size(size_t p_old_size)
     100663319, 201326611, 402653189, 805306457, 1610612741,
   };
 
-  const size_t prime_count = sizeof(prime_sizes) / sizeof(prime_sizes[0]);
-
-  for (size_t i = 0; i < prime_count; ++i) {
-    if (prime_sizes[i] > p_old_size)
-      return prime_sizes[i];
+  for (unsigned long prime_size : prime_sizes) {
+    if (prime_size > p_old_size)
+      return prime_size;
   }
 
   /* If there is not enough prime sizes just fallback to a naive growth

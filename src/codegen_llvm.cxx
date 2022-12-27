@@ -1,855 +1,826 @@
 #include "codegen_llvm.hxx"
 
-#include "identifier_table.hxx"
-#include "name_mangling.hxx"
+#include <llvm/Analysis/CGSCCPassManager.h>
+#include <llvm/Analysis/LoopAnalysisManager.h>
+#include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/Verifier.h>
+#include <llvm/IR/LegacyPassManager.h>
+#include <llvm/MC/TargetRegistry.h>
+#include <llvm/Passes/PassBuilder.h>
+#include <llvm/Support/Host.h>
+#include <llvm/Support/TargetSelect.h>
+#include <llvm/Support/raw_ostream.h>
+#include <llvm/Target/TargetMachine.h>
+#include <llvm/Transforms/Utils/BasicBlockUtils.h>
 
-#include <hedley.h>
+#include <stack>
+#include <string>
 
-#include <cassert>
-#include <cstdlib>
-
-#include <llvm-c/Analysis.h>
-#include <llvm-c/Core.h>
-#include <llvm-c/Transforms/PassBuilder.h>
-
-static LLVMTypeRef
-cg_to_llvm_type(PType* p_type);
-
-// Creates a LLVM type for a given function type.
-// You should call cg_to_llvm_type() as it does caching of LLVM types.
-static LLVMTypeRef
-cg_llvm_type_of_func_type(PFunctionType* p_type)
+struct PCodeGenLLVM::D
 {
-  LLVMTypeRef* args = static_cast<LLVMTypeRef*>(malloc(sizeof(LLVMTypeRef) * p_type->arg_count));
-  assert(args != nullptr);
+  PContext& ctx;
 
-  for (int i = 0; i < p_type->arg_count; ++i) {
-    args[i] = cg_to_llvm_type(p_type->args[i]);
+  llvm::TargetMachine* target_machine;
+  std::unique_ptr<llvm::LLVMContext> llvm_ctx;
+  std::unique_ptr<llvm::Module> llvm_module;
+  std::unique_ptr<llvm::IRBuilder<>> builder;
+
+  std::unordered_map<PType*, llvm::Type*> types_cache;
+  std::unordered_map<const PDecl*, llvm::Value*> decls;
+
+  struct LoopInfoEntry
+  {
+    // Entry block to use to implement the break statement.
+    llvm::BasicBlock* break_bb;
+    // Entry block to use to implement the continue statement.
+    llvm::BasicBlock* continue_bb;
+  };
+
+  std::stack<LoopInfoEntry> loop_infos;
+
+  D(PContext& p_ctx)
+    : ctx(p_ctx)
+  {
+    llvm_ctx = std::make_unique<llvm::LLVMContext>();
+    llvm_module = std::make_unique<llvm::Module>("", *llvm_ctx);
+    builder = std::make_unique<llvm::IRBuilder<>>(*llvm_ctx);
   }
 
-  LLVMTypeRef llvm_type = LLVMFunctionType(cg_to_llvm_type(p_type->get_ret_ty()), args, p_type->arg_count, false);
-  free(args);
-  return llvm_type;
-}
+  llvm::Type* convert_type_impl(PType* p_can_type)
+  {
+    switch (p_can_type->get_kind()) {
+      case P_TK_VOID:
+        return llvm::Type::getVoidTy(*llvm_ctx);
+      case P_TK_CHAR:
+        return llvm::Type::getInt32Ty(*llvm_ctx);
+      case P_TK_BOOL:
+        return llvm::Type::getInt1Ty(*llvm_ctx);
+      case P_TK_I8:
+      case P_TK_U8:
+        return llvm::Type::getInt8Ty(*llvm_ctx);
+      case P_TK_I16:
+      case P_TK_U16:
+        return llvm::Type::getInt16Ty(*llvm_ctx);
+      case P_TK_I32:
+      case P_TK_U32:
+        return llvm::Type::getInt32Ty(*llvm_ctx);
+      case P_TK_I64:
+      case P_TK_U64:
+        return llvm::Type::getInt64Ty(*llvm_ctx);
+      case P_TK_F32:
+        return llvm::Type::getFloatTy(*llvm_ctx);
+      case P_TK_F64:
+        return llvm::Type::getDoubleTy(*llvm_ctx);
 
-// Creates a LLVM type for a given tag type.
-// You should call cg_to_llvm_type() as it does caching of LLVM types.
-static LLVMTypeRef
-cg_llvm_type_of_tag_type(PTagType* p_type)
-{
-  if (P_DECL_GET_KIND(p_type->decl) == P_DECL_STRUCT) {
-    PDeclStruct* decl = (PDeclStruct*)p_type->decl;
-    // FIXME: prefix name with 'struct.' to avoid conflicts
-    const char* name = P_DECL_GET_NAME(decl)->spelling;
-    int field_count = decl->field_count;
-    LLVMTypeRef* field_types = static_cast<LLVMTypeRef*>(malloc(sizeof(LLVMTypeRef) * field_count));
-    assert(field_types != nullptr);
+      case P_TK_PAREN:
+        assert(false && "parenthesized types are never canonical types");
+        return nullptr;
 
-    for (int i = 0; i < field_count; ++i) {
-      field_types[i] = cg_to_llvm_type(P_DECL_GET_TYPE(decl->fields[i]));
+      case P_TK_FUNCTION: {
+        auto* fn_ty = p_can_type->as<PFunctionType>();
+        auto* ret_ty = convert_type(fn_ty->get_ret_ty());
+
+        std::vector<llvm::Type*> param_types(fn_ty->get_param_count());
+        for (size_t i = 0; i < fn_ty->get_param_count(); ++i) {
+          param_types[i] = convert_type(fn_ty->get_params()[i]);
+        }
+
+        return llvm::FunctionType::get(ret_ty, param_types, false);
+      }
+
+      case P_TK_POINTER:
+        // Now LLVM pointers are opaque.
+        return llvm::PointerType::get(*llvm_ctx, 0);
+
+      case P_TK_ARRAY: {
+        auto* array_ty = p_can_type->as<PArrayType>();
+        auto* elt_ty = convert_type(array_ty->get_element_ty());
+        return llvm::ArrayType::get(elt_ty, array_ty->get_num_elements());
+      }
+
+      default:
+        assert(false && "unimplemented type");
+        return nullptr;
     }
+  }
 
-    LLVMTypeRef llvm_type = LLVMStructCreateNamed(LLVMGetGlobalContext(), name);
-    LLVMStructSetBody(llvm_type, field_types, field_count, /* packed */ false);
+  /// Converts a Peony type to a LLVM type.
+  llvm::Type* convert_type(PType* p_type)
+  {
+    assert(p_type != nullptr);
 
-    free(field_types);
+    p_type = p_type->get_canonical_ty();
+
+    const auto it = types_cache.find(p_type);
+    if (it != types_cache.end())
+      return it->second;
+
+    auto* llvm_type = convert_type_impl(p_type);
+    assert(llvm_type != nullptr);
+    types_cache.insert({ p_type, llvm_type });
     return llvm_type;
-  } else {
-    HEDLEY_UNREACHABLE_RETURN(nullptr);
-  }
-}
-
-static LLVMTypeRef
-cg_to_llvm_type(PType* p_type)
-{
-  assert(p_type != nullptr);
-
-  p_type = p_type->get_canonical_ty();
-  assert(!p_type_is_generic(p_type));
-
-  if (p_type->_llvm_cached_type != nullptr)
-    return static_cast<LLVMTypeRef>(p_type->_llvm_cached_type);
-
-  LLVMTypeRef type;
-  switch (p_type->get_kind()) {
-    case P_TYPE_VOID:
-      type = LLVMVoidType();
-      break;
-    case P_TYPE_BOOL:
-      type = LLVMInt1Type();
-      break;
-    case P_TYPE_I8:
-    case P_TYPE_U8:
-      type = LLVMInt8Type();
-      break;
-    case P_TYPE_I16:
-    case P_TYPE_U16:
-      type = LLVMInt16Type();
-      break;
-    case P_TYPE_I32:
-    case P_TYPE_U32:
-    case P_TYPE_CHAR:
-      type = LLVMInt32Type();
-      break;
-    case P_TYPE_I64:
-    case P_TYPE_U64:
-      type = LLVMInt64Type();
-      break;
-    case P_TYPE_F32:
-      type = LLVMFloatType();
-      break;
-    case P_TYPE_F64:
-      type = LLVMDoubleType();
-      break;
-    case P_TYPE_FUNCTION:
-      type = cg_llvm_type_of_func_type((PFunctionType*)p_type);
-      break;
-    case P_TYPE_POINTER: {
-      PPointerType* ptr_type = (PPointerType*)p_type;
-      type = LLVMPointerType(cg_to_llvm_type(ptr_type->element_type), 0);
-      break;
-    }
-    case P_TYPE_ARRAY: {
-      PArrayType* array_type = (PArrayType*)p_type;
-      type = LLVMArrayType(cg_to_llvm_type(array_type->element_type), array_type->num_elements);
-      break;
-    }
-    case P_TYPE_TAG: {
-      PTagType* tag_type = (PTagType*)p_type;
-      assert(tag_type->decl != nullptr);
-      type = cg_llvm_type_of_tag_type(tag_type);
-      break;
-    }
-    default:
-      HEDLEY_UNREACHABLE_RETURN(nullptr);
   }
 
-  p_type->_llvm_cached_type = type;
-  return type;
-}
+  /// Gets the current function where the IR builder is located.
+  llvm::Function* get_function() { return builder->GetInsertBlock()->getParent(); }
 
-static LLVMValueRef
-cg_visit(struct PCodegenLLVM* p_cg, PAst* p_node);
+  /// Inserts a `alloca` instruction in the entry block of the current function.
+  /// LLVM prefers that alloca instruction are inserted in the entry block
+  /// because in that case they are guaranteed to be executed only once and
+  /// makes mem2reg pass simpler.
+  llvm::Value* insert_alloc_in_entry_bb(llvm::Type* p_type)
+  {
+    auto* func = get_function();
+    llvm::IRBuilder<> b(&func->getEntryBlock(), func->getEntryBlock().begin());
+    return b.CreateAlloca(p_type);
+  }
 
-/* Inserts a dummy block just after the current insertion block
- * and position the builder at end of it. Used to ensure that
- * each terminal instruction is at end of a block (when generating
- * code for `break;` or `return;` statements for example).
- */
-static void
-cg_insert_dummy_block(struct PCodegenLLVM* p_cg)
-{
-  const LLVMBasicBlockRef bb = LLVMAppendBasicBlock(p_cg->current_function, "");
-  LLVMPositionBuilderAtEnd(p_cg->builder, bb);
-}
+  /// Inserts a dummy block just after the current insertion block
+  /// and position the builder at end of it. Used to ensure that
+  /// each terminal instruction is at end of a block (when generating
+  /// code for `break;` or `return;` statements for example).
+  void insert_dummy_block()
+  {
+    auto* func = get_function();
+    auto* bb = llvm::BasicBlock::Create(*llvm_ctx, "", func);
+    builder->SetInsertPoint(bb);
+  }
 
-/* Inserts an alloca instruction in the entry block of the current function. */
-static LLVMValueRef
-cg_insert_alloc_in_entry_bb(struct PCodegenLLVM* p_cg, LLVMTypeRef p_type)
-{
-  /* Save the position of the builder to restore it after. */
-  const LLVMBasicBlockRef current_block = LLVMGetInsertBlock(p_cg->builder);
+  void finish_func_codegen()
+  {
+    auto* func = get_function();
 
-  const LLVMBasicBlockRef entry_block = LLVMGetEntryBasicBlock(p_cg->current_function);
-  const LLVMValueRef first_inst = LLVMGetFirstInstruction(entry_block);
-  LLVMPositionBuilder(p_cg->builder, entry_block, first_inst);
-  const LLVMValueRef address = LLVMBuildAlloca(p_cg->builder, p_type, "");
+    // Fix degenerate blocks (without a terminator) that were generated.
+    bool returns_void = func->getReturnType()->isVoidTy();
+    for (auto& block : func->getBasicBlockList()) {
+      if (block.getTerminator() != nullptr)
+        continue;
 
-  LLVMPositionBuilderAtEnd(p_cg->builder, current_block);
-  return address;
-}
-
-static void
-cg_finish_function_codegen(struct PCodegenLLVM* p_cg)
-{
-  /* Correct all empty blocks that may have been generated. */
-  bool returns_void = LLVMGetReturnType(p_cg->current_function_type) == LLVMVoidType();
-  LLVMBasicBlockRef block = LLVMGetFirstBasicBlock(p_cg->current_function);
-  while (block != nullptr) {
-    if (LLVMGetBasicBlockTerminator(block) == nullptr) {
-      LLVMPositionBuilderAtEnd(p_cg->builder, block);
-      if (returns_void)
-        LLVMBuildRetVoid(p_cg->builder);
-      else
-        LLVMBuildUnreachable(p_cg->builder);
+      llvm::IRBuilder<> b(&block);
+      if (returns_void) {
+        b.CreateRetVoid();
+      } else {
+        b.CreateUnreachable();
+      }
     }
 
-    block = LLVMGetNextBasicBlock(block);
+    assert(!llvm::verifyFunction(*func, &llvm::errs()));
+
+    // Our code generation and the above fix for degenerate blocks tends to
+    // generate many unreachable blocks. Remove them now. This is not strictly
+    // necessary as optimization passes will do it, but yet we do it nevertheless
+    // for unoptimized builds and debugging dump clarity.
+    llvm::EliminateUnreachableBlocks(*func);
+  }
+};
+
+PCodeGenLLVM::PCodeGenLLVM(PContext& p_ctx)
+  : m_d(new D(p_ctx))
+{
+}
+
+PCodeGenLLVM::~PCodeGenLLVM() = default;
+
+bool
+PCodeGenLLVM::codegen(PAstTranslationUnit* p_ast)
+{
+  auto TargetTriple = llvm::sys::getDefaultTargetTriple();
+  m_d->llvm_module->setTargetTriple(TargetTriple);
+
+  std::string Error;
+  auto Target = llvm::TargetRegistry::lookupTarget(TargetTriple, Error);
+
+  // Print an error and exit if we couldn't find the requested target.
+  // This generally occurs if we've forgotten to initialise the
+  // TargetRegistry or we have a bogus target triple.
+  if (!Target) {
+    llvm::errs() << Error;
+    return false;
   }
 
-  LLVMVerifyFunction(p_cg->current_function, LLVMAbortProcessAction);
+  auto CPU = "generic";
+  auto Features = "";
+
+  llvm::TargetOptions opt;
+  auto RM = llvm::Optional<llvm::Reloc::Model>();
+  m_d->target_machine = Target->createTargetMachine(TargetTriple, CPU, Features, opt, RM);
+
+  m_d->llvm_module->setDataLayout(m_d->target_machine->createDataLayout());
+  m_d->llvm_module->setTargetTriple(TargetTriple);
+
+  visit(p_ast);
+  assert(!llvm::verifyModule(*m_d->llvm_module, &llvm::errs()));
+  return true;
 }
 
-static void
-cg_function_decl(struct PCodegenLLVM* p_cg, PDeclFunction* p_decl)
+void
+PCodeGenLLVM::optimize()
 {
-  assert(P_DECL_GET_KIND(p_decl) == P_DECL_FUNCTION);
+  // Create the analysis managers.
+  llvm::LoopAnalysisManager lam;
+  llvm::FunctionAnalysisManager fam;
+  llvm::CGSCCAnalysisManager cgam;
+  llvm::ModuleAnalysisManager mam;
 
-  std::string mangled_name;
-  name_mangle(P_DECL_GET_NAME(p_decl), (PFunctionType*)P_DECL_GET_TYPE(p_decl), mangled_name);
+  // Create the new pass manager builder.
+  // Take a look at the PassBuilder constructor parameters for more
+  // customization, e.g. specifying a TargetMachine or various debugging
+  // options.
+  llvm::PassBuilder pb;
 
-  LLVMTypeRef type = cg_to_llvm_type(P_DECL_GET_TYPE(p_decl));
-  LLVMValueRef func = LLVMAddFunction(p_cg->module, mangled_name.data(), type);
-  p_decl->common._llvm_address = func;
+  // Register all the basic analyses with the managers.
+  pb.registerModuleAnalyses(mam);
+  pb.registerCGSCCAnalyses(cgam);
+  pb.registerFunctionAnalyses(fam);
+  pb.registerLoopAnalyses(lam);
+  pb.crossRegisterProxies(lam, fam, cgam, mam);
 
-  if (p_decl->body != nullptr) {
-    p_cg->current_function = func;
-    p_cg->current_function_type = type;
-    LLVMBasicBlockRef entry_bb = LLVMAppendBasicBlock(func, "");
-    LLVMPositionBuilderAtEnd(p_cg->builder, entry_bb);
+  // Create the pass manager.
+  // This one corresponds to a typical -O2 optimization pipeline.
+  llvm::ModulePassManager mpm = pb.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O2);
 
-    for (int i = 0; i < p_decl->param_count; ++i) {
-      LLVMTypeRef param_ty = cg_to_llvm_type(P_DECL_GET_TYPE(p_decl->params[i]));
-      LLVMValueRef param_addr = LLVMBuildAlloca(p_cg->builder, param_ty, "");
-      LLVMBuildStore(p_cg->builder, LLVMGetParam(p_cg->current_function, i), param_addr);
-      p_decl->params[i]->common._llvm_address = param_addr;
-    }
-
-    cg_visit(p_cg, p_decl->body);
-    cg_finish_function_codegen(p_cg);
-  }
+  // Optimize the IR!
+  mpm.run(*m_d->llvm_module, mam);
 }
 
-static void
-cg_var_decl(struct PCodegenLLVM* p_cg, PDeclVar* p_decl)
+bool
+PCodeGenLLVM::write_llvm_ir(const std::string& p_filename)
 {
-  assert(P_DECL_GET_KIND(p_decl) == P_DECL_VAR);
-
-  LLVMTypeRef type = cg_to_llvm_type(P_DECL_GET_TYPE(p_decl));
-  LLVMValueRef address = cg_insert_alloc_in_entry_bb(p_cg, type);
-  p_decl->common._llvm_address = address;
-
-  if (p_decl->init_expr != nullptr) {
-    const LLVMValueRef init_value = cg_visit(p_cg, p_decl->init_expr);
-    LLVMBuildStore(p_cg->builder, init_value, address);
-  }
+  std::error_code ec;
+  llvm::raw_fd_stream stream(p_filename, ec);
+  assert(!ec);
+  m_d->llvm_module->print(stream, nullptr);
+  return true;
 }
 
-static void
-cg_visit_decl(struct PCodegenLLVM* p_cg, PDecl* p_decl)
+bool
+PCodeGenLLVM::write_object_file(const std::string& p_filename)
 {
-  assert(p_decl != nullptr);
-
-  switch (P_DECL_GET_KIND(p_decl)) {
-    case P_DECL_FUNCTION:
-      cg_function_decl(p_cg, (PDeclFunction*)p_decl);
-      break;
-    case P_DECL_VAR:
-      cg_var_decl(p_cg, (PDeclVar*)p_decl);
-      break;
-    case P_DECL_STRUCT:
-    case P_DECL_STRUCT_FIELD:
-      break;
-    default:
-      HEDLEY_UNREACHABLE();
-  }
-}
-
-static LLVMValueRef
-cg_compound_stmt(struct PCodegenLLVM* p_cg, PAstCompoundStmt* p_node)
-{
-  assert(P_AST_GET_KIND(p_node) == P_AST_NODE_COMPOUND_STMT);
-
-  for (int i = 0; i < p_node->stmt_count; ++i) {
-    PAst* stmt = p_node->stmts[i];
-    cg_visit(p_cg, stmt);
+  std::error_code ec;
+  llvm::raw_fd_ostream stream(p_filename, ec);
+  if (ec) {
+    llvm::errs() << "Could not open file: " << ec.message();
+    return false;
   }
 
-  return nullptr;
-}
+  llvm::legacy::PassManager pass;
+  auto file_type = llvm::CGFT_ObjectFile;
 
-static LLVMValueRef
-cg_let_stmt(struct PCodegenLLVM* p_cg, PAstLetStmt* p_node)
-{
-  assert(P_AST_GET_KIND(p_node) == P_AST_NODE_LET_STMT);
-
-  cg_visit_decl(p_cg, p_node->var_decl);
-  return nullptr;
-}
-
-static LLVMValueRef
-cg_break_stmt(struct PCodegenLLVM* p_cg, PAstBreakStmt* p_node)
-{
-  assert(P_AST_GET_KIND(p_node) == P_AST_NODE_BREAK_STMT);
-
-  PAstLoopStmt* target_loop = (PAstLoopStmt*)p_node->loop_target;
-  assert(target_loop != nullptr);
-  LLVMBuildBr(p_cg->builder, static_cast<LLVMBasicBlockRef>(target_loop->loop_common._llvm_break_label));
-  cg_insert_dummy_block(p_cg);
-  return nullptr;
-}
-
-static LLVMValueRef
-cg_continue_stmt(struct PCodegenLLVM* p_cg, PAstContinueStmt* p_node)
-{
-  assert(P_AST_GET_KIND(p_node) == P_AST_NODE_CONTINUE_STMT);
-
-  PAstLoopStmt* target_loop = (PAstLoopStmt*)p_node->loop_target;
-  assert(target_loop != nullptr);
-  LLVMBuildBr(p_cg->builder, static_cast<LLVMBasicBlockRef>(target_loop->loop_common._llvm_continue_label));
-  cg_insert_dummy_block(p_cg);
-  return nullptr;
-}
-
-static LLVMValueRef
-cg_return_stmt(struct PCodegenLLVM* p_cg, PAstReturnStmt* p_node)
-{
-  assert(P_AST_GET_KIND(p_node) == P_AST_NODE_RETURN_STMT);
-
-  if (p_node->ret_expr != nullptr) {
-    const LLVMValueRef ret_value = cg_visit(p_cg, p_node->ret_expr);
-    LLVMBuildRet(p_cg->builder, ret_value);
-  } else {
-    LLVMBuildRetVoid(p_cg->builder);
+  if (m_d->target_machine->addPassesToEmitFile(pass, stream, nullptr, file_type)) {
+    llvm::errs() << "TargetMachine can't emit a file of this type";
+    return false;
   }
 
-  cg_insert_dummy_block(p_cg);
+  pass.run(*m_d->llvm_module);
+  return true;
+}
 
+void*
+PCodeGenLLVM::visit_translation_unit(const PAstTranslationUnit* p_node)
+{
+  visit_iter(p_node->decls, p_node->decls + p_node->decl_count);
   return nullptr;
 }
 
-static LLVMValueRef
-cg_loop_stmt(struct PCodegenLLVM* p_cg, PAstLoopStmt* p_node)
+void*
+PCodeGenLLVM::visit_compound_stmt(const PAstCompoundStmt* p_node)
 {
-  assert(P_AST_GET_KIND(p_node) == P_AST_NODE_LOOP_STMT);
-
-  LLVMBasicBlockRef body_bb = LLVMAppendBasicBlock(p_cg->current_function, "");
-  LLVMBasicBlockRef cont_bb = LLVMAppendBasicBlock(p_cg->current_function, "");
-
-  p_node->loop_common._llvm_break_label = cont_bb;
-  p_node->loop_common._llvm_continue_label = body_bb;
-
-  LLVMBuildBr(p_cg->builder, body_bb);
-
-  /* Body block: */
-  LLVMPositionBuilderAtEnd(p_cg->builder, body_bb);
-  cg_visit(p_cg, p_node->body_stmt);
-  LLVMBuildBr(p_cg->builder, body_bb);
-
-  /* Cont block: */
-  LLVMPositionBuilderAtEnd(p_cg->builder, cont_bb);
+  visit_iter(p_node->stmts, p_node->stmts + p_node->stmt_count);
   return nullptr;
 }
 
-static LLVMValueRef
-cg_while_stmt(struct PCodegenLLVM* p_cg, PAstWhileStmt* p_node)
+void*
+PCodeGenLLVM::visit_let_stmt(const PAstLetStmt* p_node)
 {
-  assert(P_AST_GET_KIND(p_node) == P_AST_NODE_WHILE_STMT);
-
-  LLVMBasicBlockRef entry_bb = LLVMAppendBasicBlock(p_cg->current_function, "");
-  LLVMBasicBlockRef body_bb = LLVMAppendBasicBlock(p_cg->current_function, "");
-  LLVMBasicBlockRef cont_bb = LLVMAppendBasicBlock(p_cg->current_function, "");
-
-  p_node->loop_common._llvm_break_label = cont_bb;
-  p_node->loop_common._llvm_continue_label = entry_bb;
-
-  LLVMBuildBr(p_cg->builder, entry_bb);
-
-  /* Entry block: */
-  LLVMPositionBuilderAtEnd(p_cg->builder, entry_bb);
-  const LLVMValueRef cond = cg_visit(p_cg, p_node->cond_expr);
-  LLVMBuildCondBr(p_cg->builder, cond, body_bb, cont_bb);
-
-  /* Body block: */
-  LLVMPositionBuilderAtEnd(p_cg->builder, body_bb);
-  cg_visit(p_cg, p_node->body_stmt);
-  LLVMBuildBr(p_cg->builder, entry_bb);
-
-  /* Cont block: */
-  LLVMPositionBuilderAtEnd(p_cg->builder, cont_bb);
+  visit_iter(p_node->var_decls, p_node->var_decls + p_node->var_decl_count);
   return nullptr;
 }
 
-static LLVMValueRef
-cg_if_stmt(struct PCodegenLLVM* p_cg, PAstIfStmt* p_node)
+void*
+PCodeGenLLVM::visit_break_stmt(const PAstBreakStmt* p_node)
 {
-  assert(P_AST_GET_KIND(p_node) == P_AST_NODE_IF_STMT);
+  assert(!m_d->loop_infos.empty());
 
-  // TODO: Support if statements as expressions.
-  // Example: let x = if (true) { 4 } else { 3 }.
-  // Maybe use PHI nodes in that case.
+  auto* break_bb = m_d->loop_infos.top().break_bb;
+  assert(break_bb != nullptr);
+  m_d->builder->CreateBr(break_bb);
+  m_d->insert_dummy_block();
+  return nullptr;
+}
 
-  LLVMBasicBlockRef then_bb = LLVMAppendBasicBlock(p_cg->current_function, "");
-  LLVMBasicBlockRef cont_bb = LLVMAppendBasicBlock(p_cg->current_function, "");
-  LLVMBasicBlockRef else_bb = nullptr;
+void*
+PCodeGenLLVM::visit_continue_stmt(const PAstContinueStmt* p_node)
+{
+  assert(!m_d->loop_infos.empty());
+
+  auto* continue_bb = m_d->loop_infos.top().break_bb;
+  assert(continue_bb != nullptr);
+  m_d->builder->CreateBr(continue_bb);
+  m_d->insert_dummy_block();
+  return nullptr;
+}
+
+void*
+PCodeGenLLVM::visit_return_stmt(const PAstReturnStmt* p_node)
+{
+  if (p_node->ret_expr == nullptr) {
+    m_d->builder->CreateRetVoid();
+    return nullptr;
+  }
+
+  auto* ret_value = static_cast<llvm::Value*>(visit(p_node->ret_expr));
+  if (p_node->ret_expr->get_type(m_d->ctx)->is_void_ty())
+    m_d->builder->CreateRetVoid();
+
+  m_d->builder->CreateRet(ret_value);
+  m_d->insert_dummy_block();
+  return nullptr;
+}
+
+void*
+PCodeGenLLVM::visit_loop_stmt(const PAstLoopStmt* p_node)
+{
+  // The generated code:
+  //  1 | body_bb:
+  //  2 |     ; body...
+  //  3 |     br body_bb
+  //  4 | exit_bb: ; used to implement the break instruction
+  //  5 |     ; ...
+
+  auto* func = m_d->get_function();
+
+  auto* body_bb = llvm::BasicBlock::Create(*m_d->llvm_ctx, "", func);
+  auto* exit_bb = llvm::BasicBlock::Create(*m_d->llvm_ctx, "", func);
+  m_d->loop_infos.push({ exit_bb, body_bb });
+
+  m_d->builder->CreateBr(body_bb);
+
+  // Body block:
+  m_d->builder->SetInsertPoint(body_bb);
+  visit(p_node->body_stmt);
+  m_d->builder->CreateBr(body_bb);
+
+  // Continue block:
+  m_d->builder->SetInsertPoint(exit_bb);
+
+  m_d->loop_infos.pop();
+  return nullptr;
+}
+
+void*
+PCodeGenLLVM::visit_while_stmt(const PAstWhileStmt* p_node)
+{
+  // The generated code:
+  //  1 | entry_bb:
+  //  2 |     ; cond...
+  //  3 |     br ..., body_bb, continue_bb
+  //  4 | body_bb:
+  //  5 |     ; body...
+  //  5 |     br entry_bb
+  //  6 | exit_bb: ; used to implement the break instruction
+  //  7 |     ; ...
+  //
+  // Which corresponds to the Peony equivalent code:
+  //  1 | loop {
+  //  2 |     if (!cond) { break; }
+  //  3 |
+  //  4 |     % body...
+  //  5 | }
+
+  auto* func = m_d->get_function();
+
+  auto* entry_bb = llvm::BasicBlock::Create(*m_d->llvm_ctx, "", func);
+  auto* body_bb = llvm::BasicBlock::Create(*m_d->llvm_ctx, "", func);
+  auto* exit_bb = llvm::BasicBlock::Create(*m_d->llvm_ctx, "", func);
+  m_d->loop_infos.push({ exit_bb, entry_bb });
+
+  m_d->builder->CreateBr(entry_bb);
+
+  // Entry block:
+  m_d->builder->SetInsertPoint(entry_bb);
+  auto* condition = static_cast<llvm::Value*>(visit(p_node->cond_expr));
+  m_d->builder->CreateCondBr(condition, body_bb, exit_bb);
+
+  // Body block:
+  m_d->builder->SetInsertPoint(body_bb);
+  visit(p_node->body_stmt);
+  m_d->builder->CreateBr(entry_bb);
+
+  // Continue block:
+  m_d->builder->SetInsertPoint(exit_bb);
+
+  m_d->loop_infos.pop();
+  return nullptr;
+}
+
+void*
+PCodeGenLLVM::visit_if_stmt(const PAstIfStmt* p_node)
+{
+  // The generated code:
+  //  1 |     br ..., body_bb, continue_bb
+  //  2 | then_bb:
+  //  3 |     ; body...
+  //  4 |     br continue_bb
+  //  5 | else_bb:
+  //  6 |     ; else stmt...
+  //  7 |     br continue_bb
+  //  8 | continue_bb:
+  //  9 |     ; ...
+
+  auto* func = m_d->get_function();
+
+  auto* then_bb = llvm::BasicBlock::Create(*m_d->llvm_ctx, "", func);
+  auto* continue_bb = llvm::BasicBlock::Create(*m_d->llvm_ctx, "", func);
+  llvm::BasicBlock* else_bb = nullptr;
+  if (p_node->else_stmt != nullptr)
+    else_bb = llvm::BasicBlock::Create(*m_d->llvm_ctx, "", func);
+
+  auto* condition = static_cast<llvm::Value*>(visit(p_node->cond_expr));
+  m_d->builder->CreateCondBr(condition, then_bb, (else_bb != nullptr) ? else_bb : continue_bb);
+
+  // Then block:
+  m_d->builder->SetInsertPoint(then_bb);
+  visit(p_node->then_stmt);
+  m_d->builder->CreateBr(continue_bb);
+
+  // Else block:
   if (p_node->else_stmt != nullptr) {
-    else_bb = LLVMAppendBasicBlock(p_cg->current_function, "");
+    m_d->builder->SetInsertPoint(else_bb);
+    visit(p_node->else_stmt);
+    m_d->builder->CreateBr(continue_bb);
   }
 
-  const LLVMValueRef cond = cg_visit(p_cg, p_node->cond_expr);
-  LLVMBuildCondBr(p_cg->builder, cond, then_bb, else_bb != nullptr ? else_bb : cont_bb);
-
-  /* Then block: */
-  LLVMPositionBuilderAtEnd(p_cg->builder, then_bb);
-  cg_visit(p_cg, p_node->then_stmt);
-  LLVMBuildBr(p_cg->builder, cont_bb);
-
-  if (p_node->else_stmt != nullptr) {
-    /* Else block: */
-    LLVMPositionBuilderAtEnd(p_cg->builder, else_bb);
-    cg_visit(p_cg, p_node->else_stmt);
-    LLVMBuildBr(p_cg->builder, cont_bb);
-  }
-
-  /* Cont block: */
-  LLVMPositionBuilderAtEnd(p_cg->builder, cont_bb);
+  // Continue block:
+  m_d->builder->SetInsertPoint(continue_bb);
   return nullptr;
 }
 
-static LLVMValueRef
-cg_bool_literal(struct PCodegenLLVM* p_cg, PAstBoolLiteral* p_node)
+void*
+PCodeGenLLVM::visit_bool_literal(const PAstBoolLiteral* p_node)
 {
-  assert(P_AST_GET_KIND(p_node) == P_AST_NODE_BOOL_LITERAL);
-
-  if (p_node->value) {
-    return LLVMConstInt(LLVMInt1Type(), 1, 0);
-  } else {
-    return LLVMConstInt(LLVMInt1Type(), 0, 0);
-  }
+  return llvm::ConstantInt::get(llvm::IntegerType::getInt1Ty(*m_d->llvm_ctx), p_node->value);
 }
 
-static LLVMValueRef
-cg_int_literal(struct PCodegenLLVM* p_cg, PAstIntLiteral* p_node)
+void*
+PCodeGenLLVM::visit_int_literal(const PAstIntLiteral* p_node)
 {
-  assert(P_AST_GET_KIND(p_node) == P_AST_NODE_INT_LITERAL);
-
-  LLVMTypeRef type = cg_to_llvm_type(p_node->type);
-  return LLVMConstInt(type, p_node->value, 0);
+  auto* llvm_type = m_d->convert_type(p_node->get_type(m_d->ctx));
+  const auto value = p_node->value;
+  return llvm::ConstantInt::get(llvm_type, value);
 }
 
-static LLVMValueRef
-cg_float_literal(struct PCodegenLLVM* p_cg, PAstFloatLiteral* p_node)
+void*
+PCodeGenLLVM::visit_float_literal(const PAstFloatLiteral* p_node)
 {
-  assert(P_AST_GET_KIND(p_node) == P_AST_NODE_FLOAT_LITERAL);
-
-  LLVMTypeRef type = cg_to_llvm_type(p_node->type);
-  return LLVMConstReal(type, p_node->value);
+  auto* llvm_type = m_d->convert_type(p_node->get_type(m_d->ctx));
+  const auto value = p_node->value;
+  return llvm::ConstantFP::get(llvm_type, value);
 }
 
-static LLVMValueRef
-cg_paren_expr(struct PCodegenLLVM* p_cg, PAstParenExpr* p_node)
+void*
+PCodeGenLLVM::visit_paren_expr(const PAstParenExpr* p_node)
 {
-  assert(P_AST_GET_KIND(p_node) == P_AST_NODE_PAREN_EXPR);
-
-  return cg_visit(p_cg, p_node->sub_expr);
+  return visit(p_node->sub_expr);
 }
 
-static LLVMValueRef
-cg_decl_ref_expr(struct PCodegenLLVM* p_cg, PAstDeclRefExpr* p_node)
+void*
+PCodeGenLLVM::visit_decl_ref_expr(const PAstDeclRefExpr* p_node)
 {
-  assert(P_AST_GET_KIND(p_node) == P_AST_NODE_DECL_REF_EXPR);
-
-  LLVMValueRef addr = static_cast<LLVMValueRef>(p_node->decl->common._llvm_address);
-  return addr;
+  const auto it = m_d->decls.find(p_node->decl);
+  assert(it != m_d->decls.end());
+  return it->second;
 }
 
-static LLVMValueRef
-cg_unary_expr(struct PCodegenLLVM* p_cg, PAstUnaryExpr* p_node)
+void*
+PCodeGenLLVM::visit_unary_expr(const PAstUnaryExpr* p_node)
 {
-  assert(P_AST_GET_KIND(p_node) == P_AST_NODE_UNARY_EXPR);
-
-  LLVMValueRef sub_expr = cg_visit(p_cg, p_node->sub_expr);
+  auto* value = static_cast<llvm::Value*>(visit(p_node->sub_expr));
   switch (p_node->opcode) {
-    case P_UNARY_NEG:
-      if (p_node->type->is_signed_int_ty())
-        return LLVMBuildNeg(p_cg->builder, sub_expr, "");
-      else if (p_node->type->is_float_ty())
-        return LLVMBuildFNeg(p_cg->builder, sub_expr, "");
-      else
-        HEDLEY_UNREACHABLE_RETURN(nullptr);
+    case P_UNARY_NEG: {
+      auto* type = p_node->get_type(m_d->ctx);
+      if (type->is_signed_int_ty()) {
+        return m_d->builder->CreateNSWNeg(value);
+      } else if (type->is_unsigned_int_ty()) {
+        auto* llvm_type = m_d->convert_type(p_node->get_type(m_d->ctx));
+        auto* zero = llvm::ConstantInt::get(llvm_type, 0);
+        return m_d->builder->CreateSub(zero, value);
+      } else if (type->is_float_ty()) {
+        return m_d->builder->CreateFNeg(value);
+      } else {
+        assert(false && "invalid type for unary neg operator");
+        return nullptr;
+      }
+    }
+
     case P_UNARY_NOT:
-      return LLVMBuildNot(p_cg->builder, sub_expr, "");
-    case P_UNARY_ADDRESS_OF:
-      return sub_expr;
-    case P_UNARY_DEREF:
-      return LLVMBuildLoad2(p_cg->builder, cg_to_llvm_type(p_ast_get_type(p_node->sub_expr)), sub_expr, "");
+      return m_d->builder->CreateNot(value);
+
+    case P_UNARY_DEREF: {
+      auto* llvm_type = m_d->convert_type(p_node->get_type(m_d->ctx));
+      return m_d->builder->CreateLoad(llvm_type, value);
+    }
+
     default:
-      HEDLEY_UNREACHABLE_RETURN(nullptr);
+      assert(false && "unary operator not yet implemented");
+      return nullptr;
   }
 }
 
-/* Implements all trivial binary opcodes. Compound assignments (e.g. +=)
- * or logical AND and OR (lazy operators) are not implemented by this function.
- */
-static LLVMValueRef
-cg_binary_expr_impl(struct PCodegenLLVM* p_cg, PType* p_type, PAstBinaryOp p_op, LLVMValueRef p_lhs, LLVMValueRef p_rhs)
+void*
+PCodeGenLLVM::emit_log_and(PAst* p_lhs, PAst* p_rhs, bool p_is_and)
 {
-  switch (p_op) {
-#define DISPATCH(p_signed_fn, p_unsigned_fn, p_float_fn)                                                               \
-  if (p_type->is_signed_int_ty()) {                                                                                      \
-    return p_signed_fn(p_cg->builder, p_lhs, p_rhs, "");                                                               \
-  } else if (p_type->is_unsigned_int_ty()) {                                                                             \
-    return p_unsigned_fn(p_cg->builder, p_lhs, p_rhs, "");                                                             \
-  } else if (p_type->is_float_ty()) {                                                                                \
-    return p_float_fn(p_cg->builder, p_lhs, p_rhs, "");                                                                \
-  } else {                                                                                                             \
-    HEDLEY_UNREACHABLE_RETURN(nullptr);                                                                                \
+  // The code 'lhs && rhs' is equivalent to:
+  //  1 | if (lhs) {
+  //  2 |     return rhs;
+  //  3 | } else {
+  //  4 |     return false;
+  //  5 | }
+  //
+  // Likewise, the code 'lhs || rhs' is equivalent to:
+  //  1 | if (lhs) {
+  //  2 |     return true;
+  //  3 | } else {
+  //  4 |     return rhs;
+  //  5 | }
+
+  auto* lhs = static_cast<llvm::Value*>(visit(p_lhs));
+  auto* func = m_d->get_function();
+
+  llvm::BasicBlock* rhs_bb = llvm::BasicBlock::Create(*m_d->llvm_ctx, "", func);
+  llvm::BasicBlock* continue_bb = llvm::BasicBlock::Create(*m_d->llvm_ctx, "", func);
+
+  if (p_is_and) { // Implementing the '&&' operator
+    m_d->builder->CreateCondBr(lhs, rhs_bb, continue_bb);
+  } else { // Implementing the '||' operator
+    m_d->builder->CreateCondBr(lhs, continue_bb, rhs_bb);
   }
 
-    case P_BINARY_ADD:
-      DISPATCH(LLVMBuildNSWAdd, LLVMBuildAdd, LLVMBuildFAdd)
-    case P_BINARY_SUB:
-      DISPATCH(LLVMBuildNSWSub, LLVMBuildSub, LLVMBuildFSub)
-    case P_BINARY_MUL:
-      DISPATCH(LLVMBuildNSWMul, LLVMBuildMul, LLVMBuildFMul)
-    case P_BINARY_DIV:
-      DISPATCH(LLVMBuildSDiv, LLVMBuildUDiv, LLVMBuildFDiv)
-    case P_BINARY_MOD:
-      DISPATCH(LLVMBuildSRem, LLVMBuildURem, LLVMBuildFRem)
+  auto* bool_ty = llvm::IntegerType::getInt1Ty(*m_d->llvm_ctx);
 
-#define DISPATCH_ONLY_INT(p_signed_fn, p_unsigned_fn)                                                                  \
-  if (p_type->is_signed_int_ty()) {                                                                                      \
-    return p_signed_fn(p_cg->builder, p_lhs, p_rhs, "");                                                               \
-  } else if (p_type->is_unsigned_int_ty()) {                                                                             \
-    return p_unsigned_fn(p_cg->builder, p_lhs, p_rhs, "");                                                             \
-  } else {                                                                                                             \
-    HEDLEY_UNREACHABLE_RETURN(nullptr);                                                                                \
-  }
+  // Continue block:
+  m_d->builder->SetInsertPoint(continue_bb);
+  auto* phi = m_d->builder->CreatePHI(bool_ty, 2);
 
-    case P_BINARY_SHL:
-      DISPATCH_ONLY_INT(LLVMBuildShl, LLVMBuildShl)
-    case P_BINARY_SHR:
-      DISPATCH_ONLY_INT(LLVMBuildAShr, LLVMBuildLShr)
-    case P_BINARY_BIT_AND:
-      DISPATCH_ONLY_INT(LLVMBuildAnd, LLVMBuildAnd)
-    case P_BINARY_BIT_XOR:
-      DISPATCH_ONLY_INT(LLVMBuildXor, LLVMBuildXor)
-    case P_BINARY_BIT_OR:
-      DISPATCH_ONLY_INT(LLVMBuildOr, LLVMBuildOr)
+  // Constant block (either false or true depending on p_is_and):
+  // As a matter of fact, this is not really a block but simply a constant.
+  phi->addIncoming(llvm::ConstantInt::get(bool_ty, !p_is_and), m_d->builder->GetInsertBlock());
 
-#define DISPATCH_COMP(p_signed_op, p_unsigned_op, p_float_op)                                                          \
-  if (p_type->is_signed_int_ty()) {                                                                                      \
-    return LLVMBuildICmp(p_cg->builder, p_signed_op, p_lhs, p_rhs, "");                                                \
-  } else if (p_type->is_unsigned_int_ty()) {                                                                             \
-    return LLVMBuildICmp(p_cg->builder, p_unsigned_op, p_lhs, p_rhs, "");                                              \
-  } else if (p_type->is_float_ty()) {                                                                                \
-    return LLVMBuildFCmp(p_cg->builder, p_float_op, p_lhs, p_rhs, "");                                                 \
-  } else {                                                                                                             \
-    HEDLEY_UNREACHABLE_RETURN(nullptr);                                                                                \
-  }
+  // RHS block (`return rhs`).
+  m_d->builder->SetInsertPoint(rhs_bb);
+  phi->addIncoming(static_cast<llvm::Value*>(visit(p_rhs)), rhs_bb);
+  rhs_bb = m_d->builder->GetInsertBlock();
+  m_d->builder->CreateBr(continue_bb);
 
-    case P_BINARY_LT:
-      DISPATCH_COMP(LLVMIntSLT, LLVMIntULT, LLVMRealOLT)
-    case P_BINARY_LE:
-      DISPATCH_COMP(LLVMIntSLE, LLVMIntULE, LLVMRealOLE)
-    case P_BINARY_GT:
-      DISPATCH_COMP(LLVMIntSGT, LLVMIntUGT, LLVMRealOGT)
-    case P_BINARY_GE:
-      DISPATCH_COMP(LLVMIntSGE, LLVMIntUGE, LLVMRealOGE)
-    case P_BINARY_EQ:
-      DISPATCH_COMP(LLVMIntEQ, LLVMIntEQ, LLVMRealOEQ)
-    case P_BINARY_NE:
-      DISPATCH_COMP(LLVMIntNE, LLVMIntNE, LLVMRealUNE)
-
-#undef DISPATCH
-#undef DISPATCH_ONLY_INT
-#undef DISPATCH_COMP
-
-    default:
-      HEDLEY_UNREACHABLE_RETURN(nullptr);
-  }
-}
-
-/* Implements && or || binary operators. */
-static LLVMValueRef
-cg_log_and_impl(struct PCodegenLLVM* p_cg, PAst* p_lhs, PAst* p_rhs, bool is_and)
-{
-  LLVMBasicBlockRef rhs_bb = LLVMAppendBasicBlock(p_cg->current_function, "");
-  LLVMBasicBlockRef cont_bb = LLVMAppendBasicBlock(p_cg->current_function, "");
-
-  const LLVMValueRef lhs = cg_visit(p_cg, p_lhs);
-  if (is_and) { /* If && */
-    LLVMBuildCondBr(p_cg->builder, lhs, rhs_bb, cont_bb);
-  } else { /* If || (just swap then_bb and else_bb) */
-    LLVMBuildCondBr(p_cg->builder, lhs, cont_bb, rhs_bb);
-  }
-
-  LLVMValueRef incoming_values[2];
-  LLVMBasicBlockRef incoming_blocks[2];
-
-  /* Constant block (does not really exists because it is just a constant): */
-  incoming_values[0] = LLVMConstInt(LLVMInt1Type(), !is_and, 0);
-  incoming_blocks[0] = LLVMGetInsertBlock(p_cg->builder);
-
-  /* RHS block: */
-  LLVMPositionBuilderAtEnd(p_cg->builder, rhs_bb);
-  incoming_values[1] = cg_visit(p_cg, p_rhs);
-  incoming_blocks[1] = rhs_bb;
-  LLVMBuildBr(p_cg->builder, cont_bb);
-
-  /* Cont block: */
-  LLVMPositionBuilderAtEnd(p_cg->builder, cont_bb);
-  LLVMValueRef phi = LLVMBuildPhi(p_cg->builder, LLVMInt1Type(), "");
-  LLVMAddIncoming(phi, incoming_values, incoming_blocks, 2);
   return phi;
 }
 
-static PAstBinaryOp
-get_assignment_op(PAstBinaryOp p_op)
+void*
+PCodeGenLLVM::emit_trivial_bin_op(PType* p_type, void* p_llvm_lhs, void* p_llvm_rhs, PAstBinaryOp p_opcode)
 {
-  switch (p_op) {
-    case P_BINARY_ASSIGN_MUL:
-      return P_BINARY_MUL;
-    case P_BINARY_ASSIGN_DIV:
-      return P_BINARY_DIV;
-    case P_BINARY_ASSIGN_MOD:
-      return P_BINARY_MOD;
+  auto* lhs = static_cast<llvm::Value*>(p_llvm_lhs);
+  auto* rhs = static_cast<llvm::Value*>(p_llvm_rhs);
+
+  switch (p_opcode) {
+    // Arithmetic binary operators
+#define DISPATCH(p_signed_fn, p_unsigned_fn, p_float_fn)                                                               \
+  if (p_type->is_signed_int_ty()) {                                                                                    \
+    return m_d->builder->p_signed_fn(lhs, rhs);                                                                        \
+  } else if (p_type->is_unsigned_int_ty()) {                                                                           \
+    return m_d->builder->p_unsigned_fn(lhs, rhs);                                                                      \
+  } else if (p_type->is_float_ty()) {                                                                                  \
+    return m_d->builder->p_float_fn(lhs, rhs);                                                                         \
+  } else {                                                                                                             \
+    assert(false && "type not supported");                                                                             \
+    return nullptr;                                                                                                    \
+  }
+
+    case P_BINARY_ADD:
     case P_BINARY_ASSIGN_ADD:
-      return P_BINARY_ADD;
+      DISPATCH(CreateNSWAdd, CreateAdd, CreateFAdd)
+    case P_BINARY_SUB:
     case P_BINARY_ASSIGN_SUB:
-      return P_BINARY_SUB;
+      DISPATCH(CreateNSWSub, CreateSub, CreateFSub)
+    case P_BINARY_MUL:
+    case P_BINARY_ASSIGN_MUL:
+      DISPATCH(CreateNSWMul, CreateMul, CreateFMul)
+    case P_BINARY_DIV:
+    case P_BINARY_ASSIGN_DIV:
+      DISPATCH(CreateSDiv, CreateUDiv, CreateFDiv)
+    case P_BINARY_MOD:
+    case P_BINARY_ASSIGN_MOD:
+      DISPATCH(CreateSRem, CreateURem, CreateFRem)
+
+#undef DISPATCH
+
+      // Integer restricted binary operators
+#define DISPATCH(p_signed_fn, p_unsigned_fn)                                                                           \
+  if (p_type->is_signed_int_ty()) {                                                                                    \
+    return m_d->builder->p_signed_fn(lhs, rhs);                                                                        \
+  } else if (p_type->is_unsigned_int_ty()) {                                                                           \
+    return m_d->builder->p_unsigned_fn(lhs, rhs);                                                                      \
+  } else {                                                                                                             \
+    assert(false && "type not supported");                                                                             \
+    return nullptr;                                                                                                    \
+  }
+
+    case P_BINARY_SHL:
     case P_BINARY_ASSIGN_SHL:
-      return P_BINARY_SHL;
+      DISPATCH(CreateShl, CreateShl)
+    case P_BINARY_SHR:
     case P_BINARY_ASSIGN_SHR:
-      return P_BINARY_SHR;
+      DISPATCH(CreateAShr, CreateLShr)
+    case P_BINARY_BIT_AND:
     case P_BINARY_ASSIGN_BIT_AND:
-      return P_BINARY_BIT_AND;
+      DISPATCH(CreateAnd, CreateAnd)
+    case P_BINARY_BIT_XOR:
     case P_BINARY_ASSIGN_BIT_XOR:
-      return P_BINARY_BIT_XOR;
+      DISPATCH(CreateXor, CreateXor)
+    case P_BINARY_BIT_OR:
     case P_BINARY_ASSIGN_BIT_OR:
-      return P_BINARY_BIT_OR;
+      DISPATCH(CreateOr, CreateOr)
+
+#undef DISPATCH
+
+      // Comparison binary operators
+#define DISPATCH(p_signed_op, p_unsigned_op, p_float_op)                                                               \
+  if (p_type->is_signed_int_ty()) {                                                                                    \
+    return m_d->builder->CreateICmp##p_signed_op(lhs, rhs);                                                            \
+  } else if (p_type->is_unsigned_int_ty()) {                                                                           \
+    return m_d->builder->CreateICmp##p_unsigned_op(lhs, rhs);                                                          \
+  } else if (p_type->is_float_ty()) {                                                                                  \
+    return m_d->builder->CreateFCmp##p_float_op(lhs, rhs);                                                             \
+  } else {                                                                                                             \
+    assert(false && "type not supported");                                                                             \
+    return nullptr;                                                                                                    \
+  }
+
+    case P_BINARY_LT:
+      DISPATCH(SLT, ULT, OLT)
+    case P_BINARY_LE:
+      DISPATCH(SLE, ULE, OLE)
+    case P_BINARY_GT:
+      DISPATCH(SGT, UGT, OGT)
+    case P_BINARY_GE:
+      DISPATCH(SGE, UGE, OGE)
+    case P_BINARY_EQ:
+      DISPATCH(EQ, EQ, OEQ)
+    case P_BINARY_NE:
+      DISPATCH(NE, NE, UNE)
+
+#undef DISPATCH
     default:
-      HEDLEY_UNREACHABLE_RETURN(P_BINARY_ADD);
+      assert(false && "binary operator not yet implemented");
   }
 }
 
-/* Implements assignment ('=') and compound assignment (e.g. '+=') operators. */
-static LLVMValueRef
-cg_assignment_impl(struct PCodegenLLVM* p_cg, PType* p_type, PAstBinaryOp p_op, LLVMValueRef p_lhs, LLVMValueRef p_rhs)
+void*
+PCodeGenLLVM::visit_binary_expr(const PAstBinaryExpr* p_node)
 {
-  if (p_op == P_BINARY_ASSIGN) {
-    return LLVMBuildStore(p_cg->builder, p_rhs, p_lhs);
+  const auto opcode = p_node->opcode;
+
+  if (opcode == P_BINARY_LOG_AND || opcode == P_BINARY_LOG_OR)
+    return emit_log_and(p_node->lhs, p_node->rhs, (opcode == P_BINARY_LOG_AND));
+
+  auto* lhs = static_cast<llvm::Value*>(visit(p_node->lhs));
+  auto* rhs = static_cast<llvm::Value*>(visit(p_node->rhs));
+  if (p_binop_is_assignment(opcode)) {
+    if (opcode == P_BINARY_ASSIGN) {
+      return m_d->builder->CreateStore(rhs, lhs);
+    } else {
+      auto* lhs_type = p_node->lhs->get_type(m_d->ctx);
+      auto* type = m_d->convert_type(lhs_type);
+      auto* lhs_value = m_d->builder->CreateLoad(type, lhs);
+
+      auto* result = static_cast<llvm::Value*>(emit_trivial_bin_op(lhs_type, lhs_value, rhs, opcode));
+      return m_d->builder->CreateStore(result, lhs);
+    }
+  } else {
+    auto* lhs_type = p_node->lhs->get_type(m_d->ctx);
+    return emit_trivial_bin_op(lhs_type, lhs, rhs, opcode);
   }
-
-  p_op = get_assignment_op(p_op);
-
-  const LLVMValueRef lhs_value = LLVMBuildLoad2(p_cg->builder, cg_to_llvm_type(p_type), p_lhs, "");
-  const LLVMValueRef value = cg_binary_expr_impl(p_cg, p_type, p_op, lhs_value, p_rhs);
-  return LLVMBuildStore(p_cg->builder, value, p_lhs);
 }
 
-static LLVMValueRef
-cg_binary_expr(struct PCodegenLLVM* p_cg, PAstBinaryExpr* p_node)
+void*
+PCodeGenLLVM::visit_call_expr(const PAstCallExpr* p_node)
 {
-  assert(P_AST_GET_KIND(p_node) == P_AST_NODE_BINARY_EXPR);
+  auto* callee_type = m_d->convert_type(p_node->callee->get_type(m_d->ctx));
+  assert(callee_type->isFunctionTy());
+  auto* callee = static_cast<llvm::Value*>(visit(p_node->callee));
 
-  if (p_node->opcode == P_BINARY_LOG_AND) {
-    return cg_log_and_impl(p_cg, p_node->lhs, p_node->rhs, /* is_and= */ true);
-  } else if (p_node->opcode == P_BINARY_LOG_OR) {
-    return cg_log_and_impl(p_cg, p_node->lhs, p_node->rhs, /* is_and= */ false);
-  } else if (p_binop_is_assignment(p_node->opcode)) {
-    const LLVMValueRef lhs = cg_visit(p_cg, p_node->lhs);
-    const LLVMValueRef rhs = cg_visit(p_cg, p_node->rhs);
-    return cg_assignment_impl(p_cg, p_node->type, p_node->opcode, lhs, rhs);
-  }
-
-  const LLVMValueRef lhs = cg_visit(p_cg, p_node->lhs);
-  const LLVMValueRef rhs = cg_visit(p_cg, p_node->rhs);
-  return cg_binary_expr_impl(p_cg, p_ast_get_type(p_node->lhs), p_node->opcode, lhs, rhs);
-}
-
-static LLVMValueRef
-cg_call_expr(struct PCodegenLLVM* p_cg, PAstCallExpr* p_node)
-{
-  assert(P_AST_GET_KIND(p_node) == P_AST_NODE_CALL_EXPR);
-
-  PType* callee_type = p_ast_get_type(p_node->callee);
-  const LLVMValueRef fn = cg_visit(p_cg, p_node->callee);
-
-  LLVMValueRef* args = static_cast<LLVMValueRef*>(malloc(sizeof(LLVMValueRef) * p_node->arg_count));
-  assert(args != nullptr);
-
+  std::vector<llvm::Value*> args(p_node->arg_count);
   for (size_t i = 0; i < p_node->arg_count; ++i) {
-    args[i] = cg_visit(p_cg, p_node->args[i]);
+    args[i] = static_cast<llvm::Value*>(visit(p_node->args[i]));
   }
 
-  const LLVMValueRef call =
-    LLVMBuildCall2(p_cg->builder, cg_to_llvm_type(callee_type), fn, args, (unsigned int)p_node->arg_count, "");
-
-  free(args);
-
-  return call;
+  return m_d->builder->CreateCall(static_cast<llvm::FunctionType*>(callee_type), callee, args);
 }
 
-static LLVMValueRef
-cg_member_expr(struct PCodegenLLVM* p_cg, PAstMemberExpr* p_node)
+void*
+PCodeGenLLVM::visit_cast_expr(const PAstCastExpr* p_node)
 {
-  assert(P_AST_GET_KIND(p_node) == P_AST_NODE_MEMBER_EXPR);
-
-  LLVMValueRef base_expr = cg_visit(p_cg, p_node->base_expr);
-  LLVMTypeRef struct_type = cg_to_llvm_type(P_DECL_GET_TYPE(p_node->member->parent));
-  return LLVMBuildStructGEP2(p_cg->builder, struct_type, base_expr, p_node->member->idx_in_parent_fields, "");
-}
-
-static LLVMValueRef
-cg_cast_expr(struct PCodegenLLVM* p_cg, PAstCastExpr* p_node)
-{
-  assert(P_AST_GET_KIND(p_node) == P_AST_NODE_CAST_EXPR);
-
-  PType* source_ty = p_ast_get_type(p_node->sub_expr);
-  LLVMValueRef sub_expr = cg_visit(p_cg, p_node->sub_expr);
-  LLVMTypeRef llvm_target_ty = cg_to_llvm_type(p_node->type);
+  auto* source_ty = p_node->sub_expr->get_type(m_d->ctx);
+  auto* sub_expr = static_cast<llvm::Value*>(visit(p_node->sub_expr));
+  auto* llvm_target_ty = m_d->convert_type(p_node->target_ty);
   switch (p_node->cast_kind) {
     case P_CAST_NOOP:
       return sub_expr;
     case P_CAST_INT2INT: {
       const int from_bitwidth = p_type_get_bitwidth(source_ty);
-      const int target_bitwidth = p_type_get_bitwidth(p_node->type);
+      const int target_bitwidth = p_type_get_bitwidth(p_node->target_ty);
 
       if (from_bitwidth > target_bitwidth) {
-        return LLVMBuildTrunc(p_cg->builder, sub_expr, llvm_target_ty, "");
+        return m_d->builder->CreateTrunc(sub_expr, llvm_target_ty);
       } else { /* from_bitwidth < target_bitwidth */
         if (source_ty->is_unsigned_int_ty()) {
-          return LLVMBuildZExt(p_cg->builder, sub_expr, llvm_target_ty, "");
+          return m_d->builder->CreateZExt(sub_expr, llvm_target_ty);
         } else {
-          return LLVMBuildSExt(p_cg->builder, sub_expr, llvm_target_ty, "");
+          return m_d->builder->CreateSExt(sub_expr, llvm_target_ty);
         }
       }
     }
     case P_CAST_INT2FLOAT:
       if (source_ty->is_unsigned_int_ty())
-        return LLVMBuildUIToFP(p_cg->builder, sub_expr, llvm_target_ty, "");
+        return m_d->builder->CreateUIToFP(sub_expr, llvm_target_ty);
       else
-        return LLVMBuildSIToFP(p_cg->builder, sub_expr, llvm_target_ty, "");
+        return m_d->builder->CreateSIToFP(sub_expr, llvm_target_ty);
     case P_CAST_FLOAT2FLOAT: {
       const int from_bitwidth = p_type_get_bitwidth(source_ty);
-      const int target_bitwidth = p_type_get_bitwidth(p_node->type);
+      const int target_bitwidth = p_type_get_bitwidth(p_node->target_ty);
 
       if (from_bitwidth > target_bitwidth) {
-        return LLVMBuildFPTrunc(p_cg->builder, sub_expr, llvm_target_ty, "");
+        return m_d->builder->CreateFPTrunc(sub_expr, llvm_target_ty);
       } else {
-        return LLVMBuildFPExt(p_cg->builder, sub_expr, llvm_target_ty, "");
+        return m_d->builder->CreateFPExt(sub_expr, llvm_target_ty);
       }
     }
     case P_CAST_FLOAT2INT:
-      if (p_node->type->is_unsigned_int_ty())
-        return LLVMBuildFPToUI(p_cg->builder, sub_expr, llvm_target_ty, "");
+      if (p_node->target_ty->is_unsigned_int_ty())
+        return m_d->builder->CreateFPToUI(sub_expr, llvm_target_ty);
       else
-        return LLVMBuildFPToSI(p_cg->builder, sub_expr, llvm_target_ty, "");
+        return m_d->builder->CreateFPToSI(sub_expr, llvm_target_ty);
     case P_CAST_BOOL2INT:
-      return LLVMBuildZExt(p_cg->builder, sub_expr, llvm_target_ty, "");
+      return m_d->builder->CreateZExt(sub_expr, llvm_target_ty);
     case P_CAST_BOOL2FLOAT:
-      return LLVMBuildUIToFP(p_cg->builder, sub_expr, llvm_target_ty, "");
+      return m_d->builder->CreateUIToFP(sub_expr, llvm_target_ty);
     default:
-      HEDLEY_UNREACHABLE_RETURN(nullptr);
+      assert(false && "cast operation not yet implemented");
+      return nullptr;
   }
 }
 
-static LLVMValueRef
-cg_lvalue_to_rvalue_expr(struct PCodegenLLVM* p_cg, PAstLValueToRValueExpr* p_node)
+void*
+PCodeGenLLVM::visit_l2rvalue_expr(const PAstL2RValueExpr* p_node)
 {
-  assert(P_AST_GET_KIND(p_node) == P_AST_NODE_LVALUE_TO_RVALUE_EXPR);
-
-  LLVMValueRef addr = cg_visit(p_cg, p_node->sub_expr);
-  return LLVMBuildLoad2(p_cg->builder, cg_to_llvm_type(p_ast_get_type(p_node->sub_expr)), addr, "");
+  auto* type = m_d->convert_type(p_node->get_type(m_d->ctx));
+  auto* ptr = static_cast<llvm::Value*>(visit(p_node->sub_expr));
+  return m_d->builder->CreateLoad(type, ptr);
 }
 
-static LLVMValueRef
-cg_translation_unit(struct PCodegenLLVM* p_cg, PAstTranslationUnit* p_node)
+void*
+PCodeGenLLVM::visit_func_decl(const PFunctionDecl* p_node)
 {
-  assert(P_AST_GET_KIND(p_node) == P_AST_NODE_TRANSLATION_UNIT);
+  auto func_name = std::string(p_node->name->spelling, p_node->name->spelling + p_node->name->spelling_len);
 
-  for (int i = 0; i < p_node->decl_count; ++i) {
-    cg_visit_decl(p_cg, p_node->decls[i]);
+  auto* func_ty = m_d->convert_type(p_node->type);
+  assert(func_ty->isFunctionTy());
+  auto func_callee = m_d->llvm_module->getOrInsertFunction(func_name, static_cast<llvm::FunctionType*>(func_ty));
+
+  auto* func = llvm::cast<llvm::Function>(func_callee.getCallee());
+  assert(func != nullptr);
+
+  m_d->decls.insert({ p_node, func });
+
+  if (p_node->body != nullptr) {
+    auto* entry_bb = llvm::BasicBlock::Create(*m_d->llvm_ctx, "", func);
+    m_d->builder->SetInsertPoint(entry_bb);
+
+    // Allocate all parameters on the stack so the user can modify them.
+    for (size_t i = 0; i < p_node->param_count; ++i) {
+      auto* param_ty = m_d->convert_type(p_node->params[i]->type);
+      auto* param_addr = m_d->builder->CreateAlloca(param_ty);
+      m_d->builder->CreateStore(func->getArg(i), param_addr);
+      m_d->decls.insert({ p_node->params[i], param_addr });
+    }
+
+    visit(p_node->body);
+    m_d->finish_func_codegen();
   }
 
   return nullptr;
 }
 
-static LLVMValueRef
-cg_visit(struct PCodegenLLVM* p_cg, PAst* p_node)
+void*
+PCodeGenLLVM::visit_var_decl(const PVarDecl* p_node)
 {
-  assert(p_node != nullptr);
+  auto* type = m_d->convert_type(p_node->type);
+  auto* ptr = m_d->insert_alloc_in_entry_bb(type);
 
-  switch (P_AST_GET_KIND(p_node)) {
-#define DISPATCH(p_kind, p_type, p_func)                                                                               \
-  case p_kind:                                                                                                         \
-    return p_func(p_cg, (p_type*)p_node)
+  m_d->decls.insert({ p_node, ptr });
 
-    DISPATCH(P_AST_NODE_TRANSLATION_UNIT, PAstTranslationUnit, cg_translation_unit);
-    DISPATCH(P_AST_NODE_COMPOUND_STMT, PAstCompoundStmt, cg_compound_stmt);
-    DISPATCH(P_AST_NODE_LET_STMT, PAstLetStmt, cg_let_stmt);
-    DISPATCH(P_AST_NODE_BREAK_STMT, PAstBreakStmt, cg_break_stmt);
-    DISPATCH(P_AST_NODE_CONTINUE_STMT, PAstContinueStmt, cg_continue_stmt);
-    DISPATCH(P_AST_NODE_RETURN_STMT, PAstReturnStmt, cg_return_stmt);
-    DISPATCH(P_AST_NODE_LOOP_STMT, PAstLoopStmt, cg_loop_stmt);
-    DISPATCH(P_AST_NODE_WHILE_STMT, PAstWhileStmt, cg_while_stmt);
-    DISPATCH(P_AST_NODE_IF_STMT, PAstIfStmt, cg_if_stmt);
-    DISPATCH(P_AST_NODE_BOOL_LITERAL, PAstBoolLiteral, cg_bool_literal);
-    DISPATCH(P_AST_NODE_INT_LITERAL, PAstIntLiteral, cg_int_literal);
-    DISPATCH(P_AST_NODE_FLOAT_LITERAL, PAstFloatLiteral, cg_float_literal);
-    DISPATCH(P_AST_NODE_PAREN_EXPR, PAstParenExpr, cg_paren_expr);
-    DISPATCH(P_AST_NODE_DECL_REF_EXPR, PAstDeclRefExpr, cg_decl_ref_expr);
-    DISPATCH(P_AST_NODE_UNARY_EXPR, PAstUnaryExpr, cg_unary_expr);
-    DISPATCH(P_AST_NODE_BINARY_EXPR, PAstBinaryExpr, cg_binary_expr);
-    DISPATCH(P_AST_NODE_CALL_EXPR, PAstCallExpr, cg_call_expr);
-    DISPATCH(P_AST_NODE_MEMBER_EXPR, PAstMemberExpr, cg_member_expr);
-    DISPATCH(P_AST_NODE_CAST_EXPR, PAstCastExpr, cg_cast_expr);
-    DISPATCH(P_AST_NODE_LVALUE_TO_RVALUE_EXPR, PAstLValueToRValueExpr, cg_lvalue_to_rvalue_expr);
-#undef DISPATCH
-
-    default:
-      HEDLEY_UNREACHABLE_RETURN(nullptr);
-  }
-}
-
-PCodegenLLVM::PCodegenLLVM(PContext& p_context)
-  : context(p_context)
-{
-  LLVMInitializeNativeTarget();
-  LLVMInitializeNativeAsmPrinter();
-
-  module = LLVMModuleCreateWithName("");
-  builder = LLVMCreateBuilder();
-
-  opt_level = 0;
-
-  char* target_triple = LLVMGetDefaultTargetTriple();
-  char* host_cpu = LLVMGetHostCPUName();
-  char* host_features = LLVMGetHostCPUFeatures();
-  LLVMTargetRef target = nullptr;
-  char* error = nullptr;
-  LLVMSetTarget(module, target_triple);
-  LLVMGetTargetFromTriple(target_triple, &target, &error);
-  LLVMDisposeMessage(error);
-  target_machine = LLVMCreateTargetMachine(
-    target, target_triple, host_cpu, host_features, LLVMCodeGenLevelAggressive, LLVMRelocDefault, LLVMCodeModelDefault);
-  LLVMDisposeMessage(host_cpu);
-  LLVMDisposeMessage(host_features);
-  LLVMDisposeMessage(target_triple);
-}
-
-PCodegenLLVM::~PCodegenLLVM()
-{
-  LLVMDisposeBuilder(builder);
-  LLVMDisposeModule(module);
-}
-
-void
-p_cg_compile(struct PCodegenLLVM* p_cg, PAst* p_ast, const char* p_output_filename)
-{
-  assert(p_cg != nullptr);
-
-  cg_visit(p_cg, p_ast);
-
-  LLVMDumpModule(p_cg->module);
-
-  char* msg = nullptr;
-  LLVMVerifyModule(p_cg->module, LLVMAbortProcessAction, &msg);
-  LLVMDisposeMessage(msg);
-
-  /* Optimize: */
-  LLVMPassBuilderOptionsRef options = LLVMCreatePassBuilderOptions();
-  char buffer[] = "default<O0>";
-  buffer[9] = (char)('0' + (char)p_cg->opt_level);
-  LLVMRunPasses(p_cg->module, buffer, p_cg->target_machine, options);
-  LLVMDisposePassBuilderOptions(options);
-
-  msg = nullptr;
-  if (LLVMTargetMachineEmitToFile(p_cg->target_machine, p_cg->module, (char*)p_output_filename, LLVMObjectFile, &msg)) {
-    // TODO: use diag interface
-    abort();
+  if (p_node->init_expr != nullptr) {
+    auto* init_value = static_cast<llvm::Value*>(visit(p_node->init_expr));
+    m_d->builder->CreateStore(init_value, ptr);
   }
 
-  LLVMDisposeMessage(msg);
+  return nullptr;
 }

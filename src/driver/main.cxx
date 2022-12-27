@@ -7,6 +7,15 @@
 #include <clocale>
 #include <cstdlib>
 
+#include "ast/ast_printer.hxx"
+
+#include <llvm/IR/Module.h>
+#include <llvm/Support/TargetSelect.h>
+
+#include <filesystem>
+
+namespace fs = std::filesystem;
+
 bool
 compile_to(PSourceFile* p_source_file, const char* p_output_filename)
 {
@@ -23,11 +32,16 @@ compile_to(PSourceFile* p_source_file, const char* p_output_filename)
   PParser parser(context, lexer);
 
   PAst* ast = p_parse(&parser);
-  if (g_diag_context.diagnostic_count[P_DIAG_ERROR] == 0 && !g_options.opt_syntax_only) {
-    PCodegenLLVM codegen(context);
-    codegen.opt_level = 0;
+  ast->dump(context);
 
-    p_cg_compile(&codegen, ast, p_output_filename);
+  if (g_diag_context.diagnostic_count[P_DIAG_ERROR] == 0 && !g_options.opt_syntax_only) {
+    PCodeGenLLVM codegen(context);
+    codegen.codegen(ast->as<PAstTranslationUnit>());
+    fs::create_directory("out");
+    codegen.write_llvm_ir("out/" + p_source_file->get_filename() + ".ir");
+    codegen.optimize();
+    codegen.write_llvm_ir("out/" + p_source_file->get_filename() + ".opt.ir");
+    codegen.write_object_file("out/" + p_source_file->get_filename() + ".o");
   }
 
   lexer_destroy(&lexer);
@@ -42,6 +56,10 @@ cmdline_parser(int p_argc, char* p_argv[]);
 int
 main(int p_argc, char* p_argv[])
 {
+  llvm::InitializeNativeTarget();
+  llvm::InitializeNativeTargetAsmPrinter();
+  llvm::InitializeNativeTargetAsmParser();
+
   setlocale(LC_ALL, "C");
 
   cmdline_parser(p_argc, p_argv);

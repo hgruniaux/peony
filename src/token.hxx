@@ -1,14 +1,13 @@
-#pragma once
+#ifndef PEONY_TOKEN_HXX
+#define PEONY_TOKEN_HXX
 
 #include "token_kind.hxx"
 #include "utils/source_location.hxx"
 
-HEDLEY_BEGIN_C_DECLS
-
 struct PIdentifierInfo;
 
-// The different possible integer literal suffixes.
-typedef enum PIntLiteralSuffix
+/// The different possible integer literal suffixes.
+enum PIntLiteralSuffix
 {
   P_ILS_NO_SUFFIX, // no suffix, e.g. '42'
   P_ILS_I8,        // e.g. '42i8'
@@ -19,23 +18,23 @@ typedef enum PIntLiteralSuffix
   P_ILS_U16,       // e.g. '42u16'
   P_ILS_U32,       // e.g. '42u32'
   P_ILS_U64        // e.g. '42u64'
-} PIntLiteralSuffix;
+};
 
-// The different possible float literal suffixes.
-typedef enum PFloatLiteralSuffix
+/// The different possible float literal suffixes.
+enum PFloatLiteralSuffix
 {
   P_FLS_NO_SUFFIX, // no suffix, e.g. '3.14'
   P_FLS_F32,       // e.g. '3.14f32'
   P_FLS_F64,       // e.g. '3.14f64'
-} PFloatLiteralSuffix;
+};
 
-typedef struct PTokenLiteralData
+struct PTokenLiteralData
 {
   // The radix of the integer literal (either 2, 8, 10 or 16).
   // This value is undefined for tokens other than P_TOK_INT_LITERAL.
   int int_radix;
   // Either a value of PIntLiteralSuffix or PFloatLiteralSuffix depending
-  // on the token kind.
+  // on the token m_kind.
   int suffix_kind;
   // begin and end are pointers to the source file m_buffer used
   // by the lexer and therefore their lifetime depends on that of the file.
@@ -43,7 +42,7 @@ typedef struct PTokenLiteralData
   // suffix (e.g. `f32`).
   const char* begin;
   const char* end;
-} PTokenLiteralData;
+};
 
 union PTokenData
 {
@@ -55,7 +54,7 @@ union PTokenData
   PTokenLiteralData literal;
 };
 
-typedef struct PToken
+struct PToken
 {
   PTokenKind kind;
 
@@ -67,6 +66,6 @@ typedef struct PToken
 
   // Store additional data needed for some types.
   union PTokenData data;
-} PToken;
+};
 
-HEDLEY_END_C_DECLS
+#endif // PEONY_TOKEN_HXX

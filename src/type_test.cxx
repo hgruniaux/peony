@@ -13,7 +13,7 @@ TEST(type, paren_type)
   PParenType* paren_ty = ctx.get_paren_ty(f32_ty);
   ASSERT_NE(paren_ty, nullptr);
 
-  EXPECT_EQ(paren_ty->sub_type, f32_ty);
+  EXPECT_EQ(paren_ty->get_sub_type(), f32_ty);
 
   EXPECT_FALSE(paren_ty->is_canonical_ty());
   EXPECT_EQ(paren_ty->get_canonical_ty(), f32_ty);
@@ -21,7 +21,7 @@ TEST(type, paren_type)
   PParenType* paren_two_ty = ctx.get_paren_ty((PType*)paren_ty);
   ASSERT_NE(paren_two_ty, nullptr);
 
-  EXPECT_EQ(paren_two_ty->sub_type, (PType*)paren_ty);
+  EXPECT_EQ(paren_two_ty->get_sub_type(), (PType*)paren_ty);
 
   EXPECT_FALSE(paren_two_ty->is_canonical_ty());
   EXPECT_EQ(paren_two_ty->get_canonical_ty(), f32_ty);
@@ -38,9 +38,9 @@ TEST(type, function_type)
   ASSERT_NE(func_ty, nullptr);
 
   EXPECT_EQ(func_ty->get_ret_ty(), ret_ty);
-  ASSERT_EQ(func_ty->arg_count, 2);
-  EXPECT_EQ(func_ty->args[0], args_ty[0]);
-  EXPECT_EQ(func_ty->args[1], args_ty[1]);
+  ASSERT_EQ(func_ty->get_param_count(), 2);
+  EXPECT_EQ(func_ty->get_params()[0], args_ty[0]);
+  EXPECT_EQ(func_ty->get_params()[1], args_ty[1]);
   EXPECT_FALSE(func_ty->is_canonical_ty());
 
   PType* canonical_ret_ty = ret_ty->get_canonical_ty();
@@ -49,9 +49,9 @@ TEST(type, function_type)
   ASSERT_NE(canonical_func_ty, nullptr);
 
   EXPECT_EQ(canonical_func_ty->get_ret_ty(), canonical_ret_ty);
-  ASSERT_EQ(canonical_func_ty->arg_count, 2);
-  EXPECT_EQ(canonical_func_ty->args[0], canonical_args_ty[0]);
-  EXPECT_EQ(canonical_func_ty->args[1], canonical_args_ty[1]);
+  ASSERT_EQ(canonical_func_ty->get_param_count(), 2);
+  EXPECT_EQ(canonical_func_ty->get_params()[0], canonical_args_ty[0]);
+  EXPECT_EQ(canonical_func_ty->get_params()[1], canonical_args_ty[1]);
   EXPECT_TRUE(canonical_func_ty->is_canonical_ty());
 
   EXPECT_EQ(canonical_func_ty->get_canonical_ty(), canonical_func_ty);
@@ -72,7 +72,7 @@ TEST(type, pointer_type)
   PPointerType* pointer_ty = ctx.get_pointer_ty(f32_ty);
   ASSERT_NE(pointer_ty, nullptr);
 
-  EXPECT_EQ(pointer_ty->element_type, f32_ty);
+  EXPECT_EQ(pointer_ty->get_element_ty(), f32_ty);
   EXPECT_TRUE(pointer_ty->is_canonical_ty());
   EXPECT_EQ(pointer_ty->get_canonical_ty(), pointer_ty);
 
@@ -85,7 +85,7 @@ TEST(type, pointer_type)
   ASSERT_NE(paren_ty, nullptr);
   PPointerType* non_canonical_pointer_ty = ctx.get_pointer_ty(paren_ty);
   ASSERT_NE(non_canonical_pointer_ty, nullptr);
-  EXPECT_EQ(non_canonical_pointer_ty->element_type, paren_ty);
+  EXPECT_EQ(non_canonical_pointer_ty->get_element_ty(), paren_ty);
   EXPECT_NE(non_canonical_pointer_ty, pointer_ty);
   EXPECT_FALSE(non_canonical_pointer_ty->is_canonical_ty());
   EXPECT_EQ(non_canonical_pointer_ty->get_canonical_ty(), pointer_ty);
@@ -100,8 +100,8 @@ TEST(type, array_type)
   PArrayType* array_ty = ctx.get_array_ty(f32_ty, 3);
   ASSERT_NE(array_ty, nullptr);
 
-  EXPECT_EQ(array_ty->element_type, f32_ty);
-  EXPECT_EQ(array_ty->num_elements, 3);
+  EXPECT_EQ(array_ty->get_element_ty(), f32_ty);
+  EXPECT_EQ(array_ty->get_num_elements(), 3);
   EXPECT_TRUE(array_ty->is_canonical_ty());
   EXPECT_EQ(array_ty->get_canonical_ty(), array_ty);
 
@@ -116,8 +116,8 @@ TEST(type, array_type)
   ASSERT_NE(paren_ty, nullptr);
   PArrayType* non_canonical_array_ty = ctx.get_array_ty(paren_ty, 3);
   ASSERT_NE(non_canonical_array_ty, nullptr);
-  EXPECT_EQ(non_canonical_array_ty->element_type, paren_ty);
-  EXPECT_EQ(non_canonical_array_ty->num_elements, 3);
+  EXPECT_EQ(non_canonical_array_ty->get_element_ty(), paren_ty);
+  EXPECT_EQ(non_canonical_array_ty->get_num_elements(), 3);
   EXPECT_NE(non_canonical_array_ty, array_ty);
   EXPECT_FALSE(non_canonical_array_ty->is_canonical_ty());
   EXPECT_EQ(non_canonical_array_ty->get_canonical_ty(), array_ty);

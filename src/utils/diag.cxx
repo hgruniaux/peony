@@ -223,11 +223,10 @@ diag_flush(PDiag* p_diag)
   if (g_options.opt_diagnostics_color)
     fputs("\x1b[0m", stderr);
 
-  PMsgBuffer buffer;
-  INIT_MSG_BUFFER(buffer);
-  p_diag_format_msg(&buffer, p_diag->message, p_diag->args, p_diag->arg_count);
+  std::string buffer;
+  p_diag_format_msg(buffer, p_diag->message, p_diag->args, p_diag->arg_count);
 
-  fputs(buffer.buffer, stderr);
+  fputs(buffer.c_str(), stderr);
   fputs("\n", stderr);
   if (p_diag->range_count > 0)
     p_diag_print_source_ranges(g_current_source_file, p_diag->ranges, p_diag->range_count);

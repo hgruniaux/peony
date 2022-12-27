@@ -1,137 +1,170 @@
-#pragma once
+#ifndef PEONY_SEMA_HXX
+#define PEONY_SEMA_HXX
 
-#include "ast.hxx"
-#include "scope.hxx"
+#include "ast/ast.hxx"
 #include "context.hxx"
+#include "scope.hxx"
+#include "token.hxx"
 
-/*
- * This file contains the interface of the semantic analyzer.
- *
- * These functions are responsible for completing the nodes of
- * the AST with semantic information and checking whether this
- * information is valid according to the context. Possibly
- * emitting errors if it is not the case.
- *
- * This interface is used by the parser during the AST construction.
- */
+#include <stack>
 
-#define P_MAX_SCOPE_CACHE 64
-
-typedef struct PSema
+/// The semantic analyzer.
+///
+/// In Peony, the semantic analyzer is called by a callback-based API which is
+/// in charge, on the one hand, to check the semantic of the program and, on the
+/// other hand, to effectively build the AST. These callbacks can be called by
+/// anyone, yet in Peony they are called by the parser.
+class PSema
 {
-  PContext& context;
-  PFunctionType* curr_func_type;
-
-  size_t current_scope_cache_idx;
-  PScope* scope_cache[P_MAX_SCOPE_CACHE];
-  PScope* current_scope;
-
-  PSema(PContext& context);
+public:
+  explicit PSema(PContext& context);
   ~PSema();
-} PSema;
 
-void
-sema_push_scope(PSema* p_s, PScopeFlags p_flags);
+  void push_scope(PScopeFlags p_flags = P_SF_NONE);
+  void pop_scope();
 
-void
-sema_pop_scope(PSema* p_s);
+  [[nodiscard]] PSymbol* lookup(PIdentifierInfo* p_name) const;
+  [[nodiscard]] PSymbol* local_lookup(PIdentifierInfo* p_name) const;
 
-PSymbol*
-sema_local_lookup(PSema* p_s, PIdentifierInfo* p_name);
+  [[nodiscard]] PAstBoolLiteral* act_on_bool_literal(bool p_value, PSourceRange p_src_range = {});
 
-PSymbol*
-sema_lookup(PSema* p_s, PIdentifierInfo* p_name);
+  /// Returns the type corresponding to the given integer literal suffix.
+  /// If p_suffix is P_ILS_NO_SUFFIX, the smallest yet greater than `i32`
+  /// integer type that can store `p_value` is returned.
+  [[nodiscard]] PType* get_type_for_int_literal_suffix(PIntLiteralSuffix p_suffix, uintmax_t p_value = 0) const;
+  /// Returns `true` if the given type is big enough to store `p_value`.
+  [[nodiscard]] bool is_int_type_big_enough(uintmax_t p_value, PType* p_type) const;
+  [[nodiscard]] PAstIntLiteral* act_on_int_literal(uintmax_t p_value,
+                                                   PIntLiteralSuffix p_suffix,
+                                                   PSourceRange p_src_range = {});
 
-PDeclFunction*
-sema_act_on_func_decl(PSema* p_s,
-                      PSourceRange p_name_range,
-                      PIdentifierInfo* p_name,
-                      PType* p_ret_type,
-                      PDeclParam** p_params,
-                      size_t p_param_count);
+  /// Same as get_type_for_int_literal_suffix() but for a float literal.
+  [[nodiscard]] PType* get_type_for_float_literal_suffix(PFloatLiteralSuffix p_suffix, double p_value = 0.0) const;
+  [[nodiscard]] PAstFloatLiteral* act_on_float_literal(double p_value,
+                                                       PFloatLiteralSuffix p_suffix,
+                                                       PSourceRange p_src_range = {});
 
-void
-sema_begin_func_decl_body_parsing(PSema* p_s, PDeclFunction* p_decl);
+  [[nodiscard]] PAstParenExpr* act_on_paren_expr(PAstExpr* p_sub_expr, PSourceRange p_src_range = {});
 
-void
-sema_end_func_decl_body_parsing(PSema* p_s, PDeclFunction* p_decl);
+  [[nodiscard]] PAstLetStmt* act_on_let_stmt(PVarDecl** p_decls, size_t p_decl_count, PSourceRange p_src_range = {});
+  [[nodiscard]] PAstLetStmt* act_on_let_stmt(const std::vector<PVarDecl*>& p_decls, PSourceRange p_src_range = {});
 
-PDeclStruct*
-sema_act_on_struct_decl(PSema* p_s,
-                        PSourceRange p_name_range,
-                        PIdentifierInfo* p_name,
-                        PDeclStructField** p_fields,
-                        size_t p_field_count);
+  [[nodiscard]] PAstBreakStmt* act_on_break_stmt(PSourceRange p_src_range = {}, PSourceRange p_break_key_range = {});
+  [[nodiscard]] PAstContinueStmt* act_on_continue_stmt(PSourceRange p_src_range = {},
+                                                       PSourceRange p_cont_key_range = {});
 
-PDeclStructField*
-sema_act_on_struct_field_decl(PSema* p_s, PSourceRange p_name_range, PIdentifierInfo* p_name, PType* p_type);
+  /// Returns `true` if the given type is compatible (that is canonically equivalent or
+  /// convertible to) the return type of the current function.
+  [[nodiscard]] bool is_compatible_with_ret_ty(PType* p_type) const;
+  [[nodiscard]] PAstReturnStmt* act_on_return_stmt(PAstExpr* p_ret_expr,
+                                                   PSourceRange p_src_range = {},
+                                                   PSourceLocation p_semi_loc = {});
 
-PDeclParam*
-sema_act_on_param_decl(PSema* p_s,
-                       PSourceRange p_name_range,
-                       PIdentifierInfo* p_name,
-                       PType* p_type,
-                       PAst* p_default_expr);
+  /// Checks (and emits diagnostics) a given expression used as a condition
+  /// like in a `if` or `while` statement.
+  void check_condition_expr(PAstExpr* p_cond_expr) const;
 
-PDeclVar*
-sema_act_on_var_decl(PSema* p_s, PSourceRange p_name_range, PIdentifierInfo* p_name, PType* p_type, PAst* p_init_expr);
+  /// To be called just before analysing a while statement body but after analysing
+  /// the condition expression. However, act_on_while_stmt() must be called after
+  /// the body analysis and thus after this function.
+  void act_before_while_stmt_body();
+  [[nodiscard]] PAstWhileStmt* act_on_while_stmt(PAstExpr* p_cond_expr, PAst* p_body, PSourceRange p_src_range = {});
 
-PAstLetStmt*
-sema_act_on_let_stmt(PSema* p_s, PDeclVar** p_decls, size_t p_decl_count);
+  void act_before_loop_stmt_body();
+  [[nodiscard]] PAstLoopStmt* act_on_loop_stmt(PAst* p_body, PSourceRange p_src_range = {});
 
-PAstBreakStmt*
-sema_act_on_break_stmt(PSema* p_s, PSourceRange p_range);
+  [[nodiscard]] PAstIfStmt* act_on_if_stmt(PAstExpr* p_cond_expr,
+                                           PAst* p_then_stmt,
+                                           PAst* p_else_stmt,
+                                           PSourceRange p_src_range = {});
 
-PAstContinueStmt*
-sema_act_on_continue_stmt(PSema* p_s, PSourceRange p_range);
+  [[nodiscard]] PAstDeclRefExpr* act_on_decl_ref_expr(PIdentifierInfo* p_name, PSourceRange p_src_range = {});
 
-PAstReturnStmt*
-sema_act_on_return_stmt(PSema* p_s, PSourceLocation p_semi_loc, PAst* p_ret_expr);
+  [[nodiscard]] PAstUnaryExpr* act_on_unary_expr(PAstExpr* p_sub_expr,
+                                                 PAstUnaryOp p_opcode,
+                                                 PSourceRange p_src_range = {},
+                                                 PSourceLocation p_op_loc = {});
+  [[nodiscard]] PAstBinaryExpr* act_on_binary_expr(PAstExpr* p_lhs,
+                                                   PAstExpr* p_rhs,
+                                                   PAstBinaryOp p_opcode,
+                                                   PSourceRange p_src_range = {},
+                                                   PSourceLocation p_op_loc = {});
 
-PAstIfStmt*
-sema_act_on_if_stmt(PSema* p_s, PAst* p_cond_expr, PAst* p_then_stmt, PAst* p_else_stmt);
+  /// Checks the arguments used in a call expression to a callee of the given type.
+  /// The param func_decl is optional and it is used for better diagnostics.
+  void check_call_args(PFunctionType* p_callee_ty,
+                       PAstExpr** p_args,
+                       size_t p_arg_count,
+                       PFunctionDecl* p_func_decl = nullptr,
+                       PSourceLocation p_lparen_loc = {});
+  [[nodiscard]] PAstCallExpr* act_on_call_expr(PAstExpr* p_callee,
+                                               PAstExpr** p_args,
+                                               size_t p_arg_count,
+                                               PSourceRange p_src_range = {},
+                                               PSourceLocation p_lparen_loc = {});
+  [[nodiscard]] PAstCallExpr* act_on_call_expr(PAstExpr* p_callee,
+                                               const std::vector<PAstExpr*>& p_args,
+                                               PSourceRange p_src_range = {},
+                                               PSourceLocation p_lparen_loc = {});
 
-PAstLoopStmt*
-sema_act_on_loop_stmt(PSema* p_s, PScope* p_scope);
+  [[nodiscard]] PAstCastExpr* act_on_cast_expr(PAstExpr* p_sub_expr,
+                                               PType* p_target_ty,
+                                               PSourceRange p_src_range = {},
+                                               PSourceLocation p_as_loc = {});
 
-PAstWhileStmt*
-sema_act_on_while_stmt(PSema* p_s, PAst* p_cond_expr, PScope* p_scope);
+  [[nodiscard]] PVarDecl* act_on_var_decl(PType* p_type,
+                                          PIdentifierInfo* p_name,
+                                          PAstExpr* p_init_expr,
+                                          PSourceRange p_src_range = {},
+                                          PSourceRange p_name_range = {});
+  [[nodiscard]] PParamDecl* act_on_param_decl(PType* p_type,
+                                              PIdentifierInfo* p_name,
+                                              PSourceRange p_src_range = {},
+                                              PSourceRange p_name_range = {});
 
-PAstBoolLiteral*
-sema_act_on_bool_literal(PSema* p_s, PSourceRange p_range, bool p_value);
+  void begin_func_decl_analysis(PFunctionDecl* p_decl);
+  void end_func_decl_analysis();
+  [[nodiscard]] PFunctionDecl* act_on_func_decl(PIdentifierInfo* p_name,
+                                                PType* p_ret_ty,
+                                                PParamDecl** p_params,
+                                                size_t p_param_count,
+                                                PSourceRange p_name_range = {},
+                                                PSourceLocation p_key_fn_end_loc = {});
+  [[nodiscard]] PFunctionDecl* act_on_func_decl(PIdentifierInfo* p_name,
+                                                PType* p_ret_ty,
+                                                const std::vector<PParamDecl*>& p_params,
+                                                PSourceRange p_name_range = {},
+                                                PSourceLocation p_key_fn_end_loc = {});
 
-PAstIntLiteral*
-sema_act_on_int_literal(PSema* p_s, PSourceRange p_range, PType* p_type, uintmax_t p_value);
+private:
+  /// Common code for act_before_while_stmt_body() and act_before_loop_stmt_body().
+  void act_before_loop_body_common();
 
-PAstFloatLiteral*
-sema_act_on_float_literal(PSema* p_s, PSourceRange p_range, PType* p_type, double p_value);
+  /// Converts a l-value expression to a r-value one. If p_expr is already
+  /// a r-value then it is returned as is.
+  PAstExpr* convert_to_rvalue(PAstExpr* p_expr);
 
-PAstDeclRefExpr*
-sema_act_on_decl_ref_expr(PSema* p_s, PSourceRange p_range, PIdentifierInfo* p_name);
+  /// Try to find the referenced declaration by the given expression.
+  /// For `((foo))` it will return the declaration referenced by `foo`.
+  /// If we can not find such a declaration, null is returned.
+  PDecl* try_get_ref_decl(PAstExpr* p_expr);
 
-PAstParenExpr*
-sema_act_on_paren_expr(PSema* p_s, PSourceLocation p_lparen_loc, PSourceLocation p_rparen_loc, PAst* p_sub_expr);
+  PScope* find_nearest_scope_with_flag(PScopeFlags p_flag)
+  {
+    PScope* scope = m_current_scope;
+    while (scope != nullptr) {
+      if (scope->flags & p_flag)
+        return scope;
 
-PAstCallExpr*
-sema_act_on_call_expr(PSema* p_s,
-                      PSourceLocation p_lparen_loc,
-                      PSourceLocation p_rparen_loc,
-                      PAst* p_callee,
-                      PAst** p_args,
-                      size_t p_arg_count);
+      scope = scope->parent_scope;
+    }
 
-PAstMemberExpr*
-sema_act_on_member_expr(PSema* p_s,
-                        PSourceLocation p_dot_loc,
-                        PAst* p_base_expr,
-                        PSourceRange p_name_range,
-                        PIdentifierInfo* p_name);
+    return nullptr;
+  }
 
-PAstBinaryExpr*
-sema_act_on_binary_expr(PSema* p_s, PAstBinaryOp p_opcode, PSourceLocation p_op_loc, PAst* p_lhs, PAst* p_rhs);
+  PContext& m_context;
+  PScope* m_current_scope = nullptr;
+  PFunctionType* m_curr_func_type;
+};
 
-PAstUnaryExpr*
-sema_act_on_unary_expr(PSema* p_s, PAstUnaryOp p_opcode, PSourceLocation p_op_loc, PAst* p_sub_expr);
-
-PAstCastExpr*
-sema_act_on_cast_expr(PSema* p_s, PSourceLocation p_as_loc, PType* p_to_type, PAst* p_sub_expr);
+#endif // PEONY_SEMA_HXX

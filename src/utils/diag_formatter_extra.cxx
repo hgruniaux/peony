@@ -1,108 +1,115 @@
-#include "ast.hxx"
+#include "ast/ast.hxx"
 #include "diag_formatter.hxx"
 
-#include "../identifier_table.hxx"
 #include "../options.hxx"
-#include "../type.hxx"
 
-#include <cassert>
 #include <cctype>
+#include <charconv>
 #include <cstdio>
-#include <cstdlib>
-
-#define DIAG_MAX_LINE_LENGTH 5
 
 /* Format function for P_DAT_CHAR. */
 static void
-format_arg_char(PMsgBuffer* p_buffer, char p_value)
+format_arg_char(std::string& p_buffer, char p_value)
 {
   if (isprint(p_value)) {
-    write_buffer(p_buffer, &p_value, sizeof(p_value));
+    p_buffer.push_back(p_value);
   } else {
-    write_buffer_printf(p_buffer, "\\x%02x", (int)p_value);
+    // FIXME
+    p_buffer.append("\\x");
+
+    unsigned second_digit = p_value % 16;
+    unsigned first_digit = p_value / 16;
+
+    if (first_digit > 9)
+      p_buffer.push_back('a' + (first_digit - 10));
+    else
+      p_buffer.push_back('0' + first_digit);
+
+    if (second_digit > 9)
+      p_buffer.push_back('a' + (second_digit - 10));
+    else
+      p_buffer.push_back('0' + second_digit);
   }
 }
 
 /* Format function for P_DAT_INT. */
 static void
-format_arg_int(PMsgBuffer* p_buffer, int p_value)
+format_arg_int(std::string& p_buffer, int p_value)
 {
-  write_buffer_printf(p_buffer, "%d", p_value);
+  p_buffer.append(std::to_string(p_value));
 }
 
 /* Format function for P_DAT_STR. */
 static void
-format_arg_str(PMsgBuffer* p_buffer, const char* p_str)
+format_arg_str(std::string& p_buffer, const char* p_str)
 {
   assert(p_str != nullptr);
-  write_buffer_str(p_buffer, p_str);
+  p_buffer.append(p_str);
 }
 
 /* Format function for P_DAT_TOK_KIND. */
 static void
-format_arg_tok_kind(PMsgBuffer* p_buffer, PTokenKind p_token_kind)
+format_arg_tok_kind(std::string& p_buffer, PTokenKind p_token_kind)
 {
   const char* spelling = token_kind_get_spelling(p_token_kind);
   if (spelling == nullptr)
     spelling = token_kind_get_name(p_token_kind);
-  write_buffer_str(p_buffer, spelling);
+  p_buffer.append(spelling);
 }
 
 /* Format function for P_DAT_IDENT. */
 static void
-format_arg_ident(PMsgBuffer* p_buffer, PIdentifierInfo* p_ident)
+format_arg_ident(std::string& p_buffer, PIdentifierInfo* p_ident)
 {
   assert(p_ident != nullptr);
-  write_buffer(p_buffer, p_ident->spelling, p_ident->spelling_len);
+  p_buffer.append(p_ident->spelling, p_ident->spelling + p_ident->spelling_len);
 }
 
 /* Format function for P_DAT_TYPE and P_DAT_TYPE_WITH_NAME_HINT. */
 static void
-format_arg_type(PMsgBuffer* p_buffer, PType* p_type, PIdentifierInfo* p_name_hint)
+format_arg_type(std::string& p_buffer, PType* p_type, PIdentifierInfo* p_name_hint)
 {
   assert(p_type != nullptr);
 
-  /* WARNING: Must have the same other as PTypeKind. */
-  static const char* builtin_types[] = { "void", "char", "bool", "i8",  "i16", "i32",       "i64",    "u8",
-                                         "u16",  "u32",  "u64",  "f32", "f64", "{integer}", "{float}" };
-
-  if (p_type->get_kind() == P_TYPE_FUNCTION) {
-    PFunctionType* func_type = (PFunctionType*)p_type;
-    write_buffer_str(p_buffer, "fn ");
+  if (p_type->get_kind() == P_TK_FUNCTION) {
+    auto* func_type = p_type->as<PFunctionType>();
+    p_buffer.append("fn ");
     if (p_name_hint != nullptr)
-      write_buffer_str(p_buffer, p_name_hint->spelling);
-    write_buffer_str(p_buffer, "(");
-    for (size_t i = 0; i < func_type->arg_count; ++i) {
-      format_arg_type(p_buffer, func_type->args[i], nullptr); // do not propagate the hint
-      if ((i + 1) != func_type->arg_count)
-        write_buffer_str(p_buffer, ", ");
+      p_buffer.append(p_name_hint->spelling);
+
+    p_buffer.append("(");
+    for (size_t i = 0; i < func_type->get_param_count(); ++i) {
+      format_arg_type(p_buffer, func_type->get_params()[i], nullptr); // do not propagate the hint
+      if ((i + 1) != func_type->get_param_count())
+        p_buffer.append(", ");
     }
-    write_buffer_str(p_buffer, ") -> ");
-    format_arg_type(p_buffer, func_type->get_ret_ty(), nullptr);
-  } else if (p_type->get_kind() == P_TYPE_POINTER) {
-    PPointerType* ptr_type = (PPointerType*)p_type;
-    write_buffer_str(p_buffer, "*");
-    format_arg_type(p_buffer, ptr_type->element_type, nullptr); // do not propagate the hint
-  } else if (p_type->get_kind() == P_TYPE_PAREN) {
-    PParenType* paren_type = (PParenType*)p_type;
-    format_arg_type(p_buffer, paren_type->sub_type, p_name_hint);
-  } else if (p_type->get_kind() == P_TYPE_TAG) {
-    PDecl* decl = ((PTagType*)p_type)->decl;
-    switch (P_DECL_GET_KIND(decl)) {
-      case P_DECL_STRUCT:
-        write_buffer_str(p_buffer, "struct ");
-        format_arg_ident(p_buffer, P_DECL_GET_NAME(decl));
-        break;
-      default:
-        HEDLEY_UNREACHABLE();
+
+    if (func_type->get_ret_ty()->is_void_ty()) {
+      p_buffer.append(")");
+    } else {
+      p_buffer.append(") -> ");
+      format_arg_type(p_buffer, func_type->get_ret_ty(), nullptr);
     }
+  } else if (p_type->get_kind() == P_TK_POINTER) {
+    auto* ptr_type = p_type->as<PPointerType>();
+    p_buffer.append("*");
+    format_arg_type(p_buffer, ptr_type->get_element_ty(), nullptr); // do not propagate the hint
+  } else if (p_type->get_kind() == P_TK_PAREN) {
+    auto* paren_type = p_type->as<PParenType>();
+    format_arg_type(p_buffer, paren_type->get_sub_type(), p_name_hint);
   } else {
-    write_buffer_str(p_buffer, builtin_types[(int)p_type->get_kind()]);
+    switch (p_type->get_kind()) {
+#define TYPE(p_kind)
+#define BUILTIN_TYPE(p_kind, p_spelling) case p_kind: p_buffer.append(p_spelling); break;
+#include "type.def"
+      default:
+        assert(false && "not a builtin type");
+    }
   }
 }
 
 void
-p_diag_format_arg(PMsgBuffer* p_buffer, PDiagArgument* p_arg)
+p_diag_format_arg(std::string& p_buffer, PDiagArgument* p_arg)
 {
   assert(p_arg != nullptr);
 
@@ -144,7 +151,10 @@ struct PartialSourceRange
 };
 
 #define CREATE_PARTIAL_SRC_RANGE(p_lineno, p_colno_begin, p_colno_end)                                                 \
-  (struct PartialSourceRange) { .lineno = (p_lineno), .colno_begin = (p_colno_begin), .colno_end = (p_colno_end) }
+  (struct PartialSourceRange)                                                                                          \
+  {                                                                                                                    \
+    .lineno = (p_lineno), .colno_begin = (p_colno_begin), .colno_end = (p_colno_end)                                   \
+  }
 
 static int
 partial_src_range_cmp(const void* p_lhs, const void* p_rhs)

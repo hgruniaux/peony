@@ -1,6 +1,6 @@
 #include "token_kind.hxx"
 
-#include <cstddef>
+#include <hedley.h>
 
 const char*
 token_kind_get_name(PTokenKind p_token_kind)
@@ -12,7 +12,7 @@ token_kind_get_name(PTokenKind p_token_kind)
 #define KEYWORD(spelling)                                                                                              \
   case P_TOK_KEY_##spelling:                                                                                           \
     return "KEY_" #spelling;
-#include "token_kinds.def"
+#include "token_kind.def"
     default:
       HEDLEY_UNREACHABLE_RETURN(nullptr);
   }
@@ -23,41 +23,14 @@ token_kind_get_spelling(PTokenKind p_token_kind)
 {
   switch (p_token_kind) {
 #define TOKEN(p_kind)
-#define PUNCTUACTOR(p_kind, p_spelling)                                                                                \
+#define PUNCTUATION(p_kind, p_spelling)                                                                                \
   case P_TOK_##p_kind:                                                                                                 \
     return p_spelling;
 #define KEYWORD(p_spelling)                                                                                            \
   case P_TOK_KEY_##p_spelling:                                                                                         \
     return #p_spelling;
-#include "token_kinds.def"
+#include "token_kind.def"
     default:
       return nullptr;
-  }
-}
-
-bool
-token_kind_is_keyword(PTokenKind p_token_kind)
-{
-  switch (p_token_kind) {
-#define TOKEN(p_kind)
-#define KEYWORD(p_spelling) case P_TOK_KEY_##p_spelling:
-#include "token_kinds.def"
-    return true;
-    default:
-      return false;
-  }
-}
-
-bool
-token_kind_is_punctuactor(PTokenKind p_token_kind)
-{
-  switch (p_token_kind) {
-#define TOKEN(p_kind)
-#define PUNCTUACTOR(p_kind, p_spelling)                                                                                \
-  case P_TOK_##p_kind:                                                                                                 \
-    return true;
-#include "token_kinds.def"
-    default:
-      return false;
   }
 }

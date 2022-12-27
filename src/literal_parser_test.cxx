@@ -7,13 +7,13 @@ TEST(literal_parser, dec_int_literal)
   auto does_overflow = [](const char* p_input) {
     const char* end = p_input + strlen(p_input);
     uintmax_t value;
-    return parse_dec_int_literal_token(p_input, end, &value);
+    return parse_int_literal_token(p_input, end, 10, value);
   };
 
   auto get_value = [](const char* p_input) {
     const char* end = p_input + strlen(p_input);
     uintmax_t value;
-    EXPECT_FALSE(parse_dec_int_literal_token(p_input, end, &value));
+    EXPECT_FALSE(parse_int_literal_token(p_input, end, 10, value));
     return value;
   };
 
@@ -28,13 +28,13 @@ TEST(literal_parser, bin_int_literal)
   auto does_overflow = [](const char* p_input) {
     const char* end = p_input + strlen(p_input);
     uintmax_t value;
-    return parse_bin_int_literal_token(p_input, end, &value);
+    return parse_int_literal_token(p_input, end, 2, value);
   };
 
   auto get_value = [](const char* p_input) {
     const char* end = p_input + strlen(p_input);
     uintmax_t value;
-    EXPECT_FALSE(parse_bin_int_literal_token(p_input, end, &value));
+    EXPECT_FALSE(parse_int_literal_token(p_input, end, 2, value));
     return value;
   };
 
@@ -49,13 +49,13 @@ TEST(literal_parser, oct_int_literal)
   auto does_overflow = [](const char* p_input) {
     const char* end = p_input + strlen(p_input);
     uintmax_t value;
-    return parse_oct_int_literal_token(p_input, end, &value);
+    return parse_int_literal_token(p_input, end, 8, value);
   };
 
   auto get_value = [](const char* p_input) {
     const char* end = p_input + strlen(p_input);
     uintmax_t value;
-    EXPECT_FALSE(parse_oct_int_literal_token(p_input, end, &value));
+    EXPECT_FALSE(parse_int_literal_token(p_input, end, 8, value));
     return value;
   };
 
@@ -70,19 +70,19 @@ TEST(literal_parser, hex_int_literal)
   auto does_overflow = [](const char* p_input) {
     const char* end = p_input + strlen(p_input);
     uintmax_t value;
-    return parse_hex_int_literal_token(p_input, end, &value);
+    return parse_int_literal_token(p_input, end, 16, value);
   };
 
   auto get_value = [](const char* p_input) {
     const char* end = p_input + strlen(p_input);
     uintmax_t value;
-    EXPECT_FALSE(parse_hex_int_literal_token(p_input, end, &value));
+    EXPECT_FALSE(parse_int_literal_token(p_input, end, 16, value));
     return value;
   };
 
   EXPECT_EQ(get_value("0x10"), 16);
   EXPECT_EQ(get_value("0XAf"), 175);
-  EXPECT_EQ(get_value("0x5A_2f_3D"), 5910333); 
+  EXPECT_EQ(get_value("0x5A_2f_3D"), 5910333);
   EXPECT_TRUE(does_overflow("0xffffffffffffffffffffff"));
 }
 
@@ -91,13 +91,13 @@ TEST(literal_parser, float_literal)
   auto does_overflow = [](const char* p_input) {
     const char* end = p_input + strlen(p_input);
     double value;
-    return parse_float_literal_token(p_input, end, &value);
+    return parse_float_literal_token(p_input, end, value);
   };
 
   auto get_value = [](const char* p_input) {
     const char* end = p_input + strlen(p_input);
     double value;
-    EXPECT_FALSE(parse_float_literal_token(p_input, end, &value));
+    EXPECT_FALSE(parse_float_literal_token(p_input, end, value));
     return value;
   };
 

@@ -6,16 +6,14 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-add_compile_options(-fsanitize=address,undefined)
-add_link_options(-fsanitize=address,undefined)
+add_subdirectory(pstd)
 
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 add_library(peony_lib STATIC
     "thirdparty/hedley/hedley.h"
 
-    "src/utils/bump_allocator.cxx"
-    "src/utils/bump_allocator.hxx"
+        "src/utils/bump_allocator.hxx"
     "src/utils/diag.hxx"
     "src/utils/diag.cxx"
     "src/utils/diag_formatter.hxx"
@@ -30,11 +28,8 @@ add_library(peony_lib STATIC
     "src/utils/source_file.cxx"
     "src/utils/source_location.cxx"
 
-        "src/ast.hxx"
-    "src/ast.cxx"
-    "src/codegen_llvm.hxx"
-    "src/codegen_llvm.cxx"
-    "src/identifier_table.cxx"
+        "src/ast/ast.hxx"
+        "src/identifier_table.cxx"
     "src/identifier_table.hxx"
     "src/lexer.hxx"
     "src/lexer.cxx"
@@ -48,15 +43,17 @@ add_library(peony_lib STATIC
     "src/token.hxx"
     "src/token_kind.cxx"
     "src/token_kind.hxx"
-    "src/token_kinds.def"
+    "src/token_kind.def"
     "src/type.hxx"
     "src/type.cxx"
     "src/options.hxx"
     "src/options.cxx"
     "src/literal_parser.hxx"
     "src/literal_parser.cxx"
-    "src/name_mangling.cxx"
-        src/context.hxx src/context.cxx)
+        src/context.hxx src/context.cxx src/ast/ast_visitor.hxx src/ast/ast_printer.cxx src/ast/ast_printer.hxx src/codegen_llvm.cxx src/codegen_llvm.hxx src/ast/ast_expr.hxx src/ast/ast_stmt.hxx src/ast/ast_decl.hxx src/ast/ast_expr.cxx src/ast/ast_decl.cxx src/ast/ast_stmt.cxx)
+
+target_compile_options(peony_lib PUBLIC -fsanitize=address,undefined)
+target_link_options(peony_lib PUBLIC -fsanitize=address,undefined)
 
 target_compile_definitions(peony_lib PUBLIC "-DP_DEBUG")
 target_include_directories(peony_lib PUBLIC "thirdparty/hedley")
@@ -101,7 +98,7 @@ target_include_directories(peony_lib PRIVATE ${LLVM_INCLUDE_DIRS})
 separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND ${LLVM_DEFINITIONS})
 target_compile_definitions(peony_lib PRIVATE ${LLVM_DEFINITIONS_LIST})
 
-llvm_map_components_to_libnames(llvm_libs support core irreader x86codegen passes)
+llvm_map_components_to_libnames(llvm_libs support core irreader passes x86asmparser x86codegen x86desc x86disassembler x86info)
 target_link_libraries(peony_lib PUBLIC ${llvm_libs})
 
 # Testing:
@@ -109,18 +106,16 @@ enable_testing()
 include(InstallGoogleTest)
 
 add_executable(peony_test
-    "src/main_test.cxx"
 
-    "src/utils/line_map_test.cxx"
+        "src/utils/line_map_test.cxx"
     "src/utils/diag_formatter_test.cxx"
         "src/identifier_table_test.cxx"
     "src/type_test.cxx"
     "src/lexer_test.cxx"
- "src/literal_parser_test.cxx" "src/name_mangling_test.cxx")
+ "src/literal_parser_test.cxx")
 
 target_link_libraries(peony_test PRIVATE peony_lib)
-target_link_libraries(peony_test PRIVATE gtest)
+target_link_libraries(peony_test PRIVATE gtest gtest_main)
 gtest_discover_tests(peony_test)
 
 add_subdirectory(test)
-

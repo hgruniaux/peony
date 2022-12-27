@@ -10,24 +10,17 @@
 static void
 check_arg_format(PDiagArgument* p_arg, const char* p_expected)
 {
-  PMsgBuffer buffer;
-  INIT_MSG_BUFFER(buffer);
-
-  p_diag_format_arg(&buffer, p_arg);
-  *buffer.it = '\0';
-
-  EXPECT_STREQ(buffer.buffer, p_expected);
+  std::string buffer;
+  p_diag_format_arg(buffer, p_arg);
+  EXPECT_EQ(buffer, p_expected);
 }
 
 static void
 check_format(const char* p_msg, PDiagArgument* p_args, size_t p_arg_count, const char* p_expected)
 {
-  PMsgBuffer buffer;
-  INIT_MSG_BUFFER(buffer);
-
-  p_diag_format_msg(&buffer, p_msg, p_args, p_arg_count);
-
-  EXPECT_STREQ(buffer.buffer, p_expected);
+  std::string buffer;
+  p_diag_format_msg(buffer, p_msg, p_args, p_arg_count);
+  EXPECT_EQ(buffer, p_expected);
 }
 
 TEST(diag_formatter, char_arg)
@@ -129,7 +122,14 @@ TEST(diag_formatter, type_arg)
     check_arg_format(&func_type, "fn (char)");
   }
 
-  // TODO: add test for function without any argument
+  {
+    // Function type without parameters.
+    PDiagArgument func_type;
+    func_type.type = P_DAT_TYPE;
+    func_type.value_type = ctx.get_function_ty(ctx.get_pointer_ty(ctx.get_u8_ty()), nullptr, 0);
+    check_arg_format(&func_type, "fn () -> *u8");
+  }
+
   // TODO: add test for array types
   // TODO: add test for all builtin types
   // TODO: add test for tag types

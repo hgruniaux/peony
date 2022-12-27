@@ -2,6 +2,8 @@
 #include "diag_formatter.hxx"
 #include "../options.hxx"
 
+#include <cassert>
+
 static size_t
 parse_integer(const char* p_begin, const char* p_end)
 {
@@ -14,7 +16,7 @@ parse_integer(const char* p_begin, const char* p_end)
 }
 
 void
-p_diag_format_msg(struct PMsgBuffer* p_buffer, const char* p_msg, PDiagArgument* p_args, size_t p_arg_count)
+p_diag_format_msg(std::string& p_buffer, const char* p_msg, PDiagArgument* p_args, size_t p_arg_count)
 {
     const char* cursor = p_msg;
     const char* marker;
@@ -41,7 +43,7 @@ yy2:
     ++cursor;
 yy3:
     {
-                write_buffer(p_buffer, saved_cursor, cursor - saved_cursor);
+                p_buffer.append(saved_cursor, cursor);
                 continue;
             }
 yy4:
@@ -103,17 +105,17 @@ yy8:
 yy9:
     ++cursor;
     {
-                write_buffer_str(p_buffer, "'");
+                p_buffer.push_back('\'');
                 if (g_options.opt_diagnostics_color)
-                    write_buffer_str(p_buffer, "\x1b[0m");
+                    p_buffer.append("\x1b[0m");
                 continue;
             }
 yy10:
     ++cursor;
     {
                 if (g_options.opt_diagnostics_color)
-                    write_buffer_str(p_buffer, "\x1b[1m");
-                write_buffer_str(p_buffer, "'");
+                    p_buffer.append("\x1b[1m");
+                p_buffer.push_back('\'');
                 continue;
             }
 yy11:
@@ -139,7 +141,7 @@ yy12:
                 assert(arg_idx < p_arg_count);
                 assert(p_args[arg_idx].type == P_DAT_INT);
                 if (p_args[arg_idx].value_int > 1) {
-                    write_buffer_str(p_buffer, "s");
+                    p_buffer.push_back('s');
                 }
 
                 continue;
@@ -156,6 +158,4 @@ yy13:
 }
 
     }
-
-    *p_buffer->it = '\0';
 }

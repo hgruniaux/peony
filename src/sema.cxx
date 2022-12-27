@@ -8,78 +8,44 @@
 #include <cstring>
 
 PSema::PSema(PContext& p_context)
-  : context(p_context)
-  , current_scope_cache_idx(0)
-  , current_scope(nullptr)
+  : m_context(p_context)
 {
-  memset(scope_cache, 0, sizeof(scope_cache));
 }
 
 PSema::~PSema()
 {
-  assert(current_scope == nullptr);
+  assert(m_current_scope == nullptr);
 
-  for (auto & i : scope_cache) {
-    if (i != nullptr)
-      p_scope_destroy(i);
+  PScope* scope = m_current_scope;
+  while (scope != nullptr) {
+    PScope* parent = scope->parent_scope;
+    delete scope;
+    scope = parent;
   }
 }
 
 void
-sema_push_scope(PSema* p_s, PScopeFlags p_flags)
+PSema::push_scope(PScopeFlags p_flags)
 {
-  assert(p_s != nullptr);
-
-  PScope* new_scope;
-  if (p_s->current_scope_cache_idx >= P_MAX_SCOPE_CACHE) {
-    new_scope = p_global_bump_allocator.alloc<PScope>();
-    p_scope_init(new_scope, p_s->current_scope, p_flags);
-  } else {
-    new_scope = p_s->scope_cache[p_s->current_scope_cache_idx];
-    if (new_scope == nullptr) {
-      new_scope = p_global_bump_allocator.alloc<PScope>();
-      p_s->scope_cache[p_s->current_scope_cache_idx] = new_scope;
-    }
-
-    p_scope_init(new_scope, p_s->current_scope, p_flags);
-  }
-
-  p_s->current_scope = new_scope;
-  p_s->current_scope_cache_idx++;
+  m_current_scope = new PScope(m_current_scope, p_flags);
 }
 
 void
-sema_pop_scope(PSema* p_s)
+PSema::pop_scope()
 {
-  assert(p_s != nullptr);
-  assert(p_s->current_scope_cache_idx > 0); /* check stack underflow */
+  assert(m_current_scope != nullptr);
 
-  PScope* parent_scope = p_s->current_scope->parent_scope;
-
-  if (p_s->current_scope_cache_idx > P_MAX_SCOPE_CACHE) {
-    p_scope_destroy(p_s->current_scope);
-  } else {
-    p_scope_clear(p_s->current_scope);
-  }
-
-  p_s->current_scope = parent_scope;
-  p_s->current_scope_cache_idx--;
+  PScope* parent = m_current_scope->parent_scope;
+  delete m_current_scope;
+  m_current_scope = parent;
 }
 
 PSymbol*
-sema_local_lookup(PSema* p_s, PIdentifierInfo* p_name)
+PSema::lookup(PIdentifierInfo* p_name) const
 {
-  assert(p_s != nullptr && p_name != nullptr);
+  assert(p_name != nullptr);
 
-  return p_scope_local_lookup(p_s->current_scope, p_name);
-}
-
-PSymbol*
-sema_lookup(PSema* p_s, PIdentifierInfo* p_name)
-{
-  assert(p_s != nullptr && p_name != nullptr);
-
-  PScope* scope = p_s->current_scope;
+  PScope* scope = m_current_scope;
   do {
     PSymbol* symbol = p_scope_local_lookup(scope, p_name);
     if (symbol != nullptr)
@@ -90,18 +56,124 @@ sema_lookup(PSema* p_s, PIdentifierInfo* p_name)
   return nullptr;
 }
 
-/* Adds a PAstLValueToRValue node if the given node is not a rvalue. */
-static PAst*
-convert_to_rvalue(PAst* p_node)
+PSymbol*
+PSema::local_lookup(PIdentifierInfo* p_name) const
 {
-  if (P_AST_EXPR_IS_RVALUE(p_node))
-    return p_node; /* no conversion needed */
+  assert(p_name != nullptr);
+  return p_scope_local_lookup(m_current_scope, p_name);
+}
 
-  PAstLValueToRValueExpr* node = CREATE_NODE(PAstLValueToRValueExpr, P_AST_NODE_LVALUE_TO_RVALUE_EXPR);
-  node->sub_expr = p_node;
-  P_AST_EXPR_GET_VALUE_CATEGORY(node) = P_VC_RVALUE;
-  node->common.source_range = p_node->common.source_range;
-  return (PAst*)node;
+PAstBoolLiteral*
+PSema::act_on_bool_literal(bool p_value, PSourceRange p_src_range)
+{
+  return m_context.new_object<PAstBoolLiteral>(p_value, p_src_range);
+}
+
+PType*
+PSema::get_type_for_int_literal_suffix(PIntLiteralSuffix p_suffix, uintmax_t p_value) const
+{
+  switch (p_suffix) {
+    case P_ILS_I8:
+      return m_context.get_i8_ty();
+    case P_ILS_I16:
+      return m_context.get_i16_ty();
+    case P_ILS_I32:
+      return m_context.get_i32_ty();
+    case P_ILS_I64:
+      return m_context.get_i64_ty();
+    case P_ILS_U8:
+      return m_context.get_u8_ty();
+    case P_ILS_U16:
+      return m_context.get_u16_ty();
+    case P_ILS_U32:
+      return m_context.get_u32_ty();
+    case P_ILS_U64:
+      return m_context.get_u64_ty();
+    case P_ILS_NO_SUFFIX:
+      if (p_value > INT64_MAX) {
+        return m_context.get_u64_ty();
+      } else if (p_value > INT32_MAX) {
+        return m_context.get_i64_ty();
+      } else {
+        return m_context.get_i32_ty();
+      }
+    default:
+      HEDLEY_UNREACHABLE_RETURN(nullptr);
+  }
+}
+
+bool
+PSema::is_int_type_big_enough(uintmax_t p_value, PType* p_type) const
+{
+  assert(p_type != nullptr && p_type->is_int_ty());
+
+  switch (p_type->get_kind()) {
+    case P_TK_I8:
+      return p_value <= INT8_MAX;
+    case P_TK_I16:
+      return p_value <= INT16_MAX;
+    case P_TK_I32:
+      return p_value <= INT32_MAX;
+    case P_TK_I64:
+      return p_value <= INT64_MAX;
+    case P_TK_U8:
+      return p_value <= UINT8_MAX;
+    case P_TK_U16:
+      return p_value <= UINT16_MAX;
+    case P_TK_U32:
+      return p_value <= UINT32_MAX;
+    case P_TK_U64:
+      return p_value <= UINT64_MAX;
+    default:
+      assert(false && "not an integer type");
+      return false;
+  }
+}
+
+PAstIntLiteral*
+PSema::act_on_int_literal(uintmax_t p_value, PIntLiteralSuffix p_suffix, PSourceRange p_src_range)
+{
+  PType* type = get_type_for_int_literal_suffix(p_suffix, p_value);
+
+  if (!is_int_type_big_enough(p_value, type)) {
+    PDiag* d = diag_at(P_DK_err_int_literal_too_large, p_src_range.begin);
+    diag_add_arg_type(d, type);
+    diag_add_source_range(d, p_src_range);
+    diag_flush(d);
+    p_value = 0; // set a value to recover
+  }
+
+  return m_context.new_object<PAstIntLiteral>(p_value, type, p_src_range);
+}
+
+PType*
+PSema::get_type_for_float_literal_suffix(PFloatLiteralSuffix p_suffix, double p_value) const
+{
+  switch (p_suffix) {
+    case P_FLS_NO_SUFFIX:
+      // The default float type.
+      return m_context.get_f64_ty();
+    case P_FLS_F32:
+      return m_context.get_f32_ty();
+    case P_FLS_F64:
+      return m_context.get_f64_ty();
+    default:
+      HEDLEY_UNREACHABLE_RETURN(nullptr);
+  }
+}
+
+PAstFloatLiteral*
+PSema::act_on_float_literal(double p_value, PFloatLiteralSuffix p_suffix, PSourceRange p_src_range)
+{
+  PType* type = get_type_for_float_literal_suffix(p_suffix, p_value);
+  return m_context.new_object<PAstFloatLiteral>(p_value, type, p_src_range);
+}
+
+PAstParenExpr*
+PSema::act_on_paren_expr(PAstExpr* p_sub_expr, PSourceRange p_src_range)
+{
+  assert(p_sub_expr != nullptr);
+  return m_context.new_object<PAstParenExpr>(p_sub_expr, p_src_range);
 }
 
 /* Returns true if p_from is trivially convertible to p_to.
@@ -113,622 +185,275 @@ are_types_compatible(PType* p_from, PType* p_to)
   p_from = p_from->get_canonical_ty();
   p_to = p_to->get_canonical_ty();
 
-  if (p_from == p_to)
-    return true;
-
-  if ((p_type_is_generic_int(p_from) && p_to->is_int_ty()) || (p_to->is_int_ty() && p_type_is_generic_int(p_to)))
-    return true;
-  if ((p_type_is_generic_float(p_from) && p_to->is_float_ty()) ||
-      (p_to->is_float_ty() && p_type_is_generic_float(p_to)))
-    return true;
-
-  return false;
+  return p_from == p_to;
 }
 
-static bool
-check_func_decl_params(PIdentifierInfo* p_func_name,
-                       PDeclParam** p_params,
-                       size_t p_param_count,
-                       size_t* p_required_param_count)
+PAstLetStmt*
+PSema::act_on_let_stmt(PVarDecl** p_decls, size_t p_decl_count, PSourceRange p_src_range)
 {
-  bool has_error = false;
-  bool found_first_default_arg = false;
-  for (size_t i = 0; i < p_param_count; ++i) {
-    if (p_params[i]->default_expr == nullptr) {
-      if (found_first_default_arg) {
-        // FIXME: provide better source location
-        PDiag* d = diag(P_DK_err_missing_default_argument);
-        diag_add_arg_int(d, (int)(i + 1));
-        diag_add_arg_ident(d, p_func_name);
-        diag_flush(d);
-        has_error = true;
-      } else {
-        (*p_required_param_count)++;
-      }
-    } else {
-      found_first_default_arg = true;
-      p_params[i]->default_expr = convert_to_rvalue(p_params[i]->default_expr);
-    }
-  }
+  assert(p_decls != nullptr && p_decl_count > 0);
 
-  return !has_error;
-}
+  auto* raw_decls = m_context.alloc_object<PVarDecl*>(p_decl_count);
+  std::copy(p_decls, p_decls + p_decl_count, raw_decls);
 
-static PType*
-create_function_type(PSema* p_s, PType* p_ret_type, PDeclParam** p_params, size_t p_param_count)
-{
-  PType** param_types = static_cast<PType**>(malloc(sizeof(PType*) * p_param_count));
-  assert(param_types != nullptr);
-  for (size_t i = 0; i < p_param_count; ++i)
-    param_types[i] = P_DECL_GET_TYPE(p_params[i]);
-  PType* type = p_s->context.get_function_ty(p_ret_type, param_types, p_param_count);
-  free(param_types);
-
-  return type;
-}
-
-PDeclFunction*
-sema_act_on_func_decl(PSema* p_s,
-                      PSourceRange p_name_range,
-                      PIdentifierInfo* p_name,
-                      PType* p_ret_type,
-                      PDeclParam** p_params,
-                      size_t p_param_count)
-{
-  if (p_name == nullptr)
-    return nullptr;
-
-  PSymbol* symbol = sema_local_lookup(p_s, p_name);
-  if (symbol != nullptr) {
-    PDiag* d = diag_at(P_DK_err_redeclaration_function, p_name_range.begin);
-    diag_add_arg_ident(d, p_name);
-    diag_add_source_range(d, p_name_range);
-    diag_flush(d);
-    return nullptr;
-  }
-
-  if (p_ret_type == nullptr)
-    p_ret_type = p_s->context.get_void_ty();
-
-  size_t required_param_count = 0;
-  if (!check_func_decl_params(p_name, p_params, p_param_count, &required_param_count))
-    return nullptr;
-
-  PType* func_type = create_function_type(p_s, p_ret_type, p_params, p_param_count);
-
-  PDeclFunction* decl =
-    CREATE_DECL_EXTRA_SIZE(PDeclFunction, sizeof(PDeclParam*) * (p_param_count - 1), P_DECL_FUNCTION);
-  P_DECL_GET_NAME(decl) = p_name;
-  P_DECL_GET_TYPE(decl) = func_type;
-  decl->required_param_count = required_param_count;
-  decl->param_count = p_param_count;
-  if (p_param_count > 0) {
-    // We check for p_param_count > 0 because when p_param_count = 0, p_params may be nullptr
-    // depending on the std::vector impl. However, memcpy expects his params to be nonnull
-    // on some platforms. All of this to avoid a AddressSanitizer warning.
-    memcpy(decl->params, p_params, sizeof(PDeclParam*) * p_param_count);
-  }
-
-  symbol = p_scope_add_symbol(p_s->current_scope, p_name);
-  symbol->decl = (PDecl*)decl;
-
-  return decl;
-}
-
-void
-sema_begin_func_decl_body_parsing(PSema* p_s, PDeclFunction* p_decl)
-{
-  sema_push_scope(p_s, P_SF_FUNC_PARAMS);
-
-  p_s->curr_func_type = (PFunctionType*)P_DECL_GET_TYPE(p_decl);
-
-  // Register parameters on the current scope.
-  // All parameters have already been checked.
-  for (size_t i = 0; i < p_decl->param_count; ++i) {
-    PSymbol* symbol = p_scope_add_symbol(p_s->current_scope, P_DECL_GET_NAME(p_decl->params[i]));
-    symbol->decl = (PDecl*)p_decl->params[i];
-  }
-}
-
-void
-sema_end_func_decl_body_parsing(PSema* p_s, PDeclFunction* p_decl)
-{
-  sema_pop_scope(p_s);
-}
-
-PDeclStruct*
-sema_act_on_struct_decl(PSema* p_s,
-                        PSourceRange p_name_range,
-                        PIdentifierInfo* p_name,
-                        PDeclStructField** p_fields,
-                        size_t p_field_count)
-{
-  if (p_name == nullptr)
-    return nullptr;
-
-  PSymbol* symbol = sema_local_lookup(p_s, p_name);
-  if (symbol != nullptr) {
-    PDiag* d = diag_at(P_DK_err_redeclaration_struct, p_name_range.begin);
-    diag_add_arg_ident(d, p_name);
-    diag_add_source_range(d, p_name_range);
-    diag_flush(d);
-    return nullptr;
-  }
-
-  PDeclStruct* decl =
-    CREATE_DECL_EXTRA_SIZE(PDeclStruct, sizeof(PDeclStructField*) * (p_field_count - 1), P_DECL_STRUCT);
-  P_DECL_GET_NAME(decl) = p_name;
-  P_DECL_GET_TYPE(decl) = p_type_get_tag((PDecl*)decl);
-  decl->field_count = p_field_count;
-  memcpy(decl->fields, p_fields, sizeof(PDeclStructField*) * p_field_count);
-
-  for (int i = 0; i < decl->field_count; ++i) {
-    decl->fields[i]->parent = decl;
-    decl->fields[i]->idx_in_parent_fields = i;
-  }
-
-  symbol = p_scope_add_symbol(p_s->current_scope, p_name);
-  symbol->decl = (PDecl*)decl;
-
-  return decl;
-}
-
-PDeclStructField*
-sema_act_on_struct_field_decl(PSema* p_s, PSourceRange p_name_range, PIdentifierInfo* p_name, PType* p_type)
-{
-  if (p_name == nullptr)
-    return nullptr;
-
-  // FIXME: check for field name duplicates
-
-  PDeclStructField* node = CREATE_DECL(PDeclStructField, P_DECL_STRUCT_FIELD);
-  P_DECL_GET_NAME(node) = p_name;
-  P_DECL_GET_TYPE(node) = p_type;
-
-  return node;
-}
-
-// Gets the first paren scope that has the flag P_SF_FUNC_PARAMS.
-static PScope*
-get_param_scope(PSema* p_s)
-{
-  PScope* scope = p_s->current_scope;
-  while (scope != nullptr) {
-    if (scope->flags & P_SF_FUNC_PARAMS)
-      return scope;
-    scope = scope->parent_scope;
-  }
-
-  return nullptr;
-}
-
-PDeclParam*
-sema_act_on_param_decl(PSema* p_s,
-                       PSourceRange p_name_range,
-                       PIdentifierInfo* p_name,
-                       PType* p_type,
-                       PAst* p_default_expr)
-{
-  if (p_name == nullptr)
-    return nullptr;
-
-  PSymbol* symbol = sema_local_lookup(p_s, p_name);
-  if (symbol != nullptr) {
-    PDiag* d = diag_at(P_DK_err_parameter_name_already_used, p_name_range.begin);
-    diag_add_arg_ident(d, p_name);
-    diag_add_source_range(d, p_name_range);
-    diag_flush(d);
-    return nullptr;
-  }
-
-  if (p_type == nullptr) {
-    if (p_default_expr == nullptr) {
-      PDiag* d = diag_at(P_DK_err_cannot_deduce_param_type, p_name_range.begin);
-      diag_add_arg_ident(d, p_name);
-      diag_add_source_range(d, p_name_range);
-      diag_flush(d);
-      return nullptr;
-    }
-
-    p_type = p_ast_get_type(p_default_expr);
-  } else if (p_default_expr != nullptr) {
-    PType* default_expr_type = p_ast_get_type(p_default_expr);
-    if (!are_types_compatible(default_expr_type, p_type)) {
-      PDiag* d = diag_at(P_DK_err_expected_type, P_AST_GET_SOURCE_RANGE(p_default_expr).begin);
-      diag_add_arg_type(d, p_type);
-      diag_add_arg_type(d, default_expr_type);
-      diag_add_source_range(d, P_AST_GET_SOURCE_RANGE(p_default_expr));
-      diag_flush(d);
-      return nullptr;
-    }
-  }
-
-  PDeclParam* node = CREATE_DECL(PDeclParam, P_DECL_PARAM);
-  P_DECL_GET_NAME(node) = p_name;
-  P_DECL_GET_TYPE(node) = p_type;
-  node->default_expr = p_default_expr;
-
-  symbol = p_scope_add_symbol(p_s->current_scope, p_name);
-  symbol->decl = (PDecl*)node;
-
-  return node;
-}
-
-PDeclVar*
-sema_act_on_var_decl(PSema* p_s, PSourceRange p_name_range, PIdentifierInfo* p_name, PType* p_type, PAst* p_init_expr)
-{
-  if (p_name == nullptr)
-    return nullptr;
-
-  PSymbol* symbol = sema_local_lookup(p_s, p_name);
-  if (symbol != nullptr) {
-    PDiag* d = diag_at(P_DK_err_redeclaration_variable, p_name_range.begin);
-    diag_add_arg_ident(d, p_name);
-    diag_add_source_range(d, p_name_range);
-    diag_flush(d);
-    return nullptr;
-  }
-
-  if (p_type == nullptr) {
-    if (p_init_expr == nullptr) {
-      PDiag* d = diag_at(P_DK_err_cannot_deduce_var_type, p_name_range.begin);
-      diag_add_arg_ident(d, p_name);
-      diag_add_source_range(d, p_name_range);
-      diag_flush(d);
-      return nullptr;
-    }
-
-    p_type = p_ast_get_type(p_init_expr);
-  } else if (p_init_expr != nullptr) {
-    PType* init_expr_type = p_ast_get_type(p_init_expr);
-    if (!are_types_compatible(init_expr_type, p_type)) {
-      PDiag* d = diag_at(P_DK_err_expected_type, P_AST_GET_SOURCE_RANGE(p_init_expr).begin);
-      diag_add_arg_type(d, p_type);
-      diag_add_arg_type(d, init_expr_type);
-      diag_add_source_range(d, P_AST_GET_SOURCE_RANGE(p_init_expr));
-      diag_flush(d);
-      return nullptr;
-    }
-  }
-
-  PDeclVar* node = CREATE_DECL(PDeclVar, P_DECL_VAR);
-  P_DECL_GET_NAME(node) = p_name;
-  P_DECL_GET_TYPE(node) = p_type;
-  node->init_expr = p_init_expr;
-
-  symbol = p_scope_add_symbol(p_s->current_scope, p_name);
-  symbol->decl = (PDecl*)node;
-
+  auto* node = m_context.new_object<PAstLetStmt>(raw_decls, p_decl_count);
   return node;
 }
 
 PAstLetStmt*
-sema_act_on_let_stmt(PSema* p_s, PDeclVar** p_decls, size_t p_decl_count)
+PSema::act_on_let_stmt(const std::vector<PVarDecl*>& p_decls, PSourceRange p_src_range)
 {
-  assert(p_decl_count == 1);
-
-  PAstLetStmt* node = CREATE_NODE(PAstLetStmt, P_AST_NODE_LET_STMT);
-  node->var_decl = (PDecl*)p_decls[0];
-  return node;
-}
-
-static PScope*
-find_nearest_scope_with_flag(PSema* p_s, PScopeFlags p_flag)
-{
-  PScope* scope = p_s->current_scope;
-  while (scope != nullptr) {
-    if (scope->flags & p_flag)
-      return scope;
-
-    scope = scope->parent_scope;
-  }
-
-  return nullptr;
+  return act_on_let_stmt(const_cast<PVarDecl**>(p_decls.data()), p_decls.size(), p_src_range);
 }
 
 PAstBreakStmt*
-sema_act_on_break_stmt(PSema* p_s, PSourceRange p_range)
+PSema::act_on_break_stmt(PSourceRange p_src_range, PSourceRange p_break_key_range)
 {
-  PScope* break_scope = find_nearest_scope_with_flag(p_s, P_SF_BREAK);
+  PScope* break_scope = find_nearest_scope_with_flag(P_SF_BREAK);
   if (break_scope == nullptr) {
-    PDiag* d = diag_at(P_DK_err_break_or_continue_outside_of_loop, p_range.begin);
+    PDiag* d = diag_at(P_DK_err_break_or_continue_outside_of_loop, p_break_key_range.begin);
     diag_add_arg_str(d, "break");
-    diag_add_source_range(d, p_range);
+    diag_add_source_range(d, p_break_key_range);
     diag_flush(d);
     return nullptr;
   }
 
-  PAstBreakStmt* node = CREATE_NODE(PAstBreakStmt, P_AST_NODE_BREAK_STMT);
-  node->loop_target = break_scope->statement;
-  assert(node->loop_target != nullptr);
-  return node;
+  return m_context.new_object<PAstBreakStmt>(p_src_range);
 }
 
 PAstContinueStmt*
-sema_act_on_continue_stmt(PSema* p_s, PSourceRange p_range)
+PSema::act_on_continue_stmt(PSourceRange p_src_range, PSourceRange p_cont_key_range)
 {
-  PScope* continue_scope = find_nearest_scope_with_flag(p_s, P_SF_CONTINUE);
+  PScope* continue_scope = find_nearest_scope_with_flag(P_SF_CONTINUE);
   if (continue_scope == nullptr) {
-    PDiag* d = diag_at(P_DK_err_break_or_continue_outside_of_loop, p_range.begin);
+    PDiag* d = diag_at(P_DK_err_break_or_continue_outside_of_loop, p_cont_key_range.begin);
     diag_add_arg_str(d, "continue");
-    diag_add_source_range(d, p_range);
+    diag_add_source_range(d, p_cont_key_range);
     diag_flush(d);
     return nullptr;
   }
 
-  PAstContinueStmt* node = CREATE_NODE(PAstContinueStmt, P_AST_NODE_CONTINUE_STMT);
-  node->loop_target = continue_scope->statement;
-  assert(node->loop_target != nullptr);
-  return node;
+  return m_context.new_object<PAstContinueStmt>(p_src_range);
+}
+
+bool
+PSema::is_compatible_with_ret_ty(PType* p_type) const
+{
+  assert(p_type != nullptr);
+  return are_types_compatible(p_type, m_curr_func_type->get_ret_ty());
 }
 
 PAstReturnStmt*
-sema_act_on_return_stmt(PSema* p_s, PSourceLocation p_semi_loc, PAst* p_ret_expr)
+PSema::act_on_return_stmt(PAstExpr* p_ret_expr, PSourceRange p_src_range, PSourceLocation p_semi_loc)
 {
-  if (p_ret_expr != nullptr) {
-    PType* ret_type = p_ast_get_type(p_ret_expr);
-    if (!are_types_compatible(ret_type, p_s->curr_func_type->get_ret_ty())) {
-      PDiag* d = diag_at(P_DK_err_expected_type, P_AST_GET_SOURCE_RANGE(p_ret_expr).begin);
-      diag_add_arg_type(d, p_s->curr_func_type->get_ret_ty());
-      diag_add_arg_type(d, ret_type);
-      diag_add_source_range(d, P_AST_GET_SOURCE_RANGE(p_ret_expr));
-      diag_flush(d);
-      return nullptr;
-    }
+  // Check if the return expression type and the current function return type are compatible
+  // and if not then emit a diagnostic.
+  PType* type = (p_ret_expr != nullptr) ? p_ret_expr->get_type(m_context) : m_context.get_void_ty();
+  if (!is_compatible_with_ret_ty(type)) {
+    PSourceLocation diag_loc = (p_ret_expr != nullptr) ? p_ret_expr->get_source_range().begin : p_semi_loc;
 
-    p_ret_expr = convert_to_rvalue(p_ret_expr);
-  } else { // p_ret_expr == nullptr
-    if (!p_s->curr_func_type->get_ret_ty()->is_void_ty()) {
-      PDiag* d = diag_at(P_DK_err_expected_type, p_semi_loc);
-      diag_add_arg_type(d, p_s->curr_func_type->get_ret_ty());
-      diag_add_arg_type(d, p_s->context.get_void_ty());
-      diag_flush(d);
-      return nullptr;
-    }
+    PDiag* d = diag_at(P_DK_err_expected_type, diag_loc);
+    diag_add_arg_type(d, m_curr_func_type->get_ret_ty());
+    diag_add_arg_type(d, type);
+
+    if (p_ret_expr != nullptr)
+      diag_add_source_range(d, p_ret_expr->get_source_range());
+
+    diag_flush(d);
   }
 
-  PAstReturnStmt* node = CREATE_NODE(PAstReturnStmt, P_AST_NODE_RETURN_STMT);
-  node->ret_expr = p_ret_expr;
+  auto* node = m_context.new_object<PAstReturnStmt>(p_ret_expr, p_src_range);
   return node;
 }
 
-static void
-check_suspicious_condition_expr(PAst* p_cond_expr)
+void
+PSema::check_condition_expr(PAstExpr* p_cond_expr) const
 {
-  if (P_AST_GET_KIND(p_cond_expr) != P_AST_NODE_BINARY_EXPR)
+  // TODO: add warnings about suspicious use of some operators in conditions
+  //       like '|=' instead of '!=' or '=' instead of '=='.
+
+  PType* cond_type = p_cond_expr->get_type(m_context);
+  if (cond_type->is_bool_ty())
     return;
 
-    // TODO: reimplement this warning
-#if 0
-  PAstBinaryExpr* bin_cond_expr = (PAstBinaryExpr*)p_cond_expr;
-  bool has_warning = false;
-  if (bin_cond_expr->opcode == P_BINARY_ASSIGN) {
-    warning("suspicious use of operator '=', did you mean '=='?");
-    has_warning = true;
-  } else if (bin_cond_expr->opcode == P_BINARY_ASSIGN_BIT_OR) {
-    warning("suspicious use of operator '|=', did you mean '!='?");
-    has_warning = true;
-  }
-
-  if (has_warning) {
-    note("add parenthesis around condition to ignore above warning");
-  }
-#endif
-}
-
-static bool
-check_condition_expr(PSema* p_s, PAst* p_cond_expr)
-{
-  check_suspicious_condition_expr(p_cond_expr);
-
-  PType* cond_type = p_ast_get_type(p_cond_expr);
-  if (cond_type->is_bool_ty())
-    return true;
-
-  PDiag* d = diag_at(P_DK_err_expected_type, P_AST_GET_SOURCE_RANGE(p_cond_expr).begin);
-  diag_add_arg_type(d, p_s->context.get_bool_ty());
+  PDiag* d = diag_at(P_DK_err_expected_type, p_cond_expr->get_source_range().begin);
+  diag_add_arg_type(d, m_context.get_bool_ty());
   diag_add_arg_type(d, cond_type);
-  diag_add_source_range(d, P_AST_GET_SOURCE_RANGE(p_cond_expr));
+  diag_add_source_range(d, p_cond_expr->get_source_range());
   diag_flush(d);
-  return false;
 }
 
-PAstIfStmt*
-sema_act_on_if_stmt(PSema* p_s, PAst* p_cond_expr, PAst* p_then_stmt, PAst* p_else_stmt)
+void
+PSema::act_before_loop_body_common()
 {
-  if (p_cond_expr == nullptr || p_then_stmt == nullptr)
-    return nullptr;
-
-  check_condition_expr(p_s, p_cond_expr);
-  p_cond_expr = convert_to_rvalue(p_cond_expr);
-
-  PAstIfStmt* node = CREATE_NODE(PAstIfStmt, P_AST_NODE_IF_STMT);
-  node->cond_expr = p_cond_expr;
-  node->then_stmt = p_then_stmt;
-  node->else_stmt = p_else_stmt;
-  return node;
+  push_scope(static_cast<PScopeFlags>(P_SF_BREAK | P_SF_CONTINUE));
 }
 
-PAstLoopStmt*
-sema_act_on_loop_stmt(PSema* p_s, PScope* p_scope)
+void
+PSema::act_before_while_stmt_body()
 {
-  assert(p_scope != nullptr);
-
-  PAstLoopStmt* node = CREATE_NODE(PAstLoopStmt, P_AST_NODE_LOOP_STMT);
-  p_scope->statement = (PAst*)node;
-  return node;
+  act_before_loop_body_common();
 }
 
 PAstWhileStmt*
-sema_act_on_while_stmt(PSema* p_s, PAst* p_cond_expr, PScope* p_scope)
+PSema::act_on_while_stmt(PAstExpr* p_cond_expr, PAst* p_body, PSourceRange p_src_range)
 {
-  if (p_cond_expr == nullptr)
-    return nullptr;
+  assert(p_cond_expr != nullptr && p_body != nullptr);
 
-  assert(p_scope != nullptr);
+  pop_scope();
 
-  check_condition_expr(p_s, p_cond_expr);
+  check_condition_expr(p_cond_expr);
+  // FIXME: remove the cast to PAstExpr*
+  p_cond_expr = (PAstExpr*)convert_to_rvalue(p_cond_expr);
+
+  auto* node = m_context.new_object<PAstWhileStmt>(p_cond_expr, p_body, p_src_range);
+  return node;
+}
+
+void
+PSema::act_before_loop_stmt_body()
+{
+  act_before_loop_body_common();
+}
+
+PAstLoopStmt*
+PSema::act_on_loop_stmt(PAst* p_body, PSourceRange p_src_range)
+{
+  assert(p_body != nullptr);
+
+  pop_scope();
+
+  auto* node = m_context.new_object<PAstLoopStmt>(p_body, p_src_range);
+  return node;
+}
+
+PAstIfStmt*
+PSema::act_on_if_stmt(PAstExpr* p_cond_expr, PAst* p_then_stmt, PAst* p_else_stmt, PSourceRange p_src_range)
+{
+  assert(p_cond_expr != nullptr && p_then_stmt != nullptr);
+
+  check_condition_expr(p_cond_expr);
   p_cond_expr = convert_to_rvalue(p_cond_expr);
 
-  PAstWhileStmt* node = CREATE_NODE(PAstWhileStmt, P_AST_NODE_WHILE_STMT);
-  node->cond_expr = p_cond_expr;
-  p_scope->statement = (PAst*)node;
-  return node;
-}
-
-PAstBoolLiteral*
-sema_act_on_bool_literal(PSema* p_s, PSourceRange p_range, bool p_value)
-{
-  PAstBoolLiteral* node = CREATE_NODE(PAstBoolLiteral, P_AST_NODE_BOOL_LITERAL);
-  P_AST_EXPR_GET_VALUE_CATEGORY(node) = P_VC_RVALUE;
-  node->value = p_value;
-  return node;
-}
-
-PAstIntLiteral*
-sema_act_on_int_literal(PSema* p_s, PSourceRange p_range, PType* p_type, uintmax_t p_value)
-{
-  if (p_type == nullptr)
-    p_type = p_s->context.get_i32_ty();
-
-  uintmax_t max_value = UINTMAX_MAX;
-  switch (p_type->get_kind()) {
-    case P_TYPE_I8:
-      max_value = INT8_MAX;
-      break;
-    case P_TYPE_I16:
-      max_value = INT16_MAX;
-      break;
-    case P_TYPE_I32:
-      max_value = INT32_MAX;
-      break;
-    case P_TYPE_I64:
-      max_value = INT64_MAX;
-      break;
-    case P_TYPE_U8:
-      max_value = UINT8_MAX;
-      break;
-    case P_TYPE_U16:
-      max_value = UINT16_MAX;
-      break;
-    case P_TYPE_U32:
-      max_value = UINT32_MAX;
-      break;
-    case P_TYPE_U64:
-      max_value = UINT64_MAX;
-      break;
-    case P_TYPE_GENERIC_INT:
-      max_value = UINTMAX_MAX;
-      break;
-    default:
-      assert(false && "int literal must have an integer type");
-      break;
-  }
-
-  if (p_value > max_value) {
-    PDiag* d = diag_at(P_DK_err_int_literal_too_large, p_range.begin);
-    diag_add_arg_type(d, p_type);
-    diag_add_source_range(d, p_range);
-    diag_flush(d);
-    p_value = 0; // set a value to recover
-  }
-
-  PAstIntLiteral* node = CREATE_NODE(PAstIntLiteral, P_AST_NODE_INT_LITERAL);
-  P_AST_EXPR_GET_VALUE_CATEGORY(node) = P_VC_RVALUE;
-  node->type = p_type;
-  node->value = p_value;
-  return node;
-}
-
-PAstFloatLiteral*
-sema_act_on_float_literal(PSema* p_s, PSourceRange p_range, PType* p_type, double p_value)
-{
-  if (p_type == nullptr)
-    p_type = p_s->context.get_f32_ty();
-
-  PAstFloatLiteral* node = CREATE_NODE(PAstFloatLiteral, P_AST_NODE_FLOAT_LITERAL);
-  P_AST_EXPR_GET_VALUE_CATEGORY(node) = P_VC_RVALUE;
-  node->type = p_type;
-  node->value = p_value;
+  auto* node = m_context.new_object<PAstIfStmt>(p_cond_expr, p_then_stmt, p_else_stmt, p_src_range);
   return node;
 }
 
 PAstDeclRefExpr*
-sema_act_on_decl_ref_expr(PSema* p_s, PSourceRange p_range, PIdentifierInfo* p_name)
+PSema::act_on_decl_ref_expr(PIdentifierInfo* p_name, PSourceRange p_src_range)
 {
-  if (p_name == nullptr)
-    return nullptr;
+  assert(p_name != nullptr);
 
-  PSymbol* symbol = sema_lookup(p_s, p_name);
+  PSymbol* symbol = lookup(p_name);
   if (symbol == nullptr) {
-    PDiag* d = diag_at(P_DK_err_use_undeclared_ident, p_range.begin);
+    PDiag* d = diag_at(P_DK_err_use_undeclared_ident, p_src_range.begin);
     diag_add_arg_ident(d, p_name);
-    diag_add_source_range(d, p_range);
+    diag_add_source_range(d, p_src_range);
     diag_flush(d);
     return nullptr;
-  }
-
-  PScope* param_scope = get_param_scope(p_s);
-  if (symbol != nullptr && symbol == p_scope_local_lookup(param_scope, p_name)) {
-    PDiag* d = diag_at(P_DK_err_default_arg_ref_param, p_range.begin);
-    diag_add_arg_ident(d, p_name);
-    diag_add_source_range(d, p_range);
-    diag_flush(d);
   }
 
   assert(symbol->decl != nullptr);
-  symbol->decl->common.used = true;
+  symbol->decl->used = true;
 
-  PAstDeclRefExpr* node = CREATE_NODE(PAstDeclRefExpr, P_AST_NODE_DECL_REF_EXPR);
-  P_AST_EXPR_GET_VALUE_CATEGORY(node) = P_VC_LVALUE;
-  node->decl = symbol != nullptr ? symbol->decl : nullptr;
+  auto* node = m_context.new_object<PAstDeclRefExpr>(symbol->decl, p_src_range);
   return node;
 }
 
-PAstParenExpr*
-sema_act_on_paren_expr(PSema* p_s, PSourceLocation p_lparen_loc, PSourceLocation p_rparen_loc, PAst* p_sub_expr)
+PAstUnaryExpr*
+PSema::act_on_unary_expr(PAstExpr* p_sub_expr, PAstUnaryOp p_opcode, PSourceRange p_src_range, PSourceLocation p_op_loc)
 {
-  if (p_sub_expr == nullptr)
-    return nullptr;
+  assert(p_sub_expr != nullptr);
 
-  PAstParenExpr* node = CREATE_NODE(PAstParenExpr, P_AST_NODE_PAREN_EXPR);
-  P_AST_EXPR_GET_VALUE_CATEGORY(node) = P_AST_EXPR_GET_VALUE_CATEGORY(p_sub_expr);
-  node->sub_expr = p_sub_expr;
-  node->lparen_loc = p_lparen_loc;
-  node->rparen_loc = p_rparen_loc;
+  PType* result_type = p_sub_expr->get_type(m_context);
+  switch (p_opcode) {
+    case P_UNARY_NEG: // '-' operator
+      if (!result_type->is_float_ty() && !result_type->is_signed_int_ty()) {
+        PDiag* d = diag_at(P_DK_err_cannot_apply_unary_op, p_op_loc);
+        diag_add_arg_char(d, '-');
+        diag_add_arg_type(d, result_type);
+        diag_add_source_range(d, p_sub_expr->get_source_range());
+        diag_flush(d);
+        return nullptr;
+      }
+
+      p_sub_expr = (p_sub_expr);
+      break;
+    case P_UNARY_NOT: // logical and bitwise '!' operator
+      if (!result_type->is_bool_ty() && !result_type->is_int_ty()) {
+        PDiag* d = diag_at(P_DK_err_cannot_apply_unary_op, p_op_loc);
+        diag_add_arg_char(d, '!');
+        diag_add_arg_type(d, result_type);
+        diag_add_source_range(d, p_sub_expr->get_source_range());
+        diag_flush(d);
+        return nullptr;
+      }
+
+      p_sub_expr = convert_to_rvalue(p_sub_expr);
+      break;
+    case P_UNARY_ADDRESS_OF: // '&' operator
+      if (p_sub_expr->is_rvalue()) {
+        PDiag* d = diag_at(P_DK_err_could_not_take_addr_rvalue, p_op_loc);
+        diag_add_arg_type(d, result_type);
+        diag_add_source_range(d, p_sub_expr->get_source_range());
+        diag_flush(d);
+        return nullptr;
+      }
+
+      result_type = m_context.get_pointer_ty(result_type);
+      break;
+    case P_UNARY_DEREF: // '*' operator
+      if (!result_type->is_pointer_ty()) {
+        PDiag* d = diag_at(P_DK_err_indirection_requires_ptr, p_op_loc);
+        diag_add_arg_type(d, result_type);
+        diag_add_source_range(d, p_sub_expr->get_source_range());
+        diag_flush(d);
+        return nullptr;
+      }
+
+      result_type = result_type->as<PPointerType>()->get_element_ty();
+      break;
+    default:
+      HEDLEY_UNREACHABLE_RETURN(nullptr);
+  }
+
+  auto* node = m_context.new_object<PAstUnaryExpr>(p_sub_expr, result_type, p_opcode, p_src_range);
   return node;
 }
 
 PAstBinaryExpr*
-sema_act_on_binary_expr(PSema* p_s, PAstBinaryOp p_opcode, PSourceLocation p_op_loc, PAst* p_lhs, PAst* p_rhs)
+PSema::act_on_binary_expr(PAstExpr* p_lhs,
+                          PAstExpr* p_rhs,
+                          PAstBinaryOp p_opcode,
+                          PSourceRange p_src_range,
+                          PSourceLocation p_op_loc)
 {
-  if (p_lhs == nullptr || p_rhs == nullptr)
-    return nullptr;
+  assert(p_lhs != nullptr && p_rhs != nullptr);
 
-  PType* lhs_type = p_ast_get_type(p_lhs);
-  PType* rhs_type = p_ast_get_type(p_rhs);
+  PType* lhs_type = p_lhs->get_type(m_context);
+  PType* rhs_type = p_rhs->get_type(m_context);
 
   PType* result_type;
   switch (p_opcode) {
     case P_BINARY_LOG_AND:
     case P_BINARY_LOG_OR: {
-      result_type = p_s->context.get_bool_ty();
+      result_type = m_context.get_bool_ty();
 
       if (!lhs_type->is_bool_ty()) {
         PDiag* d = diag_at(P_DK_err_expected_type, p_op_loc);
-        diag_add_arg_type(d, p_s->context.get_bool_ty());
+        diag_add_arg_type(d, m_context.get_bool_ty());
         diag_add_arg_type(d, lhs_type);
-        diag_add_source_range(d, P_AST_GET_SOURCE_RANGE(p_lhs));
-        diag_add_source_range(d, P_AST_GET_SOURCE_RANGE(p_rhs));
+        diag_add_source_range(d, p_lhs->get_source_range());
+        diag_add_source_range(d, p_rhs->get_source_range());
         diag_flush(d);
       }
 
       if (!rhs_type->is_bool_ty()) {
         PDiag* d = diag_at(P_DK_err_expected_type, p_op_loc);
-        diag_add_arg_type(d, p_s->context.get_bool_ty());
+        diag_add_arg_type(d, m_context.get_bool_ty());
         diag_add_arg_type(d, rhs_type);
-        diag_add_source_range(d, P_AST_GET_SOURCE_RANGE(p_lhs));
-        diag_add_source_range(d, P_AST_GET_SOURCE_RANGE(p_rhs));
+        diag_add_source_range(d, p_lhs->get_source_range());
+        diag_add_source_range(d, p_rhs->get_source_range());
         diag_flush(d);
       }
 
@@ -742,16 +467,16 @@ sema_act_on_binary_expr(PSema* p_s, PAstBinaryOp p_opcode, PSourceLocation p_op_
     case P_BINARY_GE:
       if (!are_types_compatible(lhs_type, rhs_type)) {
         PDiag* d = diag_at(P_DK_err_cannot_apply_bin_op_generic, p_op_loc);
-        diag_add_arg_str(d, p_binop_get_spelling(p_opcode));
+        diag_add_arg_str(d, p_get_spelling(p_opcode));
         diag_add_arg_type(d, lhs_type);
         diag_add_arg_type(d, rhs_type);
-        diag_add_source_range(d, P_AST_GET_SOURCE_RANGE(p_lhs));
-        diag_add_source_range(d, P_AST_GET_SOURCE_RANGE(p_rhs));
+        diag_add_source_range(d, p_lhs->get_source_range());
+        diag_add_source_range(d, p_rhs->get_source_range());
         diag_add_source_caret(d, p_op_loc);
         diag_flush(d);
       }
 
-      result_type = p_s->context.get_bool_ty();
+      result_type = m_context.get_bool_ty();
       break;
 
     case P_BINARY_ASSIGN_BIT_AND:
@@ -763,14 +488,11 @@ sema_act_on_binary_expr(PSema* p_s, PAstBinaryOp p_opcode, PSourceLocation p_op_
 
       if (!lhs_type->is_int_ty()) {
         PDiag* d = diag_at(P_DK_err_cannot_apply_assign_op, p_op_loc);
-        const char* spelling = p_binop_get_spelling(p_opcode);
+        const char* spelling = p_get_spelling(p_opcode);
         diag_add_arg_str(d, spelling);
         diag_add_arg_type(d, lhs_type);
         diag_add_source_caret(d, p_op_loc);
         diag_flush(d);
-
-        // Dummy type to try to recover.
-        result_type = p_s->context.get_generic_int_ty();
         break;
       }
 
@@ -778,7 +500,7 @@ sema_act_on_binary_expr(PSema* p_s, PAstBinaryOp p_opcode, PSourceLocation p_op_
         PDiag* d = diag_at(P_DK_err_expected_type, p_op_loc);
         diag_add_arg_type(d, lhs_type);
         diag_add_arg_type(d, rhs_type);
-        diag_add_source_range(d, P_AST_GET_SOURCE_RANGE(p_rhs));
+        diag_add_source_range(d, p_rhs->get_source_range());
         diag_flush(d);
         break;
       }
@@ -791,21 +513,16 @@ sema_act_on_binary_expr(PSema* p_s, PAstBinaryOp p_opcode, PSourceLocation p_op_
       result_type = lhs_type;
 
       if (!lhs_type->is_int_ty()) {
-        PDiag* d = diag_at(P_DK_err_expected_type, p_op_loc);
-        diag_add_arg_type(d, p_s->context.get_generic_int_ty());
+        PDiag* d = diag_at(P_DK_err_expected_int_type, p_op_loc);
         diag_add_arg_type(d, lhs_type);
-        diag_add_source_range(d, P_AST_GET_SOURCE_RANGE(p_lhs));
+        diag_add_source_range(d, p_lhs->get_source_range());
         diag_flush(d);
-
-        // Dummy type to try to recover.
-        result_type = p_s->context.get_generic_int_ty();
       }
 
       if (!rhs_type->is_int_ty()) {
-        PDiag* d = diag_at(P_DK_err_expected_type, p_op_loc);
-        diag_add_arg_type(d, p_s->context.get_generic_int_ty());
+        PDiag* d = diag_at(P_DK_err_expected_int_type, p_op_loc);
         diag_add_arg_type(d, rhs_type);
-        diag_add_source_range(d, P_AST_GET_SOURCE_RANGE(p_rhs));
+        diag_add_source_range(d, p_rhs->get_source_range());
         diag_flush(d);
       }
     } break;
@@ -845,14 +562,14 @@ sema_act_on_binary_expr(PSema* p_s, PAstBinaryOp p_opcode, PSourceLocation p_op_
 
         PDiag* d = diag_at(diag_kind, p_op_loc);
         if (diag_kind == P_DK_err_cannot_apply_bin_op_generic) {
-          const char* spelling = p_binop_get_spelling(p_opcode);
+          const char* spelling = p_get_spelling(p_opcode);
           diag_add_arg_str(d, spelling);
         }
 
         diag_add_arg_type(d, lhs_type);
         diag_add_arg_type(d, rhs_type);
-        diag_add_source_range(d, P_AST_GET_SOURCE_RANGE(p_lhs));
-        diag_add_source_range(d, P_AST_GET_SOURCE_RANGE(p_rhs));
+        diag_add_source_range(d, p_lhs->get_source_range());
+        diag_add_source_range(d, p_rhs->get_source_range());
         diag_add_source_caret(d, p_op_loc);
         diag_flush(d);
       }
@@ -862,109 +579,63 @@ sema_act_on_binary_expr(PSema* p_s, PAstBinaryOp p_opcode, PSourceLocation p_op_
 
   assert(result_type != nullptr);
 
-  // Implicit lvalue->rvalue conversion
-  p_rhs = convert_to_rvalue(p_rhs);
-  PValueCategory result_vc;
   if (!p_binop_is_assignment(p_opcode)) {
     p_lhs = convert_to_rvalue(p_lhs);
-    result_vc = P_VC_RVALUE;
-  } else {
-    result_vc = P_VC_LVALUE;
   }
 
-  PAstBinaryExpr* node = CREATE_NODE(PAstBinaryExpr, P_AST_NODE_BINARY_EXPR);
-  P_AST_EXPR_GET_VALUE_CATEGORY(node) = result_vc;
-  node->type = result_type;
-  node->lhs = p_lhs;
-  node->rhs = p_rhs;
-  node->opcode = p_opcode;
-  node->op_loc = p_op_loc;
+  p_rhs = convert_to_rvalue(p_rhs);
+
+  auto* node = m_context.new_object<PAstBinaryExpr>(p_lhs, p_rhs, result_type, p_opcode, p_src_range);
   return node;
 }
 
-/* If p_expr is a decl ref expr (ignoring parentheses) then returns its decl
- * otherwise returns nullptr. */
-static PDecl*
-get_decl_ref_decl(PAst* p_expr)
+void
+PSema::check_call_args(PFunctionType* p_callee_ty,
+                       PAstExpr** p_args,
+                       size_t p_arg_count,
+                       PFunctionDecl* p_func_decl,
+                       PSourceLocation p_lparen_loc)
 {
-  p_expr = p_ast_ignore_parens(p_expr);
-  if (P_AST_GET_KIND(p_expr) == P_AST_NODE_DECL_REF_EXPR) {
-    return ((PAstDeclRefExpr*)(p_expr))->decl;
-  }
-
-  return nullptr;
-}
-
-static bool
-check_call_args(PSourceRange p_call_range,
-                PSourceLocation p_lparen_loc,
-                PDeclFunction* p_callee_decl, // may be nullptr
-                PFunctionType* p_callee_type,
-                PAst** p_args,
-                size_t p_arg_count)
-{
-  const size_t required_param_count =
-    p_callee_decl != nullptr ? p_callee_decl->required_param_count : p_callee_type->arg_count;
-  if (p_arg_count < required_param_count) {
-    PDiag* d = diag_at(P_DK_err_too_few_args, p_lparen_loc);
-    if (p_callee_decl != nullptr)
-      diag_add_arg_type_with_name_hint(d, (PType*)p_callee_type, P_DECL_GET_NAME(p_callee_decl));
+  const size_t required_param_count = p_callee_ty->get_param_count();
+  if (p_arg_count != required_param_count) {
+    PDiag* d =
+      diag_at((p_arg_count < required_param_count) ? P_DK_err_too_few_args : P_DK_err_too_many_args, p_lparen_loc);
+    if (p_func_decl != nullptr)
+      diag_add_arg_type_with_name_hint(d, p_callee_ty, p_func_decl->name);
     else
-      diag_add_arg_type(d, (PType*)p_callee_type);
+      diag_add_arg_type(d, p_callee_ty);
     diag_add_source_caret(d, p_lparen_loc);
     diag_flush(d);
-    return false;
-  } else if (p_arg_count > p_callee_type->arg_count) {
-    PDiag* d = diag_at(P_DK_err_too_many_args, p_lparen_loc);
-    if (p_callee_decl != nullptr)
-      diag_add_arg_type_with_name_hint(d, (PType*)p_callee_type, P_DECL_GET_NAME(p_callee_decl));
-    else
-      diag_add_arg_type(d, (PType*)p_callee_type);
-    diag_add_source_caret(d, p_lparen_loc);
-    diag_flush(d);
-    return false;
   }
 
-  bool has_error = false;
-  PType** args_expected_type = p_callee_type->args;
-  for (size_t i = 0; i < p_arg_count; ++i) {
-    if (p_args[i] == nullptr) {
-      has_error = true;
+  PType** args_expected_type = p_callee_ty->get_params();
+  for (size_t i = 0; i < std::min(p_arg_count, required_param_count); ++i) {
+    if (p_args[i] == nullptr)
       continue;
-    }
 
-    PType* arg_type = p_ast_get_type(p_args[i]);
+    PType* arg_type = p_args[i]->get_type(m_context);
     if (!are_types_compatible(arg_type, args_expected_type[i])) {
-      PDiag* d = diag_at(P_DK_err_expected_type, P_AST_GET_SOURCE_RANGE(p_args[i]).begin);
+      PDiag* d = diag_at(P_DK_err_expected_type, p_args[i]->get_source_range().begin);
       diag_add_arg_type(d, args_expected_type[i]);
       diag_add_arg_type(d, arg_type);
-      diag_add_source_range(d, P_AST_GET_SOURCE_RANGE(p_args[i]));
+      diag_add_source_range(d, p_args[i]->get_source_range());
       diag_flush(d);
-      has_error = true;
     }
-
-    p_args[i] = convert_to_rvalue(p_args[i]);
   }
-
-  return !has_error;
 }
 
 PAstCallExpr*
-sema_act_on_call_expr(PSema* p_s,
-                      PSourceLocation p_lparen_loc,
-                      PSourceLocation p_rparen_loc,
-                      PAst* p_callee,
-                      PAst** p_args,
-                      size_t p_arg_count)
+PSema::act_on_call_expr(PAstExpr* p_callee,
+                        PAstExpr** p_args,
+                        size_t p_arg_count,
+                        PSourceRange p_src_range,
+                        PSourceLocation p_lparen_loc)
 {
-  if (p_callee == nullptr || p_args == nullptr)
-    return nullptr;
+  assert(p_callee != nullptr && (p_args != nullptr || p_arg_count == 0));
 
-  PSourceRange call_range = { P_AST_GET_SOURCE_RANGE(p_callee).begin, p_rparen_loc + 1 };
-
-  auto* callee_decl = (PDeclFunction*)get_decl_ref_decl(p_callee);
-  auto* callee_type = (PFunctionType*)p_ast_get_type(p_callee);
-  if (!callee_type->is_function_ty()) {
+  auto* callee_decl = try_get_ref_decl(p_callee);
+  auto* callee_ty = p_callee->get_type(m_context);
+  if (!callee_ty->is_function_ty()) {
     PDiag* d;
 
     if (callee_decl != nullptr) {
@@ -974,144 +645,34 @@ sema_act_on_call_expr(PSema* p_s,
       d = diag_at(P_DK_err_expr_cannot_be_used_as_function, p_lparen_loc);
     }
 
-    diag_add_source_range(d, P_AST_GET_SOURCE_RANGE(p_callee));
+    diag_add_source_range(d, p_callee->get_source_range());
     diag_add_source_caret(d, p_lparen_loc);
     diag_flush(d);
     return nullptr;
   }
 
-  if (!check_call_args(call_range, p_lparen_loc, callee_decl, callee_type, p_args, p_arg_count))
-    return nullptr;
+  check_call_args(callee_ty->as<PFunctionType>(), p_args, p_arg_count, (PFunctionDecl*)callee_decl, p_lparen_loc);
 
-  PAstCallExpr* node =
-    CREATE_NODE_EXTRA_SIZE(PAstCallExpr, sizeof(PAst*) * (callee_type->arg_count - 1), P_AST_NODE_CALL_EXPR);
-  P_AST_EXPR_GET_VALUE_CATEGORY(node) = P_VC_RVALUE;
-  node->callee = p_callee;
-  node->arg_count = callee_type->arg_count;
-  memcpy(node->args, p_args, sizeof(PAst*) * p_arg_count);
-  for (size_t i = p_arg_count; i < callee_type->arg_count; ++i) {
-    node->args[i] = callee_decl->params[i]->default_expr;
+  auto** raw_args = m_context.alloc_object<PAstExpr*>(p_arg_count);
+  std::copy(p_args, p_args + p_arg_count, raw_args);
+
+  auto* node = m_context.new_object<PAstCallExpr>(p_callee, raw_args, p_arg_count, p_src_range);
+
+  // Convert all lvalue arguments to rvalue
+  for (size_t i = 0; i < p_arg_count; ++i) {
+    node->args[i] = convert_to_rvalue(node->args[i]);
   }
 
   return node;
 }
 
-PAstMemberExpr*
-sema_act_on_member_expr(PSema* p_s,
-                        PSourceLocation p_dot_loc,
-                        PAst* p_base_expr,
-                        PSourceRange p_name_range,
-                        PIdentifierInfo* p_name)
+PAstCallExpr*
+PSema::act_on_call_expr(PAstExpr* p_callee,
+                        const std::vector<PAstExpr*>& p_args,
+                        PSourceRange p_src_range,
+                        PSourceLocation p_lparen_loc)
 {
-  if (p_base_expr == nullptr || p_name == nullptr)
-    return nullptr;
-
-  PType* base_type = p_ast_get_type(p_base_expr);
-  if (base_type->get_kind() != P_TYPE_TAG || P_DECL_GET_KIND(((PTagType*)base_type)->decl) != P_DECL_STRUCT) {
-    PDiag* d = diag_at(P_DK_err_member_not_struct, p_dot_loc);
-    diag_add_arg_ident(d, p_name);
-
-    PSourceRange dot_range = { p_dot_loc, p_dot_loc };
-    diag_add_source_range(d, dot_range);
-    diag_flush(d);
-    return nullptr;
-  }
-
-  PDeclStructField* field_decl = nullptr;
-  PDeclStruct* base_decl = (PDeclStruct*)((PTagType*)base_type)->decl;
-  for (int i = 0; i < base_decl->field_count; ++i) {
-    if (P_DECL_GET_NAME(base_decl->fields[i]) == p_name) {
-      field_decl = base_decl->fields[i];
-      break;
-    }
-  }
-
-  if (field_decl == nullptr) {
-    PDiag* d = diag_at(P_DK_err_no_member_named, p_dot_loc);
-    diag_add_arg_type(d, base_type);
-    diag_add_arg_ident(d, p_name);
-    diag_add_source_range(d, p_name_range);
-    diag_flush(d);
-    return nullptr;
-  }
-
-  PAstMemberExpr* node = CREATE_NODE(PAstMemberExpr, P_AST_NODE_MEMBER_EXPR);
-  P_AST_EXPR_GET_VALUE_CATEGORY(node) = P_VC_LVALUE;
-  node->base_expr = p_base_expr;
-  node->member = field_decl;
-  return node;
-}
-
-PAstUnaryExpr*
-sema_act_on_unary_expr(PSema* p_s, PAstUnaryOp p_opcode, PSourceLocation p_op_loc, PAst* p_sub_expr)
-{
-  if (p_sub_expr == nullptr)
-    return nullptr;
-
-  PType* result_type = p_ast_get_type(p_sub_expr);
-  PValueCategory result_vc;
-  switch (p_opcode) {
-    case P_UNARY_NEG: // '-' operator
-      if (!result_type->is_float_ty() && !result_type->is_signed_int_ty()) {
-        PDiag* d = diag_at(P_DK_err_cannot_apply_unary_op, p_op_loc);
-        diag_add_arg_char(d, '-');
-        diag_add_arg_type(d, result_type);
-        diag_add_source_range(d, P_AST_GET_SOURCE_RANGE(p_sub_expr));
-        diag_flush(d);
-        return nullptr;
-      }
-
-      p_sub_expr = convert_to_rvalue(p_sub_expr);
-      result_vc = P_VC_RVALUE;
-      break;
-    case P_UNARY_NOT: // logical and bitwise '!' operator
-      if (!result_type->is_bool_ty() && !result_type->is_int_ty()) {
-        PDiag* d = diag_at(P_DK_err_cannot_apply_unary_op, p_op_loc);
-        diag_add_arg_char(d, '!');
-        diag_add_arg_type(d, result_type);
-        diag_add_source_range(d, P_AST_GET_SOURCE_RANGE(p_sub_expr));
-        diag_flush(d);
-        return nullptr;
-      }
-
-      p_sub_expr = convert_to_rvalue(p_sub_expr);
-      result_vc = P_VC_RVALUE;
-      break;
-    case P_UNARY_ADDRESS_OF: // '&' operator
-      if (P_AST_EXPR_IS_RVALUE(p_sub_expr)) {
-        PDiag* d = diag_at(P_DK_err_could_not_take_addr_rvalue, p_op_loc);
-        diag_add_arg_type(d, result_type);
-        diag_add_source_range(d, P_AST_GET_SOURCE_RANGE(p_sub_expr));
-        diag_flush(d);
-        return nullptr;
-      }
-
-      result_type = p_s->context.get_pointer_ty(result_type);
-      result_vc = P_VC_RVALUE;
-      break;
-    case P_UNARY_DEREF: // '*' operator
-      if (!result_type->is_pointer_ty()) {
-        PDiag* d = diag_at(P_DK_err_indirection_requires_ptr, p_op_loc);
-        diag_add_arg_type(d, result_type);
-        diag_add_source_range(d, P_AST_GET_SOURCE_RANGE(p_sub_expr));
-        diag_flush(d);
-        return nullptr;
-      }
-
-      result_type = ((PPointerType*)result_type)->element_type;
-      result_vc = P_VC_LVALUE;
-      break;
-    default:
-      HEDLEY_UNREACHABLE_RETURN(nullptr);
-  }
-
-  PAstUnaryExpr* node = CREATE_NODE(PAstUnaryExpr, P_AST_NODE_UNARY_EXPR);
-  P_AST_EXPR_GET_VALUE_CATEGORY(node) = result_vc;
-  node->sub_expr = p_sub_expr;
-  node->opcode = p_opcode;
-  node->op_loc = p_op_loc;
-  node->type = result_type;
-  return node;
+  return act_on_call_expr(p_callee, const_cast<PAstExpr**>(p_args.data()), p_args.size(), p_src_range, p_lparen_loc);
 }
 
 /* Classify {int} -> p_to_type cast. */
@@ -1162,38 +723,217 @@ classify_bool_cast(PType* p_to_type)
 }
 
 PAstCastExpr*
-sema_act_on_cast_expr(PSema* p_s, PSourceLocation p_as_loc, PType* p_to_type, PAst* p_sub_expr)
+PSema::act_on_cast_expr(PAstExpr* p_sub_expr, PType* p_target_ty, PSourceRange p_src_range, PSourceLocation p_as_loc)
 {
-  if (p_to_type == nullptr || p_sub_expr == nullptr)
-    return nullptr;
+  assert(p_sub_expr != nullptr && p_target_ty != nullptr);
 
-  PType* from_type = p_ast_get_type(p_sub_expr);
+  PType* from_type = p_sub_expr->get_type(m_context);
 
   PAstCastKind cast_kind = P_CAST_INVALID;
-  if (from_type->get_canonical_ty() == p_to_type->get_canonical_ty())
+  if (from_type->get_canonical_ty() == p_target_ty->get_canonical_ty())
     cast_kind = P_CAST_NOOP; // from/to types are equivalent
   else if (from_type->is_int_ty())
-    cast_kind = classify_int_cast(from_type, p_to_type);
+    cast_kind = classify_int_cast(from_type, p_target_ty);
   else if (from_type->is_float_ty())
-    cast_kind = classify_float_cast(p_to_type);
+    cast_kind = classify_float_cast(p_target_ty);
   else if (from_type->is_bool_ty())
-    cast_kind = classify_bool_cast(p_to_type);
+    cast_kind = classify_bool_cast(p_target_ty);
 
   // TODO: issue a warning when cast is noop
 
   if (cast_kind == P_CAST_INVALID) {
     PDiag* d = diag_at(P_DK_err_unsupported_conversion, p_as_loc);
     diag_add_arg_type(d, from_type);
-    diag_add_arg_type(d, p_to_type);
+    diag_add_arg_type(d, p_target_ty);
     diag_flush(d);
     return nullptr;
   }
 
-  PAstCastExpr* node = CREATE_NODE(PAstCastExpr, P_AST_NODE_CAST_EXPR);
-  P_AST_EXPR_GET_VALUE_CATEGORY(node) = P_AST_EXPR_GET_VALUE_CATEGORY(p_sub_expr);
-  node->sub_expr = p_sub_expr;
-  node->type = p_to_type;
-  node->cast_kind = cast_kind;
-  node->as_loc = p_as_loc;
+  auto* node = m_context.new_object<PAstCastExpr>(p_sub_expr, p_target_ty, cast_kind, p_src_range);
   return node;
+}
+
+PVarDecl*
+PSema::act_on_var_decl(PType* p_type,
+                       PIdentifierInfo* p_name,
+                       PAstExpr* p_init_expr,
+                       PSourceRange p_src_range,
+                       PSourceRange p_name_range)
+{
+  // Unnamed variables are forbidden.
+  if (p_name == nullptr) {
+    PDiag* d = diag_at(P_DK_err_var_unnamed, p_src_range.begin);
+    diag_add_source_caret(d, p_src_range.begin);
+    diag_flush(d);
+    return m_context.new_object<PVarDecl>(p_type, p_name, p_init_expr);
+  }
+
+  // Check for variable redeclaration.
+  PSymbol* symbol = local_lookup(p_name);
+  if (symbol != nullptr) {
+    PDiag* d = diag_at(P_DK_err_var_redeclaration, p_name_range.begin);
+    diag_add_arg_ident(d, p_name);
+    diag_add_source_range(d, p_name_range);
+    diag_flush(d);
+    return m_context.new_object<PVarDecl>(p_type, p_name, p_init_expr);
+  }
+
+  // Deduce the variable type if needed.
+  if (p_type == nullptr) {
+    if (p_init_expr == nullptr) {
+      PDiag* d = diag_at(P_DK_err_cannot_deduce_var_type, p_name_range.begin);
+      diag_add_arg_ident(d, p_name);
+      diag_add_source_range(d, p_name_range);
+      diag_flush(d);
+      return nullptr;
+    }
+
+    p_type = p_init_expr->get_type(m_context);
+  } else if (p_init_expr != nullptr) {
+    PType* init_expr_type = p_init_expr->get_type(m_context);
+    if (!are_types_compatible(init_expr_type, p_type)) {
+      PDiag* d = diag_at(P_DK_err_expected_type, p_init_expr->get_source_range().begin);
+      diag_add_arg_type(d, p_type);
+      diag_add_arg_type(d, init_expr_type);
+      diag_add_source_range(d, p_init_expr->get_source_range());
+      diag_flush(d);
+      return nullptr;
+    }
+  }
+
+  auto* node = m_context.new_object<PVarDecl>(p_type, p_name, p_init_expr);
+  symbol = p_scope_add_symbol(m_current_scope, p_name);
+  symbol->decl = node;
+  return node;
+}
+
+PParamDecl*
+PSema::act_on_param_decl(PType* p_type, PIdentifierInfo* p_name, PSourceRange p_src_range, PSourceRange p_name_range)
+{
+  // Unnamed parameters are forbidden.
+  if (p_name == nullptr) {
+    PDiag* d = diag_at(P_DK_err_param_unnamed, p_src_range.begin);
+    diag_add_source_caret(d, p_src_range.begin);
+    diag_flush(d);
+    return m_context.new_object<PParamDecl>(p_type, p_name);
+  }
+
+  PSymbol* symbol = local_lookup(p_name);
+  if (symbol != nullptr) {
+    PDiag* d = diag_at(P_DK_err_param_name_already_used, p_name_range.begin);
+    diag_add_arg_ident(d, p_name);
+    diag_add_source_range(d, p_name_range);
+    diag_flush(d);
+    return m_context.new_object<PParamDecl>(p_type, p_name);
+  }
+
+  if (p_type == nullptr) {
+    PDiag* d = diag_at(P_DK_err_param_type_required, p_src_range.begin);
+    diag_add_arg_ident(d, p_name);
+    diag_add_source_range(d, p_name_range);
+    diag_flush(d);
+    return m_context.new_object<PParamDecl>(p_type, p_name);
+  }
+
+  auto* node = m_context.new_object<PParamDecl>(p_type, p_name);
+  symbol = p_scope_add_symbol(m_current_scope, p_name);
+  symbol->decl = node;
+  return node;
+}
+
+void
+PSema::begin_func_decl_analysis(PFunctionDecl* p_decl)
+{
+  push_scope(P_SF_FUNC_PARAMS);
+
+  m_curr_func_type = p_decl->type->as<PFunctionType>();
+
+  // Register parameters on the current scope.
+  // All parameters have already been checked.
+  for (size_t i = 0; i < p_decl->param_count; ++i) {
+    // We are tolerant for nullptrs to try recover errors during parsing.
+    if (p_decl->params[i] != nullptr && p_decl->params[i]->name != nullptr) {
+      PSymbol* symbol = p_scope_add_symbol(m_current_scope, p_decl->params[i]->name);
+      symbol->decl = p_decl->params[i];
+    }
+  }
+}
+
+void
+PSema::end_func_decl_analysis()
+{
+  pop_scope();
+}
+
+PFunctionDecl*
+PSema::act_on_func_decl(PIdentifierInfo* p_name,
+                        PType* p_ret_ty,
+                        PParamDecl** p_params,
+                        size_t p_param_count,
+                        PSourceRange p_name_range,
+                        PSourceLocation p_key_fn_end_loc)
+{
+  // Unnamed functions are forbidden.
+  if (p_name == nullptr) {
+    PDiag* d = diag_at(P_DK_err_func_unnamed, p_key_fn_end_loc);
+    diag_flush(d);
+  }
+
+  PSymbol* symbol = local_lookup(p_name);
+  if (symbol != nullptr) {
+    PDiag* d = diag_at(P_DK_err_func_redeclaration, p_name_range.begin);
+    diag_add_arg_ident(d, p_name);
+    diag_add_source_range(d, p_name_range);
+    diag_flush(d);
+    return nullptr;
+  }
+
+  if (p_ret_ty == nullptr)
+    p_ret_ty = m_context.get_void_ty();
+
+  std::vector<PType*> param_tys(p_param_count);
+  for (size_t i = 0; i < p_param_count; ++i) {
+    param_tys[i] = p_params[i]->type;
+  }
+
+  auto* func_ty = m_context.get_function_ty(p_ret_ty, param_tys);
+
+  auto* raw_params = m_context.alloc_object<PParamDecl*>(p_param_count);
+  std::copy(p_params, p_params + p_param_count, raw_params);
+
+  auto* decl = m_context.new_object<PFunctionDecl>(func_ty, p_name, raw_params, p_param_count);
+
+  symbol = p_scope_add_symbol(m_current_scope, p_name);
+  symbol->decl = decl;
+
+  return decl;
+}
+
+PFunctionDecl*
+PSema::act_on_func_decl(PIdentifierInfo* p_name,
+                        PType* p_ret_ty,
+                        const std::vector<PParamDecl*>& p_params,
+                        PSourceRange p_name_range,
+                        PSourceLocation p_key_fn_end_loc)
+{
+  return act_on_func_decl(
+    p_name, p_ret_ty, const_cast<PParamDecl**>(p_params.data()), p_params.size(), p_name_range, p_key_fn_end_loc);
+}
+
+PAstExpr*
+PSema::convert_to_rvalue(PAstExpr* p_expr)
+{
+  if (p_expr->is_rvalue())
+    return p_expr;
+
+  return m_context.new_object<PAstL2RValueExpr>(p_expr);
+}
+
+PDecl*
+PSema::try_get_ref_decl(PAstExpr* p_expr)
+{
+  p_expr = p_expr->ignore_parens();
+  if (p_expr->get_kind() == P_AST_NODE_DECL_REF_EXPR)
+    return p_expr->as<PAstDeclRefExpr>()->decl;
+  return nullptr;
 }

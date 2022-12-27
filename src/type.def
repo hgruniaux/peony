@@ -1,0 +1,31 @@
+#ifndef TYPE
+#error the macro TYPE must be defined before including this file
+#endif
+
+#ifndef BUILTIN_TYPE
+#define BUILTIN_TYPE(p_kind, p_spelling) TYPE(p_kind)
+#endif
+
+// Builtin types:
+BUILTIN_TYPE(P_TK_VOID, "void")
+BUILTIN_TYPE(P_TK_CHAR, "char")
+BUILTIN_TYPE(P_TK_BOOL, "bool")
+BUILTIN_TYPE(P_TK_I8, "i8")
+BUILTIN_TYPE(P_TK_I16, "i16")
+BUILTIN_TYPE(P_TK_I32, "i32")
+BUILTIN_TYPE(P_TK_I64, "i64")
+BUILTIN_TYPE(P_TK_U8, "u8")
+BUILTIN_TYPE(P_TK_U16, "u16")
+BUILTIN_TYPE(P_TK_U32, "u32")
+BUILTIN_TYPE(P_TK_U64, "u64")
+BUILTIN_TYPE(P_TK_F32, "f32")
+BUILTIN_TYPE(P_TK_F64, "f64")
+
+// Advanced types:
+TYPE(P_TK_PAREN)
+TYPE(P_TK_FUNCTION)
+TYPE(P_TK_POINTER)
+TYPE(P_TK_ARRAY)
+
+#undef TYPE
+#undef BUILTIN_TYPE

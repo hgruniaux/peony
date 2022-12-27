@@ -16,11 +16,17 @@ public:
   [[nodiscard]] PBumpAllocator& get_allocator() { return m_allocator; }
   [[nodiscard]] const PBumpAllocator& get_allocator() const { return m_allocator; }
 
+  // Allocation functions:
   [[nodiscard]] void* alloc(size_t p_size, size_t p_align) { return m_allocator.alloc(p_size, p_align); }
-  template<typename T>
-  [[nodiscard]] T* alloc()
+  template<class T>
+  [[nodiscard]] T* alloc_object(size_t p_n = 1)
   {
-    return m_allocator.alloc<T>();
+    return m_allocator.alloc_object<T>(p_n);
+  }
+  template<class T, class... Args>
+  [[nodiscard]] T* new_object(Args&&... p_args)
+  {
+    return m_allocator.new_object<T>(std::forward<Args>(p_args)...);
   }
 
   [[nodiscard]] PType* get_void_ty() { return &m_void_ty; }
@@ -36,10 +42,9 @@ public:
   [[nodiscard]] PType* get_u64_ty() { return &m_u64_ty; }
   [[nodiscard]] PType* get_f32_ty() { return &m_f32_ty; }
   [[nodiscard]] PType* get_f64_ty() { return &m_f64_ty; }
-  [[nodiscard]] PType* get_generic_int_ty() { return &m_generic_int_ty; }
 
   [[nodiscard]] PParenType* get_paren_ty(PType* p_sub_type);
-  [[nodiscard]] PFunctionType* get_function_ty(PType* p_ret_ty, PType** p_args, size_t p_arg_count);
+  [[nodiscard]] PFunctionType* get_function_ty(PType* p_ret_ty, PType** p_params, size_t p_param_count);
   [[nodiscard]] PFunctionType* get_function_ty(PType* p_ret_ty, const std::vector<PType*>& p_args);
   [[nodiscard]] PPointerType* get_pointer_ty(PType* p_elt_ty);
   [[nodiscard]] PArrayType* get_array_ty(PType* p_elt_ty, size_t p_num_elements);
@@ -48,20 +53,19 @@ private:
   PBumpAllocator m_allocator;
 
   // Builtin types:
-  PType m_void_ty{ PTypeKind::P_TYPE_VOID };
-  PType m_char_ty{ PTypeKind::P_TYPE_CHAR };
-  PType m_bool_ty{ PTypeKind::P_TYPE_BOOL };
-  PType m_i8_ty{ PTypeKind::P_TYPE_I8 };
-  PType m_i16_ty{ PTypeKind::P_TYPE_I16 };
-  PType m_i32_ty{ PTypeKind::P_TYPE_I32 };
-  PType m_i64_ty{ PTypeKind::P_TYPE_I64 };
-  PType m_u8_ty{ PTypeKind::P_TYPE_U8 };
-  PType m_u16_ty{ PTypeKind::P_TYPE_U16 };
-  PType m_u32_ty{ PTypeKind::P_TYPE_U32 };
-  PType m_u64_ty{ PTypeKind::P_TYPE_U64 };
-  PType m_f32_ty{ PTypeKind::P_TYPE_F32 };
-  PType m_f64_ty{ PTypeKind::P_TYPE_F64 };
-  PType m_generic_int_ty{ PTypeKind::P_TYPE_GENERIC_INT };
+  PType m_void_ty{ PTypeKind::P_TK_VOID };
+  PType m_char_ty{ PTypeKind::P_TK_CHAR };
+  PType m_bool_ty{ PTypeKind::P_TK_BOOL };
+  PType m_i8_ty{ PTypeKind::P_TK_I8 };
+  PType m_i16_ty{ PTypeKind::P_TK_I16 };
+  PType m_i32_ty{ PTypeKind::P_TK_I32 };
+  PType m_i64_ty{ PTypeKind::P_TK_I64 };
+  PType m_u8_ty{ PTypeKind::P_TK_U8 };
+  PType m_u16_ty{ PTypeKind::P_TK_U16 };
+  PType m_u32_ty{ PTypeKind::P_TK_U32 };
+  PType m_u64_ty{ PTypeKind::P_TK_U64 };
+  PType m_f32_ty{ PTypeKind::P_TK_F32 };
+  PType m_f64_ty{ PTypeKind::P_TK_F64 };
 
   // Composite types:
 
@@ -70,7 +74,8 @@ private:
     return p_lhs ^ (p_rhs + 0x9e3779b9 + (p_lhs << 6) + (p_lhs >> 2));
   }
 
-  struct FuncTyKey {
+  struct FuncTyKey
+  {
     PType* ret_ty;
     PType** arg_types;
     size_t arg_count;
@@ -90,10 +95,11 @@ private:
   };
 
   /// Implementation of the std::hash interface for FuncTyKey
-  struct FuncTyKeyHash {
+  struct FuncTyKeyHash
+  {
     [[nodiscard]] size_t operator()(const FuncTyKey& p_key) const noexcept
     {
-      auto hasher = std::hash<PType*> {};
+      auto hasher = std::hash<PType*>{};
       size_t hval = hasher(p_key.ret_ty);
       for (size_t i = 0; i < p_key.arg_count; ++i) {
         hval = hash_combine(hval, hasher(p_key.arg_types[i]));

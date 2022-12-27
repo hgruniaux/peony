@@ -5,8 +5,6 @@
 
 #include <cstdint>
 
-HEDLEY_BEGIN_C_DECLS
-
 typedef enum PDiagSeverity
 {
   P_DIAG_UNSPECIFIED,
@@ -141,5 +139,3 @@ diag_add_source_caret(PDiag* p_diag, PSourceLocation p_loc);
 
 void
 diag_flush(PDiag* p_diag);
-
-HEDLEY_END_C_DECLS
