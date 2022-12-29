@@ -24,6 +24,9 @@ private:
   std::vector<PParamDecl*> parse_param_list();
   PVarDecl* parse_var_decl();
   std::vector<PVarDecl*> parse_var_list();
+  PDecl* parse_func_decl();
+  PDecl* parse_struct_decl();
+  PStructFieldDecl* parse_struct_field_decl();
 
   PAst* parse_compound_stmt();
   PAst* parse_let_stmt();
@@ -40,6 +43,8 @@ private:
   PAstExpr* parse_float_lit();
   PAstExpr* parse_paren_expr();
   PAstExpr* parse_decl_ref_expr();
+  PAstStructFieldExpr* parse_struct_field_expr(PStructDecl* p_struct_decl);
+  PAstExpr* parse_struct_expr(PLocalizedIdentifierInfo p_name);
   PAstExpr* parse_primary_expr();
   PAstExpr* parse_call_expr(PAstExpr* p_callee);
   PAstExpr* parse_member_expr(PAstExpr* p_base_expr);
@@ -48,17 +53,43 @@ private:
   PAstExpr* parse_cast_expr();
   PAstExpr* parse_binary_expr(PAstExpr* p_lhs, int p_expr_prec);
 
-  PDecl* parse_func_decl();
   PDecl* parse_top_level_decl();
   PAstTranslationUnit* parse_translation_unit();
 
+  PType* try_parse_type_specifier();
+
 private:
+  friend class PBalancedDelimiterTracker;
+  friend class PSourceRangeTracker;
+
+  template<class Fn>
+  PLocalizedIdentifierInfo parse_identifier(Fn p_err_fn)
+  {
+    if (lookahead(P_TOK_IDENTIFIER)) {
+      auto info = PLocalizedIdentifierInfo{
+        m_token.data.identifier,
+        get_token_range()
+      };
+
+      consume_token();
+      return info;
+    } else {
+      p_err_fn();
+      return PLocalizedIdentifierInfo{
+        nullptr,
+        {}
+      };
+    }
+  }
+
   [[nodiscard]] PSourceRange get_token_range() const
   {
     return { m_token.source_location, m_token.source_location + m_token.token_length };
   }
 
-  void consume();
+  void consume_token();
+  bool try_consume_token(PTokenKind p_kind);
+
   bool expect_token(PTokenKind p_kind);
   void unexpected_token();
 

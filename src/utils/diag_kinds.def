@@ -6,6 +6,10 @@
 #define WARNING(p_name, p_msg)
 #endif
 
+#ifndef NOTE
+#define NOTE(p_name, p_msg)
+#endif
+
 /* Driver errors */
 ERROR(fail_open_file, "failed to open file <%{0}%>")
 ERROR(cmdline_opt_expect_int, "argument to <%{0}%> should be an integer")
@@ -15,24 +19,22 @@ ERROR(no_input_files, "no input files")
 
 ERROR(unknown_character, "unknown character <%{0}%>")
 ERROR(unexpected_tok, "unexpected token, found <%{0}%>")
+ERROR(unexpected_tok_with_hint, "unexpected token <%{0}%>; did you mean <%{1}%>")
 ERROR(expected_tok, "expected <%{0}%>, found <%{1}%>")
 ERROR(expected_type, "mismatched types; expected <%{0}%>, found <%{1}%>")
 ERROR(expected_int_type, "mismatched types; expected integer type, found <%{1}%>")
 ERROR(expected_expr, "expected expression")
+ERROR(expected_struct_field_decl, "expected struct field declarator")
 ERROR(expected_func_body_after_func_decl, "expected function body after function declarator")
 
-ERROR(member_not_struct, "request for member <%{0}%> in something not a structure")
-ERROR(no_member_named, "<%{0}%> has no member named <%{1}%>")
-ERROR(redeclaration_struct, "redeclaration of structure <%{0}%>")
+ERROR(name_defined_multiple_times, "the name <%{0}%> is defined multiple times")
 ERROR(use_undeclared_ident, "use of undeclared identifier <%{0}%>")
-ERROR(use_undeclared_type, "use of undeclared type <%{0}%>")
 
 ERROR(break_or_continue_outside_of_loop, "<%{0}%> outside of a loop")
 
 ERROR(int_literal_too_large, "integer literal too large for type <%{0}%>")
 ERROR(generic_int_literal_too_large, "integer literal too large")
 ERROR(generic_float_literal_too_large, "float literal too large")
-
 
 ERROR(func_redeclaration, "redeclaration of function <%{0}%>")
 ERROR(func_unnamed, "function must be named")
@@ -51,6 +53,16 @@ ERROR(var_unnamed, "variable must be named")
 ERROR(var_redeclaration, "redeclaration of variable <%{0}%>")
 ERROR(var_decl_expected, "expected variable declarator")
 ERROR(cannot_deduce_var_type, "cannot deduce the type of variable <%{0}%>")
+
+ERROR(duplicate_member, "duplicate member <%{0}%>")
+ERROR(member_not_struct, "request for member <%{0}%> in something not a structure")
+ERROR(no_member_named, "<%{0}%> has no member named <%{1}%>")
+
+ERROR(expected_struct, "expected struct, found <%{0}%>")
+ERROR(cannot_find_struct, "cannot find struct type <%{0}%> in this scope")
+ERROR(struct_has_not_field, "struct <%{0}%> has no field named <%{1}%>")
+
+ERROR(type_unknown, "unknown type name <%{0}%>")
 
 ERROR(cannot_add, "cannot add <%{0}%> to <%{1}%>")
 ERROR(cannot_add_assign, "cannot add-assign <%{1}%> to <%{0}%>")
@@ -71,3 +83,4 @@ WARNING(unnecessary_paren, "unnecessary parentheses around <%{}%> condition")
 
 #undef ERROR
 #undef WARNING
+#undef NOTE

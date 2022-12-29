@@ -38,8 +38,10 @@ public:
   void* visit_decl_ref_expr(const PAstDeclRefExpr* p_node);
   void* visit_unary_expr(const PAstUnaryExpr* p_node);
   void* visit_binary_expr(const PAstBinaryExpr* p_node);
+  void* visit_member_expr(const PAstMemberExpr* p_node);
   void* visit_call_expr(const PAstCallExpr* p_node);
   void* visit_cast_expr(const PAstCastExpr* p_node);
+  void* visit_struct_expr(const PAstStructExpr* p_node);
   void* visit_l2rvalue_expr(const PAstL2RValueExpr* p_node);
 
   // Declarations:

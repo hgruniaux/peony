@@ -5,6 +5,7 @@
 #include "context.hxx"
 #include "scope.hxx"
 #include "token.hxx"
+#include "utils/diag.hxx"
 
 #include <stack>
 
@@ -25,6 +26,11 @@ public:
 
   [[nodiscard]] PSymbol* lookup(PIdentifierInfo* p_name) const;
   [[nodiscard]] PSymbol* local_lookup(PIdentifierInfo* p_name) const;
+
+  /// Lookups for a tag type with the given name (e.g. a struct or alias type).
+  /// Builtin types that are identified by a keyword are not recognized by this
+  /// function!
+  [[nodiscard]] PType* lookup_type(PLocalizedIdentifierInfo p_name, PDiagKind p_diag = P_DK_err_type_unknown, bool p_return_unknown = true) const;
 
   [[nodiscard]] PAstBoolLiteral* act_on_bool_literal(bool p_value, PSourceRange p_src_range = {});
 
@@ -55,9 +61,7 @@ public:
   /// Returns `true` if the given type is compatible (that is canonically equivalent or
   /// convertible to) the return type of the current function.
   [[nodiscard]] bool is_compatible_with_ret_ty(PType* p_type) const;
-  [[nodiscard]] PAstReturnStmt* act_on_return_stmt(PAstExpr* p_ret_expr,
-                                                   PSourceRange p_src_range = {},
-                                                   PSourceLocation p_semi_loc = {});
+  [[nodiscard]] PAstReturnStmt* act_on_return_stmt(PAstExpr* p_ret_expr, PSourceRange p_src_range = {});
 
   /// Checks (and emits diagnostics) a given expression used as a condition
   /// like in a `if` or `while` statement.
@@ -81,13 +85,17 @@ public:
 
   [[nodiscard]] PAstUnaryExpr* act_on_unary_expr(PAstExpr* p_sub_expr,
                                                  PAstUnaryOp p_opcode,
-                                                 PSourceRange p_src_range = {},
-                                                 PSourceLocation p_op_loc = {});
+                                                 PSourceRange p_src_range = {});
   [[nodiscard]] PAstBinaryExpr* act_on_binary_expr(PAstExpr* p_lhs,
                                                    PAstExpr* p_rhs,
                                                    PAstBinaryOp p_opcode,
                                                    PSourceRange p_src_range = {},
                                                    PSourceLocation p_op_loc = {});
+
+  PAstMemberExpr* act_on_member_expr(PAstExpr* p_base_expr,
+                                     PLocalizedIdentifierInfo p_member_name,
+                                     PSourceRange p_src_range = {},
+                                     PSourceLocation p_dot_loc = {});
 
   /// Checks the arguments used in a call expression to a callee of the given type.
   /// The param func_decl is optional and it is used for better diagnostics.
@@ -105,23 +113,37 @@ public:
                                                PSourceRange p_src_range = {},
                                                PSourceLocation p_as_loc = {});
 
+  [[nodiscard]] PStructDecl* resolve_struct_expr_name(PLocalizedIdentifierInfo p_name);
+  [[nodiscard]] PAstStructFieldExpr* act_on_struct_field_expr(PStructDecl* p_struct_decl, PLocalizedIdentifierInfo p_name, PAstExpr* p_expr);
+  [[nodiscard]] PAstStructExpr* act_on_struct_expr(PStructDecl* p_struct_decl,
+                                                   PArrayView<PAstStructFieldExpr*> p_fields,
+                                                   PSourceRange p_src_range = {});
+
+  [[nodiscard]] PAstTranslationUnit* act_on_translation_unit(PArrayView<PDecl*> p_decls);
+
   [[nodiscard]] PVarDecl* act_on_var_decl(PType* p_type,
-                                          PIdentifierInfo* p_name,
+                                          PLocalizedIdentifierInfo p_name,
                                           PAstExpr* p_init_expr,
-                                          PSourceRange p_src_range = {},
-                                          PSourceRange p_name_range = {});
+                                          PSourceRange p_src_range = {});
   [[nodiscard]] PParamDecl* act_on_param_decl(PType* p_type,
-                                              PIdentifierInfo* p_name,
-                                              PSourceRange p_src_range = {},
-                                              PSourceRange p_name_range = {});
+                                              PLocalizedIdentifierInfo p_name,
+                                              PSourceRange p_src_range = {});
 
   void begin_func_decl_analysis(PFunctionDecl* p_decl);
   void end_func_decl_analysis();
-  [[nodiscard]] PFunctionDecl* act_on_func_decl(PIdentifierInfo* p_name,
+  [[nodiscard]] PFunctionDecl* act_on_func_decl(PLocalizedIdentifierInfo p_name,
                                                 PType* p_ret_ty,
                                                 PArrayView<PParamDecl*> p_params,
-                                                PSourceRange p_name_range = {},
-                                                PSourceLocation p_key_fn_end_loc = {});
+                                                PSourceLocation p_lparen_loc = {});
+
+  [[nodiscard]] PStructFieldDecl* act_on_struct_field_decl(PType* p_type,
+                                                           PLocalizedIdentifierInfo p_name,
+                                                           PSourceRange p_src_range = {});
+
+  void check_struct_fields(PArrayView<PStructFieldDecl*> p_fields);
+  [[nodiscard]] PStructDecl* act_on_struct_decl(PLocalizedIdentifierInfo p_name,
+                                                PArrayView<PStructFieldDecl*> p_fields,
+                                                PSourceRange p_src_range = {});
 
 private:
   /// Common code for act_before_while_stmt_body() and act_before_loop_stmt_body().

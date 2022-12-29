@@ -18,6 +18,11 @@ public:
   RetTy default_ret_value(Args&&... p_args) { return RetTy(); }
 
   // Statements
+  RetTy visit_null_stmt(Args&&... p_args)
+  {
+    assert(false && "null node");
+    return default_ret_value(std::forward<Args>(p_args)...);
+  }
   RetTy visit_stmt(Ptr<PAst> p_node, Args&&... p_args) { return default_ret_value(std::forward<Args>(p_args)...); }
   RetTy visit_translation_unit(Ptr<PAstTranslationUnit> p_node, Args&&... p_args) { return DISPATCH(PAst, visit_stmt); }
   RetTy visit_compound_stmt(Ptr<PAstCompoundStmt> p_node, Args&&... p_args) { return DISPATCH(PAst, visit_stmt); }
@@ -38,27 +43,45 @@ public:
   RetTy visit_decl_ref_expr(Ptr<PAstDeclRefExpr> p_node, Args&&... p_args) { return DISPATCH(PAstExpr, visit_expr); }
   RetTy visit_unary_expr(Ptr<PAstUnaryExpr> p_node, Args&&... p_args) { return DISPATCH(PAstExpr, visit_expr); }
   RetTy visit_binary_expr(Ptr<PAstBinaryExpr> p_node, Args&&... p_args) { return DISPATCH(PAstExpr, visit_expr); }
+  RetTy visit_member_expr(Ptr<PAstMemberExpr> p_node, Args&&... p_args) { return DISPATCH(PAstMemberExpr, visit_expr); }
   RetTy visit_call_expr(Ptr<PAstCallExpr> p_node, Args&&... p_args) { return DISPATCH(PAstExpr, visit_expr); }
   RetTy visit_cast_expr(Ptr<PAstCastExpr> p_node, Args&&... p_args) { return DISPATCH(PAstExpr, visit_expr); }
+  RetTy visit_struct_expr(Ptr<PAstStructExpr> p_node, Args&&... p_args) { return DISPATCH(PAstExpr, visit_expr); }
   RetTy visit_l2rvalue_expr(Ptr<PAstL2RValueExpr> p_node, Args&&... p_args) { return DISPATCH(PAstExpr, visit_expr); }
 
   // Declarations
+  RetTy visit_null_decl(Args&&... p_args)
+  {
+    assert(false && "null node");
+    return default_ret_value(std::forward<Args>(p_args)...);
+  }
   RetTy visit_decl(Ptr<PDecl> p_node, Args&&... p_args) { return default_ret_value(std::forward<Args>(p_args)...); }
   RetTy visit_func_decl(Ptr<PFunctionDecl> p_node, Args&&... p_args) { return DISPATCH(PDecl, visit_decl); }
   RetTy visit_param_decl(Ptr<PParamDecl> p_node, Args&&... p_args) { return DISPATCH(PDecl, visit_decl); }
   RetTy visit_var_decl(Ptr<PVarDecl> p_node, Args&&... p_args) { return DISPATCH(PDecl, visit_decl); }
+  RetTy visit_struct_field_decl(Ptr<PStructFieldDecl> p_node, Args&&... p_args) { return DISPATCH(PDecl, visit_decl); }
+  RetTy visit_struct_decl(Ptr<PStructDecl> p_node, Args&&... p_args) { return DISPATCH(PDecl, visit_decl); }
 
   // Types
+  RetTy visit_null_ty(Args&&... p_args)
+  {
+    assert(false && "null node");
+    return default_ret_value(std::forward<Args>(p_args)...);
+  }
   RetTy visit_ty(Ptr<PType> p_node, Args&&... p_args) { return default_ret_value(std::forward<Args>(p_args)...); }
   RetTy visit_builtin_ty(Ptr<PType> p_node, Args&&... p_args) { return DISPATCH(PType, visit_ty); }
   RetTy visit_paren_ty(Ptr<PParenType> p_node, Args&&... p_args) { return DISPATCH(PType, visit_ty); }
   RetTy visit_func_ty(Ptr<PFunctionType> p_node, Args&&... p_args) { return DISPATCH(PType, visit_ty); }
   RetTy visit_pointer_ty(Ptr<PPointerType> p_node, Args&&... p_args) { return DISPATCH(PType, visit_ty); }
   RetTy visit_array_ty(Ptr<PArrayType> p_node, Args&&... p_args) { return DISPATCH(PType, visit_ty); }
+  RetTy visit_tag_ty(Ptr<PTagType> p_node, Args&&... p_args) { return DISPATCH(PType, visit_ty); }
+  RetTy visit_unknown_ty(Ptr<PUnknownType> p_node, Args&&... p_args) { return DISPATCH(PType, visit_ty); }
 
   RetTy visit(Ptr<PAst> p_node, Args&&... p_args)
   {
-    assert(p_node != nullptr);
+    if (p_node == nullptr)
+      return (static_cast<Derived*>(this)->visit_null_stmt(std::forward<Args>(p_args)...));
+
     switch (p_node->get_kind()) {
         // Statements
       case P_SK_TRANSLATION_UNIT:
@@ -95,22 +118,28 @@ public:
         return DISPATCH(PAstUnaryExpr, visit_unary_expr);
       case P_SK_BINARY_EXPR:
         return DISPATCH(PAstBinaryExpr, visit_binary_expr);
+      case P_SK_MEMBER_EXPR:
+        return DISPATCH(PAstMemberExpr, visit_member_expr);
       case P_SK_CALL_EXPR:
         return DISPATCH(PAstCallExpr, visit_call_expr);
       case P_SK_CAST_EXPR:
         return DISPATCH(PAstCastExpr, visit_cast_expr);
+      case P_SK_STRUCT_EXPR:
+        return DISPATCH(PAstStructExpr, visit_struct_expr);
       case P_SK_L2RVALUE_EXPR:
         return DISPATCH(PAstL2RValueExpr, visit_l2rvalue_expr);
 
       default:
-        assert(false && "unknown AST statement node m_kind");
+        assert(false && "unknown AST statement node kind");
         return default_ret_value(std::forward<Args>(p_args)...);
     }
   }
 
   RetTy visit(Ptr<PDecl> p_node, Args&&... p_args)
   {
-    assert(p_node != nullptr);
+    if (p_node == nullptr)
+      return (static_cast<Derived*>(this)->visit_null_decl(std::forward<Args>(p_args)...));
+
     switch (p_node->get_kind()) {
       case P_DK_FUNCTION:
         return DISPATCH(PFunctionDecl, visit_func_decl);
@@ -118,15 +147,21 @@ public:
         return DISPATCH(PParamDecl, visit_param_decl);
       case P_DK_VAR:
         return DISPATCH(PVarDecl, visit_var_decl);
+      case P_DK_STRUCT_FIELD:
+        return DISPATCH(PStructFieldDecl, visit_struct_field_decl);
+      case P_DK_STRUCT:
+        return DISPATCH(PStructDecl, visit_struct_decl);
       default:
-        assert(false && "unknown AST declaration node m_kind");
+        assert(false && "unknown AST declaration node kind");
         return default_ret_value(std::forward<Args>(p_args)...);
     }
   }
 
   RetTy visit(Ptr<PType> p_node, Args&&... p_args)
   {
-    assert(p_node != nullptr);
+    if (p_node == nullptr)
+      return (static_cast<Derived*>(this)->visit_null_ty(std::forward<Args>(p_args)...));
+
     switch (p_node->get_kind()) {
       case P_TK_PAREN:
         return DISPATCH(PParenType, visit_paren_ty);
@@ -136,10 +171,16 @@ public:
         return DISPATCH(PPointerType, visit_pointer_ty);
       case P_TK_ARRAY:
         return DISPATCH(PArrayType, visit_array_ty);
+      case P_TK_TAG:
+        return DISPATCH(PTagType, visit_tag_ty);
+      case P_TK_UNKNOWN:
+        return DISPATCH(PUnknownType, visit_unknown_ty);
       default:
         return DISPATCH(PType, visit_builtin_ty);
     }
   }
+
+#undef DISPATCH
 
   template<class T>
   void visit(PArrayView<T*> p_nodes, Args&&... p_args)
@@ -148,16 +189,6 @@ public:
     for (auto node : p_nodes)
       (void)visit(node, std::forward<Args>(p_args)...);
   }
-
-  /// Helper method that calls visit on each elements.
-  template<class InputIt>
-  void visit_iter(InputIt p_begin, InputIt p_end, Args&&... p_args)
-  {
-    for (; p_begin != p_end; ++p_begin)
-      (void)visit(*p_begin, std::forward<Args>(p_args)...);
-  }
-
-#undef DISPATCH
 };
 }
 

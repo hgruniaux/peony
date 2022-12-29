@@ -58,3 +58,19 @@ p_get_spelling(PAstBinaryOp p_opcode)
       return nullptr;
   }
 }
+
+PAstStructFieldExpr::PAstStructFieldExpr(PStructFieldDecl* p_field_decl, PAstExpr* p_expr, bool m_shorthand)
+  : m_field_decl(p_field_decl)
+  , m_expr(p_expr)
+  , m_is_shorthand(m_shorthand)
+{
+}
+
+PAstStructExpr::PAstStructExpr(PStructDecl* p_struct_decl,
+                               PArrayView<PAstStructFieldExpr*> p_fields,
+                               PSourceRange p_src_range)
+  : PAstExpr(STMT_KIND, p_src_range)
+  , m_struct_decl(p_struct_decl)
+  , m_fields(p_fields)
+{
+}

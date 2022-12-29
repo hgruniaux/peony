@@ -34,7 +34,7 @@ TEST(type, function_type)
   PType* ret_ty = ctx.get_paren_ty(ctx.get_f32_ty());
   PType* args_ty[] = { ctx.get_i32_ty(), ctx.get_paren_ty(ctx.get_bool_ty()) };
 
-  PFunctionType* func_ty = ctx.get_function_ty(ret_ty, args_ty, 2);
+  PFunctionType* func_ty = ctx.get_function_ty(ret_ty, { args_ty, 2 });
   ASSERT_NE(func_ty, nullptr);
 
   EXPECT_EQ(func_ty->get_ret_ty(), ret_ty);
@@ -45,7 +45,7 @@ TEST(type, function_type)
 
   PType* canonical_ret_ty = ret_ty->get_canonical_ty();
   PType* canonical_args_ty[] = { args_ty[0]->get_canonical_ty(), args_ty[1]->get_canonical_ty() };
-  PFunctionType* canonical_func_ty = ctx.get_function_ty(canonical_ret_ty, canonical_args_ty, 2);
+  PFunctionType* canonical_func_ty = ctx.get_function_ty(canonical_ret_ty, { canonical_args_ty, 2 });
   ASSERT_NE(canonical_func_ty, nullptr);
 
   EXPECT_EQ(canonical_func_ty->get_ret_ty(), canonical_ret_ty);
@@ -57,7 +57,7 @@ TEST(type, function_type)
   EXPECT_EQ(canonical_func_ty->get_canonical_ty(), canonical_func_ty);
   EXPECT_EQ(func_ty->get_canonical_ty(), canonical_func_ty);
 
-  PFunctionType* func_bis_ty = ctx.get_function_ty(ret_ty, args_ty, 2);
+  PFunctionType* func_bis_ty = ctx.get_function_ty(ret_ty, { args_ty, 2 });
   ASSERT_NE(func_bis_ty, nullptr);
   // There must be only one instance of each pointer type.
   EXPECT_EQ(func_ty, func_bis_ty);

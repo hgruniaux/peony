@@ -8,6 +8,110 @@
 #include <cassert>
 #include <vector>
 
+class PBalancedDelimiterTracker
+{
+public:
+  PBalancedDelimiterTracker(PParser& p_parser, PTokenKind p_open_token)
+    : m_parser(p_parser)
+    , m_open_token(p_open_token)
+  {
+  }
+
+  void consume_open()
+  {
+    assert(m_parser.lookahead(m_open_token));
+    m_parser.consume_token();
+  }
+
+  void consume_close()
+  {
+    assert(m_parser.lookahead(get_close_token()));
+    m_parser.consume_token();
+  }
+
+  bool try_consume_open()
+  {
+    m_open_location = m_parser.m_token.source_location;
+    return m_parser.try_consume_token(m_open_token);
+  }
+
+  bool try_consume_close()
+  {
+    m_close_location = m_parser.m_token.source_location;
+    return m_parser.try_consume_token(get_close_token());
+  }
+
+  bool expect_and_consume_open()
+  {
+    if (try_consume_open())
+      return true;
+
+    PDiag* d = diag_at(P_DK_err_expected_tok, m_open_location);
+    diag_add_source_caret(d, m_open_location);
+    diag_add_arg_tok_kind(d, m_open_token);
+    diag_add_arg_tok_kind(d, m_parser.m_token.kind);
+    diag_flush(d);
+    return false;
+  }
+
+  bool expect_and_consume_close()
+  {
+    if (try_consume_close())
+      return true;
+
+    PDiag* d = diag_at(P_DK_err_expected_tok, m_close_location);
+    diag_add_source_caret(d, m_close_location);
+    diag_add_arg_tok_kind(d, get_close_token());
+    diag_add_arg_tok_kind(d, m_parser.m_token.kind);
+    diag_flush(d);
+    return false;
+  }
+
+  [[nodiscard]] PSourceLocation get_open_location() const { return m_open_location; }
+
+  [[nodiscard]] PSourceLocation get_close_location() const { return m_close_location; }
+
+  [[nodiscard]] PSourceRange get_source_range() const { return { m_open_location, m_close_location + 1 }; }
+
+private:
+  [[nodiscard]] PTokenKind get_close_token()
+  {
+    switch (m_open_token) {
+      case P_TOK_LPAREN:
+        return P_TOK_RPAREN;
+      case P_TOK_LBRACE:
+        return P_TOK_RBRACE;
+      case P_TOK_LSQUARE:
+        return P_TOK_RSQUARE;
+      default:
+        assert(false && "not a open delimiter token");
+        return P_TOK_EOF;
+    }
+  }
+
+private:
+  PParser& m_parser;
+  PTokenKind m_open_token;
+  PSourceLocation m_open_location;
+  PSourceLocation m_close_location;
+};
+
+class PSourceRangeTracker
+{
+public:
+  PSourceRangeTracker(PParser& p_parser)
+    : m_parser(p_parser)
+    , m_start(p_parser.m_token.source_location)
+  {
+  }
+
+  [[nodiscard]] PSourceRange get_source_range() const { return { m_start, m_parser.m_prev_lookahead_end_loc }; }
+
+private:
+  PParser& m_parser;
+  PSourceLocation m_start;
+};
+
 PParser::PParser(PContext& p_context, PLexer& p_lexer)
   : m_context(p_context)
   , m_lexer(p_lexer)
@@ -40,76 +144,63 @@ PParser::parse_type()
   switch (m_token.kind) {
       // Pointer type:
     case P_TOK_STAR:
-      consume();
+      consume_token();
       return m_context.get_pointer_ty(parse_type());
 
       // Parenthesized type:
     case P_TOK_LPAREN: {
-      consume();
+      consume_token();
       PType* sub_type = parse_type();
       expect_token(P_TOK_RPAREN);
       return m_context.get_paren_ty(sub_type);
     }
 
     case P_TOK_IDENTIFIER: {
-      // TODO
-      PType* type = nullptr;
-      const PSourceRange name_range = get_token_range();
-      PIdentifierInfo* name = m_token.data.identifier;
-      PSymbol* symbol = m_sema.lookup(name);
-      if (symbol == nullptr) {
-        PDiag* d = diag_at(P_DK_err_use_undeclared_type, name_range.begin);
-        diag_add_arg_ident(d, name);
-        diag_add_source_range(d, name_range);
-        diag_flush(d);
-      } else {
-        type = P_DECL_GET_TYPE(symbol->decl);
-      }
-
-      consume();
-      return type;
+      auto parse_ident_info = parse_identifier([]() { assert(false && "unreachable"); });
+      return m_sema.lookup_type(parse_ident_info);
     }
 
       // Builtin types:
     case P_TOK_KEY_void:
-      consume();
+      consume_token();
       return m_context.get_void_ty();
     case P_TOK_KEY_char:
-      consume();
+      consume_token();
       return m_context.get_char_ty();
     case P_TOK_KEY_bool:
-      consume();
+      consume_token();
       return m_context.get_bool_ty();
     case P_TOK_KEY_i8:
-      consume();
+      consume_token();
       return m_context.get_i8_ty();
     case P_TOK_KEY_i16:
-      consume();
+      consume_token();
       return m_context.get_i16_ty();
     case P_TOK_KEY_i32:
-      consume();
+      consume_token();
       return m_context.get_i32_ty();
     case P_TOK_KEY_i64:
-      consume();
+      consume_token();
       return m_context.get_i64_ty();
     case P_TOK_KEY_u8:
-      consume();
+      consume_token();
       return m_context.get_u8_ty();
     case P_TOK_KEY_u16:
-      consume();
+      consume_token();
       return m_context.get_u16_ty();
     case P_TOK_KEY_u32:
-      consume();
+      consume_token();
       return m_context.get_u32_ty();
     case P_TOK_KEY_u64:
-      consume();
+      consume_token();
       return m_context.get_u64_ty();
     case P_TOK_KEY_f32:
-      consume();
+      consume_token();
       return m_context.get_f32_ty();
     case P_TOK_KEY_f64:
-      consume();
+      consume_token();
       return m_context.get_f64_ty();
+
     default:
       unexpected_token();
       return nullptr;
@@ -124,25 +215,26 @@ PParser::parse_type()
 PParamDecl*
 PParser::parse_param_decl()
 {
-  PIdentifierInfo* name = nullptr;
-  const PSourceRange name_range = get_token_range();
-  if (lookahead(P_TOK_IDENTIFIER)) {
-    name = m_token.data.identifier;
-    consume();
-  } else if (!lookahead(P_TOK_COLON)) {
-    PDiag* d = diag_at(P_DK_err_param_decl_expected, m_prev_lookahead_end_loc);
+  PSourceRangeTracker range_tracker(*this);
+
+  bool next_is_colon = lookahead(P_TOK_COLON);
+  auto ident_parse_info = parse_identifier([this, next_is_colon]() {
+    // If there is a chance that the user just forgot the name, let semantic
+    // analyzer handle this error.
+    if (next_is_colon)
+      return;
+
+    PDiag* d = diag_at(P_DK_err_param_decl_expected, m_token.source_location);
     diag_flush(d);
+  });
+
+  // No chance that it was just the name that was forgotten. Do not try to recover.
+  if (ident_parse_info.ident == nullptr && !next_is_colon)
     return nullptr;
-  }
 
-  PType* type = nullptr;
-  if (lookahead(P_TOK_COLON)) {
-    consume(); // consume ':'
-    type = parse_type();
-  }
+  PType* type = try_parse_type_specifier();
 
-  const auto range = PSourceRange{ name_range.begin, m_prev_lookahead_end_loc };
-  auto* node = m_sema.act_on_param_decl(type, name, range, name_range);
+  auto* node = m_sema.act_on_param_decl(type, ident_parse_info, range_tracker.get_source_range());
   return node;
 }
 
@@ -155,31 +247,32 @@ PParser::parse_param_decl()
 PVarDecl*
 PParser::parse_var_decl()
 {
-  PIdentifierInfo* name = nullptr;
-  const PSourceRange name_range = get_token_range();
-  if (lookahead(P_TOK_IDENTIFIER)) {
-    name = m_token.data.identifier;
-    consume(); // consume identifier
-  } else if (!(lookahead(P_TOK_COLON) || lookahead(P_TOK_EQUAL))) {
-    PDiag* d = diag_at(P_DK_err_var_decl_expected, m_prev_lookahead_end_loc);
-    diag_flush(d);
-    return nullptr;
-  }
+  PSourceRangeTracker range_tracker(*this);
 
-  PType* type = nullptr;
-  if (lookahead(P_TOK_COLON)) {
-    consume(); // consume ':'
-    type = parse_type();
-  }
+  bool next_is_colon_or_eq = lookahead(P_TOK_COLON) || lookahead(P_TOK_EQUAL);
+  auto ident_parse_info = parse_identifier([this, next_is_colon_or_eq]() {
+    // If there is a chance that the user just forgot the name, let semantic
+    // analyzer handle this error.
+    if (next_is_colon_or_eq)
+      return;
+
+    PDiag* d = diag_at(P_DK_err_var_decl_expected, m_token.source_location);
+    diag_flush(d);
+  });
+
+  // No chance that it was just the name that was forgotten. Do not try to recover.
+  if (ident_parse_info.ident == nullptr && !next_is_colon_or_eq)
+    return nullptr;
+
+  PType* type = try_parse_type_specifier();
 
   PAstExpr* default_expr = nullptr;
   if (lookahead(P_TOK_EQUAL)) {
-    consume(); // consume '='
+    consume_token(); // consume '='
     default_expr = parse_expr();
   }
 
-  const auto range = PSourceRange{ name_range.begin, m_prev_lookahead_end_loc };
-  return m_sema.act_on_var_decl(type, name, default_expr, range, name_range);
+  return m_sema.act_on_var_decl(type, ident_parse_info, default_expr, range_tracker.get_source_range());
 }
 
 // param_decl_list:
@@ -237,8 +330,8 @@ PParser::parse_compound_stmt()
 
   m_sema.push_scope(P_SF_NONE);
 
-  PSourceLocation lbrace_loc = m_token.source_location;
-  consume(); // consume '{'
+  PBalancedDelimiterTracker delimiters(*this, P_TOK_LBRACE);
+  delimiters.try_consume_open();
 
   std::vector<PAst*> stmts;
   while (!lookahead(P_TOK_RBRACE) && !lookahead(P_TOK_EOF)) {
@@ -246,14 +339,13 @@ PParser::parse_compound_stmt()
     stmts.push_back(stmt);
   }
 
-  PSourceLocation rbrace_loc = m_token.source_location;
-  expect_token(P_TOK_RBRACE);
+  delimiters.expect_and_consume_close();
 
   auto* raw_stmts = m_context.alloc_object<PAst*>(stmts.size());
   std::copy(stmts.begin(), stmts.end(), raw_stmts);
 
-  auto* node = m_context.new_object<PAstCompoundStmt>(PArrayView{ raw_stmts, stmts.size() },
-                                                    PSourceRange{ lbrace_loc, rbrace_loc + 1 });
+  auto* node =
+    m_context.new_object<PAstCompoundStmt>(PArrayView{ raw_stmts, stmts.size() }, delimiters.get_source_range());
   m_sema.pop_scope();
   return node;
 }
@@ -265,13 +357,13 @@ PParser::parse_let_stmt()
 {
   assert(lookahead(P_TOK_KEY_let));
 
-  PSourceLocation loc_begin = m_token.source_location;
-  consume();
+  PSourceRangeTracker range_tracker(*this);
+  consume_token(); // consume 'let'
 
   auto var_decls = parse_var_list();
 
   expect_token(P_TOK_SEMI);
-  return m_sema.act_on_let_stmt(var_decls, PSourceRange{ loc_begin, m_prev_lookahead_end_loc });
+  return m_sema.act_on_let_stmt(var_decls, range_tracker.get_source_range());
 }
 
 // break_stmt:
@@ -281,13 +373,13 @@ PParser::parse_break_stmt()
 {
   assert(lookahead(P_TOK_KEY_break));
 
-  PSourceRange break_range = get_token_range();
-  consume();
+  PSourceRangeTracker range_tracker(*this);
 
-  PSourceLocation loc_end = m_token.source_location + m_token.token_length;
+  PSourceRange break_range = get_token_range();
+  consume_token(); // consume 'break'
   expect_token(P_TOK_SEMI);
 
-  return m_sema.act_on_break_stmt({ break_range.begin, loc_end }, break_range);
+  return m_sema.act_on_break_stmt(range_tracker.get_source_range(), break_range);
 }
 
 // continue_stmt:
@@ -297,13 +389,13 @@ PParser::parse_continue_stmt()
 {
   assert(lookahead(P_TOK_KEY_continue));
 
-  PSourceRange continue_range = get_token_range();
-  consume();
+  PSourceRangeTracker range_tracker(*this);
 
-  PSourceLocation loc_end = m_token.source_location + m_token.token_length;
+  PSourceRange continue_range = get_token_range();
+  consume_token(); // consume 'continue'
   expect_token(P_TOK_SEMI);
 
-  return m_sema.act_on_continue_stmt({ continue_range.begin, loc_end }, continue_range);
+  return m_sema.act_on_continue_stmt(range_tracker.get_source_range(), continue_range);
 }
 
 // return_stmt:
@@ -314,16 +406,15 @@ PParser::parse_return_stmt()
 {
   assert(lookahead(P_TOK_KEY_return));
 
-  PSourceLocation loc_begin = m_token.source_location;
-  consume();
+  PSourceRangeTracker range_tracker(*this);
+  consume_token(); // consume 'return'
 
   PAstExpr* ret_expr = nullptr;
   if (!lookahead(P_TOK_SEMI))
     ret_expr = parse_expr();
 
-  PSourceLocation semi_loc = m_token.source_location;
   expect_token(P_TOK_SEMI);
-  return m_sema.act_on_return_stmt(ret_expr, { loc_begin, semi_loc + 1 }, semi_loc);
+  return m_sema.act_on_return_stmt(ret_expr, range_tracker.get_source_range());
 }
 
 // if_stmt:
@@ -334,29 +425,25 @@ PParser::parse_if_stmt()
 {
   assert(lookahead(P_TOK_KEY_if));
 
-  PSourceLocation loc_begin = m_token.source_location;
-  consume();
+  PSourceRangeTracker range_tracker(*this);
+  consume_token(); // consume 'if'
 
   PAstExpr* cond_expr = parse_expr();
   PAst* then_stmt = parse_compound_stmt();
 
-  PSourceLocation loc_end;
   PAst* else_stmt = nullptr;
   if (lookahead(P_TOK_KEY_else)) {
-    consume();
+    consume_token(); // consume 'else'
 
     if (lookahead(P_TOK_KEY_if)) {
+      // This allow `if { ... } else if { ... } ...` syntax.
       else_stmt = parse_if_stmt();
     } else {
       else_stmt = parse_compound_stmt();
     }
-
-    loc_end = else_stmt->get_source_range().end;
-  } else {
-    loc_end = then_stmt->get_source_range().end;
   }
 
-  auto* node = m_sema.act_on_if_stmt(cond_expr, then_stmt, else_stmt, { loc_begin, loc_end });
+  auto* node = m_sema.act_on_if_stmt(cond_expr, then_stmt, else_stmt, range_tracker.get_source_range());
   return node;
 }
 
@@ -367,14 +454,13 @@ PParser::parse_loop_stmt()
 {
   assert(lookahead(P_TOK_KEY_loop));
 
-  PSourceLocation loc_begin = m_token.source_location;
-  consume();
+  PSourceRangeTracker range_tracker(*this);
+  consume_token(); // consume 'loop'
 
   m_sema.act_before_loop_stmt_body();
   PAst* body = parse_compound_stmt();
 
-  const auto range = PSourceRange{ loc_begin, body->get_source_range().end };
-  auto* node = m_sema.act_on_loop_stmt(body, range);
+  auto* node = m_sema.act_on_loop_stmt(body, range_tracker.get_source_range());
   return node;
 }
 
@@ -385,16 +471,15 @@ PParser::parse_while_stmt()
 {
   assert(lookahead(P_TOK_KEY_while));
 
-  PSourceLocation loc_begin = m_token.source_location;
-  consume();
+  PSourceRangeTracker range_tracker(*this);
+  consume_token();
 
   PAstExpr* cond_expr = parse_expr();
 
   m_sema.act_before_while_stmt_body();
   PAst* body = parse_compound_stmt();
 
-  const auto range = PSourceRange{ loc_begin, body->get_source_range().end };
-  auto* node = m_sema.act_on_while_stmt(cond_expr, body, range);
+  auto* node = m_sema.act_on_while_stmt(cond_expr, body, range_tracker.get_source_range());
   return node;
 }
 
@@ -453,7 +538,7 @@ PParser::parse_bool_lit()
 
   PSourceRange range = get_token_range();
   const bool value = lookahead(P_TOK_KEY_true);
-  consume();
+  consume_token();
   return m_sema.act_on_bool_literal(value, range);
 }
 
@@ -477,7 +562,7 @@ PParser::parse_int_lit()
   }
 
   const auto suffix = static_cast<PIntLiteralSuffix>(m_token.data.literal.suffix_kind);
-  consume();
+  consume_token();
   return m_sema.act_on_int_literal(value, suffix, range);
 }
 
@@ -500,7 +585,7 @@ PParser::parse_float_lit()
   }
 
   const auto suffix = static_cast<PFloatLiteralSuffix>(m_token.data.literal.suffix_kind);
-  consume();
+  consume_token();
   return m_sema.act_on_float_literal(value, suffix, range);
 }
 
@@ -509,24 +594,94 @@ PParser::parse_float_lit()
 PAstExpr*
 PParser::parse_paren_expr()
 {
-  assert(lookahead(P_TOK_LPAREN));
-
-  PSourceLocation begin_loc = m_token.source_location;
-  consume();
+  PBalancedDelimiterTracker delimiters(*this, P_TOK_LPAREN);
+  delimiters.consume_open();
 
   PAstExpr* sub_expr = nullptr;
   if (lookahead(P_TOK_RPAREN) || lookahead(P_TOK_EOF)) {
-    PDiag* d = diag_at(P_DK_err_expected_expr, begin_loc + 1);
-    diag_add_source_caret(d, begin_loc + 1);
+    PDiag* d = diag_at(P_DK_err_expected_expr, m_token.source_location);
+    diag_add_source_caret(d, m_token.source_location);
     diag_flush(d);
   } else {
-    // FIXME: remove (PAstExpr*) cast
     sub_expr = parse_expr();
   }
 
-  PSourceLocation end_loc = m_token.source_location + m_token.token_length;
-  expect_token(P_TOK_RPAREN);
-  return m_sema.act_on_paren_expr(sub_expr, { begin_loc, end_loc });
+  delimiters.expect_and_consume_close();
+  return m_sema.act_on_paren_expr(sub_expr, delimiters.get_source_range());
+}
+
+// struct_field_expr:
+//     IDENTIFIER
+//     IDENTIFIER ":" expr
+PAstStructFieldExpr*
+PParser::parse_struct_field_expr(PStructDecl* p_struct_decl)
+{
+  auto ident_parse_info = parse_identifier([this]() {
+    PDiag* d = diag_at(P_DK_err_expected_struct_field_decl, m_token.source_location);
+    diag_add_source_caret(d, m_token.source_location);
+    diag_flush(d);
+  });
+
+  if (ident_parse_info.ident == nullptr)
+    return nullptr;
+
+  PAstExpr* expr = nullptr;
+  if (lookahead(P_TOK_COLON)) {
+    consume_token(); // consume ':'
+    expr = parse_expr();
+  }
+
+  return m_sema.act_on_struct_field_expr(p_struct_decl, ident_parse_info, expr);
+}
+
+// struct_expr:
+//     IDENTIFIER "{"
+//     "}"
+PAstExpr*
+PParser::parse_struct_expr(PLocalizedIdentifierInfo p_name)
+{
+  auto* struct_decl = m_sema.resolve_struct_expr_name(p_name);
+
+  PBalancedDelimiterTracker delimiters(*this, P_TOK_LBRACE);
+  delimiters.consume_open();
+
+  std::vector<PAstStructFieldExpr*> fields;
+  while (!lookahead(P_TOK_EOF) && !lookahead(P_TOK_RBRACE)) {
+    PAstStructFieldExpr* field = parse_struct_field_expr(struct_decl);
+    if (field != nullptr)
+      fields.push_back(field);
+
+    if (try_consume_token(P_TOK_COMMA))
+      continue;
+
+    // On other languages ';' is used instead of ',' to separate the struct
+    // fields.
+    if (lookahead(P_TOK_SEMI)) {
+      PDiag* d = diag_at(P_DK_err_unexpected_tok_with_hint, m_token.source_location);
+      diag_add_source_caret(d, m_token.source_location);
+      diag_add_arg_tok_kind(d, P_TOK_SEMI);
+      diag_add_arg_tok_kind(d, P_TOK_COMMA);
+      diag_flush(d);
+
+      // Act as if it were a ','.
+      consume_token();
+      continue;
+    }
+
+    if (lookahead(P_TOK_RBRACE))
+      break;
+
+    expect_token(P_TOK_COMMA);
+    // Skip until '}' or ','.
+    while (!lookahead(P_TOK_RBRACE) && !lookahead(P_TOK_COMMA))
+      consume_token();
+    // If we stopped at ',', eat it.
+    try_consume_token(P_TOK_COMMA);
+  }
+
+  delimiters.expect_and_consume_close();
+  return m_sema.act_on_struct_expr(
+    struct_decl, fields, PSourceRange{ p_name.range.begin, delimiters.get_close_location() + 1 });
 }
 
 // decl_ref_expr:
@@ -534,14 +689,15 @@ PParser::parse_paren_expr()
 PAstExpr*
 PParser::parse_decl_ref_expr()
 {
-  assert(m_token.kind == P_TOK_IDENTIFIER);
+  assert(lookahead(P_TOK_IDENTIFIER));
 
-  const PSourceRange range = get_token_range();
-  PIdentifierInfo* name = m_token.data.identifier;
-  consume();
+  PLocalizedIdentifierInfo name = { m_token.data.identifier, get_token_range() };
+  consume_token();
 
-  auto* node = m_sema.act_on_decl_ref_expr(name, range);
-  return node;
+  if (lookahead(P_TOK_LBRACE))
+    return parse_struct_expr(name);
+
+  return m_sema.act_on_decl_ref_expr(name.ident, name.range);
 }
 
 // primary_expr:
@@ -550,6 +706,7 @@ PParser::parse_decl_ref_expr()
 //     float_lit
 //     paren_expr
 //     decl_ref_expr
+//     struct_expr
 PAstExpr*
 PParser::parse_primary_expr()
 {
@@ -580,10 +737,8 @@ PParser::parse_primary_expr()
 PAstExpr*
 PParser::parse_call_expr(PAstExpr* p_callee)
 {
-  assert(lookahead(P_TOK_LPAREN));
-
-  PSourceLocation lparen_loc = m_token.source_location;
-  consume(); // consume '('
+  PBalancedDelimiterTracker delimiters(*this, P_TOK_LPAREN);
+  delimiters.consume_open();
 
   // Parse arguments:
   std::vector<PAstExpr*> args;
@@ -594,14 +749,13 @@ PParser::parse_call_expr(PAstExpr* p_callee)
     if (!lookahead(P_TOK_COMMA))
       break;
 
-    consume(); // consume ','
+    consume_token(); // consume ','
   }
 
-  PSourceLocation end_loc = m_token.source_location + m_token.token_length;
-  expect_token(P_TOK_RPAREN);
+  delimiters.expect_and_consume_close();
 
-  const auto range = PSourceRange{ p_callee->get_source_range().begin, end_loc };
-  auto* node = m_sema.act_on_call_expr(p_callee, args, range, lparen_loc);
+  const auto range = PSourceRange{ p_callee->get_source_range().begin, delimiters.get_close_location() + 1 };
+  auto* node = m_sema.act_on_call_expr(p_callee, args, range, delimiters.get_open_location());
   return node;
 }
 
@@ -613,19 +767,17 @@ PParser::parse_member_expr(PAstExpr* p_base_expr)
   assert(lookahead(P_TOK_DOT));
 
   PSourceLocation dot_loc = m_token.source_location;
-  consume(); // consume '.'
+  consume_token(); // consume '.'
 
   if (!lookahead(P_TOK_IDENTIFIER)) {
     unexpected_token();
     return nullptr;
   }
 
-  PSourceRange name_range = get_token_range();
-  PIdentifierInfo* name = m_token.data.identifier;
-  consume(); // consume identifier
+  auto ident_parse_info = parse_identifier([] { assert(false && "unreachable"); });
 
-  assert(false && "not yet implemented");
-  return nullptr;
+  const auto range = PSourceRange{ p_base_expr->get_source_range().begin, m_prev_lookahead_end_loc };
+  return m_sema.act_on_member_expr(p_base_expr, ident_parse_info, range, dot_loc);
 }
 
 // postfix_expr:
@@ -659,6 +811,8 @@ PParser::parse_postfix_expr()
 PAstExpr*
 PParser::parse_unary_expr()
 {
+  PSourceRangeTracker range_tracker(*this);
+
   PAstUnaryOp opcode;
   switch (m_token.kind) {
     case P_TOK_EXCLAIM:
@@ -677,14 +831,10 @@ PParser::parse_unary_expr()
       return parse_postfix_expr();
   }
 
-  PSourceLocation op_loc = m_token.source_location;
-  consume(); // consume opcode
+  consume_token(); // consume operator
 
   PAstExpr* sub_expr = parse_unary_expr();
-
-  const auto range = PSourceRange{ op_loc, sub_expr->get_source_range().end };
-  auto* node = m_sema.act_on_unary_expr(sub_expr, opcode, range, op_loc);
-  return node;
+  return m_sema.act_on_unary_expr(sub_expr, opcode, range_tracker.get_source_range());
 }
 
 // cast_expr:
@@ -693,16 +843,15 @@ PParser::parse_unary_expr()
 PAstExpr*
 PParser::parse_cast_expr()
 {
+  PSourceRangeTracker range_tracker(*this);
   PAstExpr* sub_expr = parse_unary_expr();
 
   if (lookahead(P_TOK_KEY_as)) {
     PSourceLocation as_loc = m_token.source_location;
-    consume();
+    consume_token(); // consume 'as'
 
     PType* target_ty = parse_type();
-    const auto range = PSourceRange{ sub_expr->get_source_range().begin, as_loc + 2 };
-    auto* node = m_sema.act_on_cast_expr(sub_expr, target_ty, range, as_loc);
-    return node;
+    return m_sema.act_on_cast_expr(sub_expr, target_ty, range_tracker.get_source_range(), as_loc);
   }
 
   return sub_expr;
@@ -741,14 +890,14 @@ PParser::parse_binary_expr(PAstExpr* p_lhs, int p_expr_prec)
     int tok_prec = get_binop_precedence(m_token.kind);
 
     /* If this is a binop that binds at least as tightly as the current
-     * binary_op, consume it, otherwise we are done. */
+     * binary_op, consume_token it, otherwise we are done. */
     if (tok_prec < p_expr_prec)
       return p_lhs;
 
     /* Okay, we know this is a binary_op. */
     const PAstBinaryOp binary_opcode = get_binop_from_tok_kind(m_token.kind);
     const PSourceLocation op_loc = m_token.source_location;
-    consume();
+    consume_token();
 
     /* Parse the primary expression after the binary operator. */
     PAstExpr* rhs = parse_cast_expr();
@@ -789,48 +938,50 @@ PParser::parse_func_decl()
 {
   assert(lookahead(P_TOK_KEY_fn));
 
-  PSourceLocation loc_begin = m_token.source_location;
-  consume();
+  PSourceRangeTracker range_tracker(*this);
+  consume_token(); // consume 'fn'
 
-  PSourceRange name_range = get_token_range();
-  PIdentifierInfo* name = nullptr;
-  if (lookahead(P_TOK_IDENTIFIER)) {
-    name = m_token.data.identifier;
-    consume(); // consume identifier
-  }
+  bool next_is_lparen = lookahead(P_TOK_LPAREN);
+  auto ident_parse_info = parse_identifier([this]() {
+    PDiag* d = diag_at(P_DK_err_expected_tok, m_token.source_location);
+    diag_add_source_caret(d, m_token.source_location);
+    diag_add_arg_tok_kind(d, P_TOK_IDENTIFIER);
+    diag_add_arg_tok_kind(d, m_token.kind);
+    diag_flush(d);
+  });
+
+  if (ident_parse_info.ident == nullptr && !next_is_lparen)
+    return nullptr;
 
   std::vector<PParamDecl*> params;
 
   // Parse parameters
-  expect_token(P_TOK_LPAREN);
+  PBalancedDelimiterTracker delimiters(*this, P_TOK_LPAREN);
+  if (!delimiters.expect_and_consume_open())
+    return nullptr;
 
   m_sema.push_scope(P_SF_FUNC_PARAMS);
   if (!lookahead(P_TOK_RPAREN))
     params = parse_param_list();
   m_sema.pop_scope();
 
-  PSourceLocation rparen_loc = m_token.source_location;
-  if (lookahead(P_TOK_EOF)) {
-    print_expect_tok_diag(P_TOK_RPAREN, m_prev_lookahead_end_loc);
+  if (!delimiters.expect_and_consume_close())
     return nullptr;
-  }
-
-  expect_token(P_TOK_RPAREN);
 
   // Parse return type specified (optional)
   PType* ret_ty = nullptr;
   if (lookahead(P_TOK_ARROW)) {
-    consume(); // consume '->'
+    consume_token(); // consume '->'
     ret_ty = parse_type();
   }
 
-  PFunctionDecl* decl = m_sema.act_on_func_decl(name, ret_ty, params, name_range, loc_begin + 2);
-  decl->source_range = { loc_begin, m_prev_lookahead_end_loc };
+  PFunctionDecl* decl = m_sema.act_on_func_decl(ident_parse_info, ret_ty, params, delimiters.get_open_location());
+  decl->source_range = range_tracker.get_source_range();
 
   // Parse body
   if (!lookahead(P_TOK_LBRACE)) {
-    PDiag* d = diag_at(P_DK_err_expected_func_body_after_func_decl, rparen_loc + 1);
-    diag_add_source_caret(d, rparen_loc + 1);
+    PDiag* d = diag_at(P_DK_err_expected_func_body_after_func_decl, delimiters.get_close_location() + 1);
+    diag_add_source_caret(d, delimiters.get_close_location() + 1);
     diag_flush(d);
     return decl;
   }
@@ -839,76 +990,94 @@ PParser::parse_func_decl()
   decl->body = parse_compound_stmt();
   m_sema.end_func_decl_analysis();
 
-  decl->source_range = { loc_begin, decl->body->get_source_range().end };
+  decl->source_range = range_tracker.get_source_range();
   return decl;
 }
 
-#if 0
 // struct_field_decl:
-//     IDENTIFIER type_specifier ";"
-static PDecl*
-parse_struct_field_decl(PParser* p_parser)
+//     IDENTIFIER type_specifier
+PStructFieldDecl*
+PParser::parse_struct_field_decl()
 {
-  PSourceRange name_range = { LOOKAHEAD_BEGIN_LOC, LOOKAHEAD_END_LOC };
-  PIdentifierInfo* name = nullptr;
-  if (p_parser->lookahead(P_TOK_IDENTIFIER))
-    name = p_parser->m_token.data.identifier;
+  PSourceRangeTracker range_tracker(*this);
 
-  if (!expect_token(p_parser, P_TOK_IDENTIFIER))
+  auto ident_parse_info = parse_identifier([this]() {
+    PDiag* d = diag_at(P_DK_err_expected_struct_field_decl, m_token.source_location);
+    diag_add_source_caret(d, m_token.source_location);
+    diag_flush(d);
+  });
+
+  if (ident_parse_info.ident == nullptr)
     return nullptr;
 
-  expect_token(p_parser, P_TOK_COLON);
-  PType* type = p_parser->parse_type();
+  expect_token(P_TOK_COLON);
+  PType* type = parse_type();
 
-  expect_token(p_parser, P_TOK_SEMI);
-
-  assert(false && "not yet implemented");
-  return nullptr;
-}
-
-// struct_field_decls:
-//     struct_field_decl
-//     struct_field_decls struct_field_decl
-static void
-parse_struct_field_decls(PParser* p_parser, std::vector<PDecl*>& p_fields)
-{
-  while (!p_parser->lookahead(P_TOK_RBRACE)) {
-    PDecl* field = parse_struct_field_decl(p_parser);
-    if (field != nullptr)
-      p_fields.push_back(field);
-  }
+  return m_sema.act_on_struct_field_decl(type, ident_parse_info, range_tracker.get_source_range());
 }
 
 // struct_decl:
-//     "struct" identifier "{" "}"
-static PDecl*
-parse_struct_decl(PParser* p_parser)
+//     "struct" identifier "{" struct_field_decls "}"
+//
+// struct_field_decls:
+//     struct_field_decl (',' struct_field_decl)* ','?
+PDecl*
+PParser::parse_struct_decl()
 {
-  assert(p_parser->lookahead(P_TOK_KEY_struct));
+  assert(lookahead(P_TOK_KEY_struct));
 
-  PSourceLocation loc_begin = LOOKAHEAD_BEGIN_LOC;
-  consume_token(p_parser); // consume 'struct'
+  PSourceRangeTracker range_tracker(*this);
+  consume_token(); // consume 'struct'
 
-  PSourceRange name_range = { LOOKAHEAD_BEGIN_LOC, LOOKAHEAD_END_LOC };
-  PIdentifierInfo* name = nullptr;
-  if (p_parser->lookahead(P_TOK_IDENTIFIER)) {
-    name = p_parser->m_token.data.identifier;
-    consume_token(p_parser); // consume identifier
-  } else {
-    // Act as if there was an identifier but emit a diagnostic.
-    print_expect_tok_diag(p_parser, P_TOK_IDENTIFIER, p_parser->m_prev_lookahead_end_loc);
+  auto ident_parse_info = parse_identifier([this]() {
+    PDiag* d = diag_at(P_DK_err_expected_tok, m_token.source_location);
+    diag_add_source_caret(d, m_token.source_location);
+    diag_add_arg_tok_kind(d, P_TOK_IDENTIFIER);
+    diag_add_arg_tok_kind(d, m_token.kind);
+    diag_flush(d);
+  });
+
+  PBalancedDelimiterTracker delimiters(*this, P_TOK_LBRACE);
+  if (!delimiters.expect_and_consume_open())
+    return nullptr;
+
+  std::vector<PStructFieldDecl*> fields;
+  while (!lookahead(P_TOK_EOF) && !lookahead(P_TOK_RBRACE)) {
+    PStructFieldDecl* field = parse_struct_field_decl();
+    if (field != nullptr)
+      fields.push_back(field);
+
+    if (try_consume_token(P_TOK_COMMA))
+      continue;
+
+    // On other languages ';' is used instead of ',' to separate the struct
+    // fields.
+    if (lookahead(P_TOK_SEMI)) {
+      PDiag* d = diag_at(P_DK_err_unexpected_tok_with_hint, m_token.source_location);
+      diag_add_source_caret(d, m_token.source_location);
+      diag_add_arg_tok_kind(d, P_TOK_SEMI);
+      diag_add_arg_tok_kind(d, P_TOK_COMMA);
+      diag_flush(d);
+
+      // Act as if it were a ','.
+      consume_token();
+      continue;
+    }
+
+    if (lookahead(P_TOK_RBRACE))
+      break;
+
+    expect_token(P_TOK_COMMA);
+    // Skip until '}' or ','.
+    while (!lookahead(P_TOK_RBRACE) && !lookahead(P_TOK_COMMA))
+      consume_token();
+    // If we stopped at ',', eat it.
+    try_consume_token(P_TOK_COMMA);
   }
 
-  std::vector<PDecl*> fields;
-
-  expect_token(p_parser, P_TOK_LBRACE);
-  parse_struct_field_decls(p_parser, fields);
-  expect_token(p_parser, P_TOK_RBRACE);
-
-  assert(false && "not yet implemented");
-  return nullptr;
+  delimiters.expect_and_consume_close();
+  return m_sema.act_on_struct_decl(ident_parse_info, fields, range_tracker.get_source_range());
 }
-#endif
 
 // top_level_decl:
 //     function_decl
@@ -919,10 +1088,8 @@ PParser::parse_top_level_decl()
   switch (m_token.kind) {
     case P_TOK_KEY_fn:
       return parse_func_decl();
-#if 0
     case P_TOK_KEY_struct:
-      return parse_struct_decl(this);
-#endif
+      return parse_struct_decl();
     default:
       unexpected_token();
       return nullptr;
@@ -934,7 +1101,7 @@ PParser::parse_top_level_decl()
 PAstTranslationUnit*
 PParser::parse_translation_unit()
 {
-  PSourceLocation loc_begin = m_token.source_location;
+  PSourceRangeTracker range_tracker(*this);
   m_sema.push_scope(P_SF_NONE);
 
   std::vector<PDecl*> decls;
@@ -946,11 +1113,8 @@ PParser::parse_translation_unit()
 
   expect_token(P_TOK_EOF);
 
-  auto** raw_decls = m_context.alloc_object<PDecl*>(decls.size());
-  std::copy(decls.begin(), decls.end(), raw_decls);
-
-  auto* node = m_context.new_object<PAstTranslationUnit>(PArrayView{ raw_decls, decls.size() },
-                                                       PSourceRange{ loc_begin, m_token.source_location });
+  auto* node = m_sema.act_on_translation_unit(decls);
+  node->set_source_range(range_tracker.get_source_range());
   node->p_src_file = m_lexer.source_file;
   m_sema.pop_scope();
   return node;
@@ -959,16 +1123,35 @@ PParser::parse_translation_unit()
 PAstTranslationUnit*
 PParser::parse()
 {
-  consume();
+  consume_token();
   m_prev_lookahead_end_loc = 0;
   return parse_translation_unit();
 }
 
+PType*
+PParser::try_parse_type_specifier()
+{
+  if (!try_consume_token(P_TOK_COLON))
+    return nullptr;
+
+  return parse_type();
+}
+
 void
-PParser::consume()
+PParser::consume_token()
 {
   m_prev_lookahead_end_loc = m_token.source_location + m_token.token_length;
   m_lexer.tokenize(m_token);
+}
+
+bool
+PParser::try_consume_token(PTokenKind p_kind)
+{
+  if (!lookahead(p_kind))
+    return false;
+
+  consume_token();
+  return true;
 }
 
 bool
@@ -976,11 +1159,11 @@ PParser::expect_token(PTokenKind p_kind)
 {
   if (m_token.kind != p_kind) {
     print_expect_tok_diag(p_kind, m_prev_lookahead_end_loc);
-    consume();
+    consume_token();
     return false;
   }
 
-  consume();
+  consume_token();
   return true;
 }
 
@@ -990,7 +1173,7 @@ PParser::unexpected_token()
   PDiag* d = diag_at(P_DK_err_unexpected_tok, m_token.source_location);
   diag_add_arg_tok_kind(d, m_token.kind);
   diag_flush(d);
-  consume();
+  consume_token();
 }
 
 void

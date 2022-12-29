@@ -109,7 +109,7 @@ TEST(diag_formatter, type_arg)
     PType* func_args[] = { ctx.get_bool_ty(), ctx.get_f32_ty() };
     PDiagArgument func_type;
     func_type.type = P_DAT_TYPE;
-    func_type.value_type = ctx.get_function_ty(ctx.get_i32_ty(), func_args, std::size(func_args));
+    func_type.value_type = ctx.get_function_ty(ctx.get_i32_ty(), { func_args, std::size(func_args) });
     check_arg_format(&func_type, "fn (bool, f32) -> i32");
   }
 
@@ -118,7 +118,7 @@ TEST(diag_formatter, type_arg)
     PType* func_args[] = { ctx.get_char_ty() };
     PDiagArgument func_type;
     func_type.type = P_DAT_TYPE;
-    func_type.value_type = ctx.get_function_ty(ctx.get_void_ty(), func_args, std::size(func_args));
+    func_type.value_type = ctx.get_function_ty(ctx.get_void_ty(), { func_args, std::size(func_args) });
     check_arg_format(&func_type, "fn (char)");
   }
 
@@ -126,7 +126,7 @@ TEST(diag_formatter, type_arg)
     // Function type without parameters.
     PDiagArgument func_type;
     func_type.type = P_DAT_TYPE;
-    func_type.value_type = ctx.get_function_ty(ctx.get_pointer_ty(ctx.get_u8_ty()), nullptr, 0);
+    func_type.value_type = ctx.get_function_ty(ctx.get_pointer_ty(ctx.get_u8_ty()), {});
     check_arg_format(&func_type, "fn () -> *u8");
   }
 
