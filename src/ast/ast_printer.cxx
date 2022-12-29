@@ -12,6 +12,12 @@ PAstPrinter::PAstPrinter(PContext& p_ctx, std::FILE* p_output)
 }
 
 void
+PAstPrinter::visit_null_stmt()
+{
+  print_stmt_header(nullptr, "{null stmt}");
+}
+
+void
 PAstPrinter::visit_translation_unit(const PAstTranslationUnit* p_node)
 {
   m_src_file = p_node->p_src_file;
@@ -179,6 +185,22 @@ PAstPrinter::visit_binary_expr(const PAstBinaryExpr* p_node)
 }
 
 void
+PAstPrinter::visit_member_expr(const PAstMemberExpr* p_node)
+{
+  print_expr_header(p_node, "PAstMemberExpr");
+  std::fputs("\n", m_output);
+
+  ++m_indent;
+  visit(p_node->base_expr);
+
+  m_elide_decls = true;
+  visit(p_node->member);
+  m_elide_decls = false;
+
+  --m_indent;
+}
+
+void
 PAstPrinter::visit_call_expr(const PAstCallExpr* p_node)
 {
   print_expr_header(p_node, "PAstCallExpr");
@@ -202,6 +224,25 @@ PAstPrinter::visit_cast_expr(const PAstCastExpr* p_node)
 }
 
 void
+PAstPrinter::visit_struct_expr(const PAstStructExpr* p_node)
+{
+  print_expr_header(p_node, "PAstStructExpr");
+  std::fputs("\n", m_output);
+
+  ++m_indent;
+  for (auto* field : p_node->get_fields()) {
+    print_header(field, "PAstStructFieldExpr", true);
+    print_ident_info(field->get_name());
+    std::fputs("\n", m_output);
+
+    ++m_indent;
+    visit(field->get_expr());
+    --m_indent;
+  }
+  --m_indent;
+}
+
+void
 PAstPrinter::visit_l2rvalue_expr(const PAstL2RValueExpr* p_node)
 {
   print_expr_header(p_node, "PAstL2RValueExpr");
@@ -213,14 +254,19 @@ PAstPrinter::visit_l2rvalue_expr(const PAstL2RValueExpr* p_node)
 }
 
 void
+PAstPrinter::visit_null_decl()
+{
+  print_decl_header(nullptr, "{null decl}");
+}
+
+void
 PAstPrinter::visit_func_decl(const PFunctionDecl* p_node)
 {
   print_decl_header(p_node, "PFunctionDecl");
-  print_type(p_node->type);
 
   print_decl_body([this, p_node]() {
     visit(p_node->params);
-    visit(p_node->body);
+    visit(p_node->get_body());
   });
 }
 
@@ -228,7 +274,6 @@ void
 PAstPrinter::visit_param_decl(const PParamDecl* p_node)
 {
   print_decl_header(p_node, "PParamDecl");
-  print_type(p_node->type);
   std::fputs("\n", m_output);
 }
 
@@ -236,7 +281,6 @@ void
 PAstPrinter::visit_var_decl(const PVarDecl* p_node)
 {
   print_decl_header(p_node, "PVarDecl");
-  print_type(p_node->type);
 
   print_decl_body([this, p_node]() {
     if (p_node->init_expr != nullptr)
@@ -245,9 +289,29 @@ PAstPrinter::visit_var_decl(const PVarDecl* p_node)
 }
 
 void
+PAstPrinter::visit_struct_field_decl(const PStructFieldDecl* p_node)
+{
+  print_decl_header(p_node, "PStructFieldDecl");
+  std::fputs("\n", m_output);
+}
+
+void
+PAstPrinter::visit_struct_decl(const PStructDecl* p_node)
+{
+  print_decl_header(p_node, "PStructDecl");
+  print_decl_body([this, p_node]() { visit(p_node->get_fields()); });
+}
+
+void
+PAstPrinter::visit_null_ty()
+{
+  std::fprintf(m_output, "{null type}");
+}
+
+void
 PAstPrinter::visit_ty(const PType* p_node)
 {
-  std::fprintf(m_output, "{unknown}");
+  std::fprintf(m_output, "{unknown type}");
 }
 
 void
@@ -309,6 +373,29 @@ PAstPrinter::visit_array_ty(const PArrayType* p_node)
 }
 
 void
+PAstPrinter::visit_tag_ty(const PTagType* p_node)
+{
+  auto* decl = p_node->get_decl();
+  switch (decl->get_kind()) {
+    case P_DK_STRUCT:
+      std::fprintf(m_output, "struct");
+      print_ident_info(decl->get_name(), false);
+      break;
+    default:
+      assert(false && "unreachable");
+      break;
+  }
+}
+
+void
+PAstPrinter::visit_unknown_ty(const PUnknownType* p_node)
+{
+  std::fprintf(m_output, "{unknown type:");
+  print_ident_info(p_node->get_name(), false);
+  std::fprintf(m_output, "}");
+}
+
+void
 PAstPrinter::print(const char* p_format, ...)
 {
   unsigned indent_level = m_indent;
@@ -328,7 +415,7 @@ PAstPrinter::print_header(const void* p_ptr, const char* p_name, bool p_is_expr)
   print("%s", p_name, p_ptr);
   color_reset();
 
-  if (m_show_addresses) {
+  if (m_show_addresses && p_ptr != nullptr) {
     color("33");
     std::fprintf(m_output, " %p", p_ptr);
     color_reset();
@@ -339,19 +426,28 @@ void
 PAstPrinter::print_decl_header(const PDecl* p_node, const char* p_name)
 {
   print_header(p_node, p_name, false);
+
+  if (p_node == nullptr)
+    return;
+
   print_range(p_node->source_range);
 
   if (m_show_used && p_node->used) {
     std::fprintf(m_output, " used");
   }
 
-  print_ident_info(p_node->name);
+  print_ident_info(p_node->get_name());
+  print_type(p_node->get_type());
 }
 
 void
 PAstPrinter::print_stmt_header(const PAst* p_node, const char* p_name)
 {
   print_header(p_node, p_name, true);
+
+  if (p_node == nullptr)
+    return;
+
   print_range(p_node->get_source_range());
 }
 
@@ -359,6 +455,10 @@ void
 PAstPrinter::print_expr_header(const PAstExpr* p_node, const char* p_name)
 {
   print_header(p_node, p_name, true);
+
+  if (p_node == nullptr)
+    return;
+
   print_range(p_node->get_source_range());
 
   if (m_show_value_categories && p_node->is_lvalue()) {
@@ -412,16 +512,20 @@ PAstPrinter::print_type(PType* p_type)
 }
 
 void
-PAstPrinter::print_ident_info(PIdentifierInfo* p_name)
+PAstPrinter::print_ident_info(PIdentifierInfo* p_name, bool p_formatting)
 {
-  color("1");
+  if (p_formatting)
+    color("1");
+
   std::fprintf(m_output, " ");
   if (p_name != nullptr) {
     std::fwrite(p_name->spelling, sizeof(char), p_name->spelling_len, m_output);
   } else {
-    std::fprintf(m_output, "unnamed");
+    std::fprintf(m_output, "{unnamed}");
   }
-  color_reset();
+
+  if (p_formatting)
+    color_reset();
 }
 
 void

@@ -136,7 +136,7 @@ p_diag_format_arg(std::string& p_buffer, PDiagArgument* p_arg)
       format_arg_type(p_buffer, p_arg->value_type_with_name_hint.type, p_arg->value_type_with_name_hint.name);
       break;
     default:
-      HEDLEY_UNREACHABLE();
+      assert(false && "unreachable");
   }
 }
 

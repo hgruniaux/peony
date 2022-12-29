@@ -1,8 +1,8 @@
-#pragma once
+#ifndef PEONY_IDENTIFIER_TABLE_HXX
+#define PEONY_IDENTIFIER_TABLE_HXX
 
 #include "token_kind.hxx"
-
-#include <hedley.h>
+#include "utils/source_location.hxx"
 
 #include <cstddef>
 
@@ -19,14 +19,21 @@ struct PIdentifierInfo
   char spelling[1];
 };
 
-/// A dynamic hash table optimized for storing identifiers.
-typedef struct PIdentifierTable
+/// \brief A PIdentifierInfo with an attached PSourceRange.
+struct PLocalizedIdentifierInfo
+{
+  PIdentifierInfo* ident;
+  PSourceRange range;
+};
+
+/// \brief A dynamic hash table optimized for storing identifiers.
+struct PIdentifierTable
 {
   PIdentifierInfo** identifiers;
   size_t bucket_count;
   size_t item_count;
   size_t rehashing_count;
-} PIdentifierTable;
+};
 
 /// Initializes the identifier table but do not add any identifier (even
 /// keywords). Must be called before any other functions using p_table.
@@ -53,3 +60,5 @@ p_identifier_table_get(PIdentifierTable* p_table,
 /// Registers default Peony keywords into the given identifier table.
 void
 p_identifier_table_register_keywords(PIdentifierTable* p_table);
+
+#endif // PEONY_IDENTIFIER_TABLE_HXX

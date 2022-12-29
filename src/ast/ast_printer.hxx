@@ -12,6 +12,7 @@ class PAstPrinter : public PAstConstVisitor<PAstPrinter>
 public:
   PAstPrinter(PContext& p_ctx, std::FILE* p_output = stdout);
 
+  void visit_null_stmt();
   void visit_translation_unit(const PAstTranslationUnit* p_node);
   void visit_compound_stmt(const PAstCompoundStmt* p_node);
   void visit_let_stmt(const PAstLetStmt* p_node);
@@ -29,20 +30,28 @@ public:
   void visit_decl_ref_expr(const PAstDeclRefExpr* p_node);
   void visit_unary_expr(const PAstUnaryExpr* p_node);
   void visit_binary_expr(const PAstBinaryExpr* p_node);
+  void visit_member_expr(const PAstMemberExpr* p_node);
   void visit_call_expr(const PAstCallExpr* p_node);
   void visit_cast_expr(const PAstCastExpr* p_node);
+  void visit_struct_expr(const PAstStructExpr* p_node);
   void visit_l2rvalue_expr(const PAstL2RValueExpr* p_node);
 
+  void visit_null_decl();
   void visit_func_decl(const PFunctionDecl* p_node);
   void visit_param_decl(const PParamDecl* p_node);
   void visit_var_decl(const PVarDecl* p_node);
+  void visit_struct_field_decl(const PStructFieldDecl* p_node);
+  void visit_struct_decl(const PStructDecl* p_node);
 
+  void visit_null_ty();
   void visit_ty(const PType* p_node);
   void visit_builtin_ty(const PType* p_node);
   void visit_paren_ty(const PParenType* p_node);
   void visit_func_ty(const PFunctionType* p_node);
   void visit_pointer_ty(const PPointerType* p_node);
   void visit_array_ty(const PArrayType* p_node);
+  void visit_tag_ty(const PTagType* p_node);
+  void visit_unknown_ty(const PUnknownType* p_node);
 
 private:
   void print(const char* p_format, ...);
@@ -53,7 +62,7 @@ private:
 
   void print_range(PSourceRange p_src_range);
   void print_type(PType* p_type);
-  void print_ident_info(PIdentifierInfo* p_name);
+  void print_ident_info(PIdentifierInfo* p_name, bool p_formatting = true);
 
   void color(const char* p_color);
   void color_reset();

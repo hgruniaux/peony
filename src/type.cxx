@@ -3,6 +3,8 @@
 #include "context.hxx"
 #include "utils/bump_allocator.hxx"
 
+#include <cassert>
+
 int
 p_type_get_bitwidth(PType* p_type)
 {
@@ -26,7 +28,7 @@ p_type_get_bitwidth(PType* p_type)
     case P_TK_F64:
       return 64;
     default:
-      HEDLEY_UNREACHABLE_RETURN(-1);
+      assert(false && "unimplemented for this type");
   }
 }
 

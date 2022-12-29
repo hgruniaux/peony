@@ -1,5 +1,6 @@
 #include "sema.hxx"
 
+#include "parser.hxx"
 #include "utils/bump_allocator.hxx"
 #include "utils/diag.hxx"
 
@@ -48,8 +49,11 @@ PSema::lookup(PIdentifierInfo* p_name) const
   PScope* scope = m_current_scope;
   do {
     PSymbol* symbol = p_scope_local_lookup(scope, p_name);
-    if (symbol != nullptr)
+    if (symbol != nullptr) {
+      assert(symbol->decl != nullptr);
       return symbol;
+    }
+
     scope = scope->parent_scope;
   } while (scope != nullptr);
 
@@ -61,6 +65,27 @@ PSema::local_lookup(PIdentifierInfo* p_name) const
 {
   assert(p_name != nullptr);
   return p_scope_local_lookup(m_current_scope, p_name);
+}
+
+PType*
+PSema::lookup_type(PLocalizedIdentifierInfo p_name, PDiagKind p_diag, bool p_return_unknown) const
+{
+  PSymbol* symbol = lookup(p_name.ident);
+  if (symbol != nullptr && symbol->decl->get_kind() == P_DK_STRUCT)
+    return symbol->decl->get_type();
+
+  PDiag* d = diag_at(p_diag, p_name.range.begin);
+  diag_add_source_range(d, p_name.range);
+  diag_add_arg_ident(d, p_name.ident);
+  diag_flush(d);
+
+  if (p_return_unknown) {
+    // Return a fake type which store the name as typed by the user.
+    // AST consumers can then use it for diagnostics, resilient formatting, etc.
+    return m_context.get_unknown_ty(p_name.ident);
+  } else {
+    return nullptr;
+  }
 }
 
 PAstBoolLiteral*
@@ -98,7 +123,8 @@ PSema::get_type_for_int_literal_suffix(PIntLiteralSuffix p_suffix, uintmax_t p_v
         return m_context.get_i32_ty();
       }
     default:
-      HEDLEY_UNREACHABLE_RETURN(nullptr);
+      assert(false && "unreachable");
+      return nullptr;
   }
 }
 
@@ -158,7 +184,8 @@ PSema::get_type_for_float_literal_suffix(PFloatLiteralSuffix p_suffix, double p_
     case P_FLS_F64:
       return m_context.get_f64_ty();
     default:
-      HEDLEY_UNREACHABLE_RETURN(nullptr);
+      assert(false && "unreachable");
+      return nullptr;
   }
 }
 
@@ -191,7 +218,7 @@ are_types_compatible(PType* p_from, PType* p_to)
 PAstLetStmt*
 PSema::act_on_let_stmt(PArrayView<PVarDecl*> p_decls, PSourceRange p_src_range)
 {
-  return m_context.new_object<PAstLetStmt>(make_array_view_copy(p_decls));
+  return m_context.new_object<PAstLetStmt>(make_array_view_copy(p_decls), p_src_range);
 }
 
 PAstBreakStmt*
@@ -232,13 +259,15 @@ PSema::is_compatible_with_ret_ty(PType* p_type) const
 }
 
 PAstReturnStmt*
-PSema::act_on_return_stmt(PAstExpr* p_ret_expr, PSourceRange p_src_range, PSourceLocation p_semi_loc)
+PSema::act_on_return_stmt(PAstExpr* p_ret_expr, PSourceRange p_src_range)
 {
   // Check if the return expression type and the current function return type are compatible
   // and if not then emit a diagnostic.
   PType* type = (p_ret_expr != nullptr) ? p_ret_expr->get_type(m_context) : m_context.get_void_ty();
   if (!is_compatible_with_ret_ty(type)) {
-    PSourceLocation diag_loc = (p_ret_expr != nullptr) ? p_ret_expr->get_source_range().begin : p_semi_loc;
+    // The location of the ';'.
+    PSourceLocation semi_loc = p_src_range.end - 1;
+    PSourceLocation diag_loc = (p_ret_expr != nullptr) ? p_ret_expr->get_source_range().begin : semi_loc;
 
     PDiag* d = diag_at(P_DK_err_expected_type, diag_loc);
     diag_add_arg_type(d, m_curr_func_type->get_ret_ty());
@@ -250,8 +279,9 @@ PSema::act_on_return_stmt(PAstExpr* p_ret_expr, PSourceRange p_src_range, PSourc
     diag_flush(d);
   }
 
-  auto* node = m_context.new_object<PAstReturnStmt>(p_ret_expr, p_src_range);
-  return node;
+  if (p_ret_expr != nullptr)
+    p_ret_expr = convert_to_rvalue(p_ret_expr);
+  return m_context.new_object<PAstReturnStmt>(p_ret_expr, p_src_range);
 }
 
 void
@@ -349,15 +379,17 @@ PSema::act_on_decl_ref_expr(PIdentifierInfo* p_name, PSourceRange p_src_range)
 }
 
 PAstUnaryExpr*
-PSema::act_on_unary_expr(PAstExpr* p_sub_expr, PAstUnaryOp p_opcode, PSourceRange p_src_range, PSourceLocation p_op_loc)
+PSema::act_on_unary_expr(PAstExpr* p_sub_expr, PAstUnaryOp p_opcode, PSourceRange p_src_range)
 {
   assert(p_sub_expr != nullptr);
 
+  // The location of the unary operator.
+  const PSourceLocation op_loc = p_src_range.begin;
   PType* result_type = p_sub_expr->get_type(m_context);
   switch (p_opcode) {
     case P_UNARY_NEG: // '-' operator
       if (!result_type->is_float_ty() && !result_type->is_signed_int_ty()) {
-        PDiag* d = diag_at(P_DK_err_cannot_apply_unary_op, p_op_loc);
+        PDiag* d = diag_at(P_DK_err_cannot_apply_unary_op, op_loc);
         diag_add_arg_char(d, '-');
         diag_add_arg_type(d, result_type);
         diag_add_source_range(d, p_sub_expr->get_source_range());
@@ -369,7 +401,7 @@ PSema::act_on_unary_expr(PAstExpr* p_sub_expr, PAstUnaryOp p_opcode, PSourceRang
       break;
     case P_UNARY_NOT: // logical and bitwise '!' operator
       if (!result_type->is_bool_ty() && !result_type->is_int_ty()) {
-        PDiag* d = diag_at(P_DK_err_cannot_apply_unary_op, p_op_loc);
+        PDiag* d = diag_at(P_DK_err_cannot_apply_unary_op, op_loc);
         diag_add_arg_char(d, '!');
         diag_add_arg_type(d, result_type);
         diag_add_source_range(d, p_sub_expr->get_source_range());
@@ -381,7 +413,7 @@ PSema::act_on_unary_expr(PAstExpr* p_sub_expr, PAstUnaryOp p_opcode, PSourceRang
       break;
     case P_UNARY_ADDRESS_OF: // '&' operator
       if (p_sub_expr->is_rvalue()) {
-        PDiag* d = diag_at(P_DK_err_could_not_take_addr_rvalue, p_op_loc);
+        PDiag* d = diag_at(P_DK_err_could_not_take_addr_rvalue, op_loc);
         diag_add_arg_type(d, result_type);
         diag_add_source_range(d, p_sub_expr->get_source_range());
         diag_flush(d);
@@ -392,7 +424,7 @@ PSema::act_on_unary_expr(PAstExpr* p_sub_expr, PAstUnaryOp p_opcode, PSourceRang
       break;
     case P_UNARY_DEREF: // '*' operator
       if (!result_type->is_pointer_ty()) {
-        PDiag* d = diag_at(P_DK_err_indirection_requires_ptr, p_op_loc);
+        PDiag* d = diag_at(P_DK_err_indirection_requires_ptr, op_loc);
         diag_add_arg_type(d, result_type);
         diag_add_source_range(d, p_sub_expr->get_source_range());
         diag_flush(d);
@@ -402,11 +434,11 @@ PSema::act_on_unary_expr(PAstExpr* p_sub_expr, PAstUnaryOp p_opcode, PSourceRang
       result_type = result_type->as<PPointerType>()->get_element_ty();
       break;
     default:
-      HEDLEY_UNREACHABLE_RETURN(nullptr);
+      assert(false && "unknown unary operator");
+      return nullptr;
   }
 
-  auto* node = m_context.new_object<PAstUnaryExpr>(p_sub_expr, result_type, p_opcode, p_src_range);
-  return node;
+  return m_context.new_object<PAstUnaryExpr>(p_sub_expr, result_type, p_opcode, p_src_range);
 }
 
 PAstBinaryExpr*
@@ -588,15 +620,16 @@ PSema::check_call_args(PFunctionType* p_callee_ty,
     PDiag* d =
       diag_at((p_args.size() < required_param_count) ? P_DK_err_too_few_args : P_DK_err_too_many_args, p_lparen_loc);
     if (p_func_decl != nullptr)
-      diag_add_arg_type_with_name_hint(d, p_callee_ty, p_func_decl->name);
+      diag_add_arg_type_with_name_hint(d, p_callee_ty, p_func_decl->get_name());
     else
       diag_add_arg_type(d, p_callee_ty);
     diag_add_source_caret(d, p_lparen_loc);
     diag_flush(d);
+    return;
   }
 
-  PType** args_expected_type = p_callee_ty->get_params();
-  for (size_t i = 0; i < std::min(p_args.size(), required_param_count); ++i) {
+  PArrayView<PType*> args_expected_type = p_callee_ty->get_params();
+  for (size_t i = 0; i < p_args.size(); ++i) {
     if (p_args[i] == nullptr)
       continue;
 
@@ -609,6 +642,35 @@ PSema::check_call_args(PFunctionType* p_callee_ty,
       diag_flush(d);
     }
   }
+}
+
+PAstMemberExpr*
+PSema::act_on_member_expr(PAstExpr* p_base_expr,
+                          PLocalizedIdentifierInfo p_member_name,
+                          PSourceRange p_src_range,
+                          PSourceLocation p_dot_loc)
+{
+  PType* base_type = p_base_expr->get_type(m_context);
+  PDecl* base_decl = base_type->is_tag_ty() ? base_type->get_canonical_ty()->as<PTagType>()->get_decl() : nullptr;
+  if (base_decl == nullptr || base_decl->get_kind() != P_DK_STRUCT) {
+    PDiag* d = diag_at(P_DK_err_member_not_struct, p_base_expr->get_source_range().begin);
+    diag_add_source_range(d, p_base_expr->get_source_range());
+    diag_add_arg_ident(d, p_member_name.ident);
+    diag_flush(d);
+    return nullptr;
+  }
+
+  auto* field = base_decl->as<PStructDecl>()->find_field(p_member_name.ident);
+  if (field == nullptr) {
+    PDiag* d = diag_at(P_DK_err_no_member_named, p_member_name.range.begin);
+    diag_add_source_range(d, p_member_name.range);
+    diag_add_arg_type(d, base_type);
+    diag_add_arg_ident(d, p_member_name.ident);
+    diag_flush(d);
+    return nullptr;
+  }
+
+  return m_context.new_object<PAstMemberExpr>(p_base_expr, field, p_src_range);
 }
 
 PAstCallExpr*
@@ -626,7 +688,7 @@ PSema::act_on_call_expr(PAstExpr* p_callee,
 
     if (callee_decl != nullptr) {
       d = diag_at(P_DK_err_cannot_be_used_as_function, p_lparen_loc);
-      diag_add_arg_ident(d, P_DECL_GET_NAME(callee_decl));
+      diag_add_arg_ident(d, callee_decl->get_name());
     } else {
       d = diag_at(P_DK_err_expr_cannot_be_used_as_function, p_lparen_loc);
     }
@@ -726,15 +788,82 @@ PSema::act_on_cast_expr(PAstExpr* p_sub_expr, PType* p_target_ty, PSourceRange p
   return node;
 }
 
+PStructDecl*
+PSema::resolve_struct_expr_name(PLocalizedIdentifierInfo p_name)
+{
+  assert(p_name.ident != nullptr);
+
+  auto* referenced_type = lookup_type(p_name, P_DK_err_cannot_find_struct, false);
+  if (referenced_type == nullptr) {
+    return nullptr;
+  } else if (!referenced_type->is_tag_ty() ||
+             referenced_type->as_canonical<PTagType>()->get_decl()->get_kind() != P_DK_STRUCT) {
+    PDiag* d = diag_at(P_DK_err_expected_struct, p_name.range.begin);
+    diag_add_source_range(d, p_name.range);
+    diag_add_arg_ident(d, p_name.ident);
+    diag_add_arg_type(d, referenced_type);
+    diag_flush(d);
+    return nullptr;
+  }
+
+  return referenced_type->as_canonical<PTagType>()->get_decl()->as<PStructDecl>();
+}
+
+PAstStructFieldExpr*
+PSema::act_on_struct_field_expr(PStructDecl* p_struct_decl, PLocalizedIdentifierInfo p_name, PAstExpr* p_expr)
+{
+  assert(p_struct_decl != nullptr && p_name.ident != nullptr);
+
+  auto* field = p_struct_decl->find_field(p_name.ident);
+  if (field == nullptr) {
+    PDiag* d = diag_at(P_DK_err_struct_has_not_field, p_name.range.begin);
+    diag_add_source_range(d, p_name.range);
+    diag_add_arg_ident(d, p_struct_decl->get_name());
+    diag_add_arg_ident(d, p_name.ident);
+    diag_flush(d);
+    return nullptr;
+  }
+
+  // Is a shorthand struct field expr? That is a field expression with only a name like 'a' in
+  // MyStruct { a }
+  bool is_shorthand = (p_expr == nullptr);
+  if (is_shorthand) {
+    auto* decl_ref = act_on_decl_ref_expr(p_name.ident, p_name.range);
+    p_expr = convert_to_rvalue(decl_ref);
+  }
+
+  auto* expr_ty = p_expr->get_type(m_context);
+  if (!are_types_compatible(expr_ty, field->get_type())) {
+    PDiag* d = diag_at(P_DK_err_expected_type, p_expr->get_source_range().begin);
+    diag_add_source_range(d, p_expr->get_source_range());
+    diag_add_arg_type(d, field->get_type());
+    diag_add_arg_type(d, expr_ty);
+    diag_flush(d);
+  }
+
+  return m_context.new_object<PAstStructFieldExpr>(field, p_expr, is_shorthand);
+}
+
+PAstStructExpr*
+PSema::act_on_struct_expr(PStructDecl* p_struct_decl,
+                          PArrayView<PAstStructFieldExpr*> p_fields,
+                          PSourceRange p_src_range)
+{
+  assert(p_struct_decl != nullptr);
+  return m_context.new_object<PAstStructExpr>(p_struct_decl, make_array_view_copy(p_fields), p_src_range);
+}
+
+PAstTranslationUnit*
+PSema::act_on_translation_unit(PArrayView<PDecl*> p_decls)
+{
+  return m_context.new_object<PAstTranslationUnit>(make_array_view_copy(p_decls));
+}
+
 PVarDecl*
-PSema::act_on_var_decl(PType* p_type,
-                       PIdentifierInfo* p_name,
-                       PAstExpr* p_init_expr,
-                       PSourceRange p_src_range,
-                       PSourceRange p_name_range)
+PSema::act_on_var_decl(PType* p_type, PLocalizedIdentifierInfo p_name, PAstExpr* p_init_expr, PSourceRange p_src_range)
 {
   // Unnamed variables are forbidden.
-  if (p_name == nullptr) {
+  if (p_name.ident == nullptr) {
     PDiag* d = diag_at(P_DK_err_var_unnamed, p_src_range.begin);
     diag_add_source_caret(d, p_src_range.begin);
     diag_flush(d);
@@ -742,21 +871,20 @@ PSema::act_on_var_decl(PType* p_type,
   }
 
   // Check for variable redeclaration.
-  PSymbol* symbol = local_lookup(p_name);
+  PSymbol* symbol = local_lookup(p_name.ident);
   if (symbol != nullptr) {
-    PDiag* d = diag_at(P_DK_err_var_redeclaration, p_name_range.begin);
-    diag_add_arg_ident(d, p_name);
-    diag_add_source_range(d, p_name_range);
+    PDiag* d = diag_at(P_DK_err_var_redeclaration, p_name.range.begin);
+    diag_add_arg_ident(d, p_name.ident);
+    diag_add_source_range(d, p_name.range);
     diag_flush(d);
-    return m_context.new_object<PVarDecl>(p_type, p_name, p_init_expr);
   }
 
   // Deduce the variable type if needed.
   if (p_type == nullptr) {
     if (p_init_expr == nullptr) {
-      PDiag* d = diag_at(P_DK_err_cannot_deduce_var_type, p_name_range.begin);
-      diag_add_arg_ident(d, p_name);
-      diag_add_source_range(d, p_name_range);
+      PDiag* d = diag_at(P_DK_err_cannot_deduce_var_type, p_name.range.begin);
+      diag_add_arg_ident(d, p_name.ident);
+      diag_add_source_range(d, p_name.range);
       diag_flush(d);
       return nullptr;
     }
@@ -775,42 +903,49 @@ PSema::act_on_var_decl(PType* p_type,
   }
 
   auto* node = m_context.new_object<PVarDecl>(p_type, p_name, p_init_expr, p_src_range);
-  symbol = p_scope_add_symbol(m_current_scope, p_name);
-  symbol->decl = node;
+
+  if (symbol == nullptr) {
+    symbol = p_scope_add_symbol(m_current_scope, p_name.ident);
+    symbol->decl = node;
+  }
+
   return node;
 }
 
 PParamDecl*
-PSema::act_on_param_decl(PType* p_type, PIdentifierInfo* p_name, PSourceRange p_src_range, PSourceRange p_name_range)
+PSema::act_on_param_decl(PType* p_type, PLocalizedIdentifierInfo p_name, PSourceRange p_src_range)
 {
   // Unnamed parameters are forbidden.
-  if (p_name == nullptr) {
+  if (p_name.ident == nullptr) {
     PDiag* d = diag_at(P_DK_err_param_unnamed, p_src_range.begin);
     diag_add_source_caret(d, p_src_range.begin);
     diag_flush(d);
     return m_context.new_object<PParamDecl>(p_type, p_name);
   }
 
-  PSymbol* symbol = local_lookup(p_name);
+  PSymbol* symbol = local_lookup(p_name.ident);
   if (symbol != nullptr) {
-    PDiag* d = diag_at(P_DK_err_param_name_already_used, p_name_range.begin);
-    diag_add_arg_ident(d, p_name);
-    diag_add_source_range(d, p_name_range);
+    PDiag* d = diag_at(P_DK_err_param_name_already_used, p_name.range.begin);
+    diag_add_arg_ident(d, p_name.ident);
+    diag_add_source_range(d, p_name.range);
     diag_flush(d);
-    return m_context.new_object<PParamDecl>(p_type, p_name);
   }
 
   if (p_type == nullptr) {
     PDiag* d = diag_at(P_DK_err_param_type_required, p_src_range.begin);
-    diag_add_arg_ident(d, p_name);
-    diag_add_source_range(d, p_name_range);
+    diag_add_arg_ident(d, p_name.ident);
+    diag_add_source_range(d, p_name.range);
     diag_flush(d);
     return m_context.new_object<PParamDecl>(p_type, p_name);
   }
 
   auto* node = m_context.new_object<PParamDecl>(p_type, p_name, p_src_range);
-  symbol = p_scope_add_symbol(m_current_scope, p_name);
-  symbol->decl = node;
+
+  if (symbol == nullptr) {
+    symbol = p_scope_add_symbol(m_current_scope, p_name.ident);
+    symbol->decl = node;
+  }
+
   return node;
 }
 
@@ -819,14 +954,14 @@ PSema::begin_func_decl_analysis(PFunctionDecl* p_decl)
 {
   push_scope(P_SF_FUNC_PARAMS);
 
-  m_curr_func_type = p_decl->type->as<PFunctionType>();
+  m_curr_func_type = p_decl->get_type()->as<PFunctionType>();
 
   // Register parameters on the current scope.
   // All parameters have already been checked.
   for (auto param : p_decl->params) {
     // We are tolerant for nullptrs to try recover errors during parsing.
-    if (param != nullptr && param->name != nullptr) {
-      PSymbol* symbol = p_scope_add_symbol(m_current_scope, param->name);
+    if (param != nullptr && param->get_name() != nullptr) {
+      PSymbol* symbol = p_scope_add_symbol(m_current_scope, param->get_name());
       symbol->decl = param;
     }
   }
@@ -839,25 +974,24 @@ PSema::end_func_decl_analysis()
 }
 
 PFunctionDecl*
-PSema::act_on_func_decl(PIdentifierInfo* p_name,
+PSema::act_on_func_decl(PLocalizedIdentifierInfo p_name,
                         PType* p_ret_ty,
                         PArrayView<PParamDecl*> p_params,
-                        PSourceRange p_name_range,
-                        PSourceLocation p_key_fn_end_loc)
+                        PSourceLocation p_lparen_loc)
 {
   // Unnamed functions are forbidden.
-  if (p_name == nullptr) {
-    PDiag* d = diag_at(P_DK_err_func_unnamed, p_key_fn_end_loc);
+  if (p_name.ident == nullptr) {
+    PDiag* d = diag_at(P_DK_err_func_unnamed, p_lparen_loc);
+    diag_add_source_caret(d, p_lparen_loc);
     diag_flush(d);
   }
 
-  PSymbol* symbol = local_lookup(p_name);
+  PSymbol* symbol = local_lookup(p_name.ident);
   if (symbol != nullptr) {
-    PDiag* d = diag_at(P_DK_err_func_redeclaration, p_name_range.begin);
-    diag_add_arg_ident(d, p_name);
-    diag_add_source_range(d, p_name_range);
+    PDiag* d = diag_at(P_DK_err_name_defined_multiple_times, p_name.range.begin);
+    diag_add_arg_ident(d, p_name.ident);
+    diag_add_source_range(d, p_name.range);
     diag_flush(d);
-    return nullptr;
   }
 
   if (p_ret_ty == nullptr)
@@ -865,14 +999,76 @@ PSema::act_on_func_decl(PIdentifierInfo* p_name,
 
   std::vector<PType*> param_tys(p_params.size());
   for (size_t i = 0; i < p_params.size(); ++i) {
-    param_tys[i] = p_params[i]->type;
+    param_tys[i] = p_params[i]->get_type();
   }
 
   auto* func_ty = m_context.get_function_ty(p_ret_ty, param_tys);
   auto* decl = m_context.new_object<PFunctionDecl>(func_ty, p_name, make_array_view_copy(p_params));
 
-  symbol = p_scope_add_symbol(m_current_scope, p_name);
-  symbol->decl = decl;
+  if (symbol == nullptr) {
+    symbol = p_scope_add_symbol(m_current_scope, p_name.ident);
+    symbol->decl = decl;
+  }
+
+  return decl;
+}
+
+PStructFieldDecl*
+PSema::act_on_struct_field_decl(PType* p_type, PLocalizedIdentifierInfo p_name, PSourceRange p_src_range)
+{
+  return m_context.new_object<PStructFieldDecl>(p_type, p_name, p_src_range);
+}
+
+void
+PSema::check_struct_fields(PArrayView<PStructFieldDecl*> p_fields)
+{
+  if (p_fields.empty())
+    return; // nothing to check
+
+  // Check for duplicate names in the struct fields.
+  for (auto it = std::next(p_fields.begin()); it != p_fields.end(); ++it) {
+    PIdentifierInfo* field_name = (*it)->get_name();
+    bool has_duplicate = std::find_if(p_fields.begin(), it, [field_name](auto* p_other) {
+                           return p_other->get_name() == field_name;
+                         }) != it;
+    if (has_duplicate) {
+      PDiag* d = diag_at(P_DK_err_duplicate_member, (*it)->source_range.begin);
+      diag_add_arg_ident(d, field_name);
+      diag_add_source_range(d, (*it)->get_name_range());
+      // TODO: Add a note diagnostic showing the previous declaration.
+      diag_flush(d);
+    }
+  }
+}
+
+PStructDecl*
+PSema::act_on_struct_decl(PLocalizedIdentifierInfo p_name,
+                          PArrayView<PStructFieldDecl*> p_fields,
+                          PSourceRange p_src_range)
+{
+  // Unnamed structures are forbidden.
+  if (p_name.ident == nullptr) {
+    PDiag* d = diag_at(P_DK_err_func_unnamed, p_name.range.begin);
+    diag_add_source_caret(d, p_name.range.begin);
+    diag_flush(d);
+  }
+
+  PSymbol* symbol = local_lookup(p_name.ident);
+  if (symbol != nullptr) {
+    PDiag* d = diag_at(P_DK_err_name_defined_multiple_times, p_name.range.begin);
+    diag_add_arg_ident(d, p_name.ident);
+    diag_add_source_range(d, p_name.range);
+    // TODO: Add a note diagnostic showing the previous declaration.
+    diag_flush(d);
+  }
+
+  check_struct_fields(p_fields);
+  auto* decl = m_context.new_object<PStructDecl>(m_context, p_name, make_array_view_copy(p_fields), p_src_range);
+
+  if (symbol == nullptr) {
+    symbol = p_scope_add_symbol(m_current_scope, p_name.ident);
+    symbol->decl = decl;
+  }
 
   return decl;
 }

@@ -8,6 +8,8 @@
 #include <unordered_map>
 #include <vector>
 
+class PDecl;
+
 class PContext
 {
 public:
@@ -44,10 +46,11 @@ public:
   [[nodiscard]] PType* get_f64_ty() { return &m_f64_ty; }
 
   [[nodiscard]] PParenType* get_paren_ty(PType* p_sub_type);
-  [[nodiscard]] PFunctionType* get_function_ty(PType* p_ret_ty, PType** p_params, size_t p_param_count);
-  [[nodiscard]] PFunctionType* get_function_ty(PType* p_ret_ty, const std::vector<PType*>& p_args);
+  [[nodiscard]] PFunctionType* get_function_ty(PType* p_ret_ty, PArrayView<PType*> p_params);
   [[nodiscard]] PPointerType* get_pointer_ty(PType* p_elt_ty);
   [[nodiscard]] PArrayType* get_array_ty(PType* p_elt_ty, size_t p_num_elements);
+  [[nodiscard]] PTagType* get_tag_ty(PDecl* p_decl);
+  [[nodiscard]] PUnknownType* get_unknown_ty(PIdentifierInfo* p_name);
 
 private:
   PBumpAllocator m_allocator;
@@ -69,6 +72,9 @@ private:
 
   // Composite types:
 
+  std::unordered_map<PType*, PPointerType*> m_pointer_tys;
+  std::unordered_map<PDecl*, PTagType*> m_tag_tys;
+
   [[nodiscard]] static inline size_t hash_combine(size_t p_lhs, size_t p_rhs) noexcept
   {
     return p_lhs ^ (p_rhs + 0x9e3779b9 + (p_lhs << 6) + (p_lhs >> 2));
@@ -77,20 +83,11 @@ private:
   struct FuncTyKey
   {
     PType* ret_ty;
-    PType** arg_types;
-    size_t arg_count;
+    PArrayView<PType*> params;
 
     [[nodiscard]] bool operator==(const FuncTyKey& p_key) const noexcept
     {
-      if (ret_ty != p_key.ret_ty || arg_count != p_key.arg_count)
-        return false;
-
-      for (size_t i = 0; i < arg_count; ++i) {
-        if (arg_types[i] != p_key.arg_types[i])
-          return false;
-      }
-
-      return true;
+      return ret_ty == p_key.ret_ty && params == p_key.params;
     }
   };
 
@@ -101,15 +98,14 @@ private:
     {
       auto hasher = std::hash<PType*>{};
       size_t hval = hasher(p_key.ret_ty);
-      for (size_t i = 0; i < p_key.arg_count; ++i) {
-        hval = hash_combine(hval, hasher(p_key.arg_types[i]));
+      for (auto* param : p_key.params) {
+        hval = hash_combine(hval, hasher(param));
       }
       return hval;
     }
   };
 
   std::unordered_map<FuncTyKey, PFunctionType*, FuncTyKeyHash> m_func_tys;
-  std::unordered_map<PType*, PPointerType*> m_pointer_tys;
 
   /// Implementation of the std::hash interface for std::pair<PType*, size_t>.
   struct PairHash
