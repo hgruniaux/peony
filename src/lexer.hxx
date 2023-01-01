@@ -29,6 +29,9 @@ private:
   void fill_token(PToken& p_token, PTokenKind p_kind);
   void register_newline();
 
+  void fill_identifier_token(PToken& p_token, bool p_is_raw);
+  void fill_integer_literal(PToken& p_token, int p_radix);
+  void fill_string_literal(PToken& p_token);
 
 private:
   bool m_keep_comments = false;

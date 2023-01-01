@@ -31,8 +31,6 @@ class PDecl
 public:
   PDeclKind kind;
   PSourceRange source_range;
-  // Is there at least one reference to this type?
-  bool used;
 
   [[nodiscard]] PDeclKind get_kind() const { return kind; }
 
@@ -64,13 +62,12 @@ protected:
     , source_range(p_src_range)
     , m_type(p_type)
     , m_localized_name(p_name)
-    , used(false)
   {
   }
 
   PType* m_type;
   PLocalizedIdentifierInfo m_localized_name;
-  bool m_used;
+  bool m_used = false;
 };
 
 /// \brief A variable declaration.
@@ -109,7 +106,7 @@ class PFunctionDecl : public PDecl
 public:
   static constexpr auto DECL_KIND = P_DK_FUNCTION;
 
-  PAst* body;
+  PAst* body = nullptr;
   PArrayView<PParamDecl*> params;
 
   PFunctionDecl(PType* p_type,
@@ -118,13 +115,29 @@ public:
                 PAst* p_body = nullptr,
                 PSourceRange p_src_range = {})
     : PDecl(DECL_KIND, p_type, p_name, p_src_range)
-    , body(nullptr)
     , params(p_params)
   {
   }
 
   [[nodiscard]] bool has_body() const { return body != nullptr; }
   [[nodiscard]] PAst* get_body() const { return body; }
+
+  [[nodiscard]] bool is_extern() const { return m_is_extern; }
+  void set_extern(bool p_extern) { m_is_extern = p_extern; }
+
+  [[nodiscard]] bool has_abi() const { return m_has_abi; }
+  [[nodiscard]] std::string_view get_abi() const { return m_abi; }
+  void unset_abi() { m_has_abi = false; }
+  void set_abi(std::string_view p_abi)
+  {
+    m_has_abi = true;
+    m_abi = p_abi;
+  }
+
+private:
+  std::string_view m_abi;
+  bool m_has_abi = false;
+  bool m_is_extern = false;
 };
 
 class PStructDecl;

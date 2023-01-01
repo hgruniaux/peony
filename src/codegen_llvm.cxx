@@ -162,6 +162,7 @@ struct PCodeGenLLVM::D
   }
 
   /// Converts a Peony type to a LLVM debug DWARF type.
+  /// This function can return nullptr.
   llvm::DIType* to_debug_ty(PType* p_type)
   {
     assert(p_type != nullptr);
@@ -174,7 +175,6 @@ struct PCodeGenLLVM::D
       return it->second;
 
     auto* llvm_type = to_debug_ty_impl(p_type);
-    assert(llvm_type != nullptr);
     debug_types_cache.insert({ p_type, llvm_type });
     return llvm_type;
   }
@@ -325,7 +325,7 @@ struct PCodeGenLLVM::D
 
     uint32_t lineno, colno;
     p_source_location_get_lineno_and_colno(current_file, p_src_loc, &lineno, &colno);
-    builder->SetCurrentDebugLocation(llvm::DILocation::get(scope->getContext(), lineno, colno, scope));
+    builder->SetCurrentDebugLocation(llvm::DILocation::get(*llvm_ctx, lineno, colno, scope));
   }
 
   llvm::DIScope* get_current_di_scope()
@@ -1040,6 +1040,10 @@ PCodeGenLLVM::visit_l2rvalue_expr(const PAstL2RValueExpr* p_node)
 void*
 PCodeGenLLVM::visit_func_decl(const PFunctionDecl* p_node)
 {
+  // Do not waste time generating code when is not needed.
+  if (!p_node->is_used() && p_node->is_extern() && !p_node->has_body())
+    return nullptr;
+
   auto* func_ty = m_d->to_llvm_ty(p_node->get_type());
   assert(func_ty->isFunctionTy());
   auto func_callee =
@@ -1048,21 +1052,51 @@ PCodeGenLLVM::visit_func_decl(const PFunctionDecl* p_node)
   auto* func = llvm::cast<llvm::Function>(func_callee.getCallee());
   assert(func != nullptr);
 
+  if (p_node->is_extern()) {
+    func->setLinkage(llvm::Function::ExternalLinkage);
+  }
+
+  std::string_view abi;
+  if (p_node->has_abi())
+    abi = p_node->get_abi();
+  else if (p_node->is_extern())
+    abi = "C";
+
+  if (!abi.empty()) {
+    if (abi == "C") {
+      func->setCallingConv(llvm::CallingConv::C);
+    } else if (abi == "stdcall") {
+      func->setCallingConv(llvm::CallingConv::X86_StdCall);
+    } else if (abi == "fastcall") {
+      func->setCallingConv(llvm::CallingConv::X86_FastCall);
+    } else if (abi == "vectorcall") {
+      func->setCallingConv(llvm::CallingConv::X86_VectorCall);
+    } else {
+      assert(false && "unreachable");
+    }
+  }
+
   m_d->decls.insert({ p_node, func });
 
-  // Generate debug info for the function
-  auto* debug_subprogram =
-    m_d->debug_builder->createFunction(m_d->debug_file,
-                                       to_str_ref(p_node->get_name()),
-                                       "",
-                                       m_d->debug_file,
-                                       0,
-                                       static_cast<llvm::DISubroutineType*>(m_d->to_debug_ty(p_node->get_type())),
-                                       0,
-                                       llvm::DINode::FlagPrototyped,
-                                       llvm::DISubprogram::SPFlagDefinition);
-  func->setSubprogram(debug_subprogram);
+  // Generate debug info only for functions with a definition.
+  bool generate_debug_info = p_node->has_body();
 
+  llvm::DISubprogram* debug_subprogram;
+  if (generate_debug_info) {
+    debug_subprogram =
+      m_d->debug_builder->createFunction(m_d->debug_file,
+                                         to_str_ref(p_node->get_name()),
+                                         "",
+                                         m_d->debug_file,
+                                         0,
+                                         static_cast<llvm::DISubroutineType*>(m_d->to_debug_ty(p_node->get_type())),
+                                         0,
+                                         llvm::DINode::FlagPrototyped,
+                                         llvm::DISubprogram::SPFlagDefinition);
+    func->setSubprogram(debug_subprogram);
+  }
+
+  // Function body generation.
   if (p_node->has_body()) {
     m_d->lexical_blocks.push(debug_subprogram);
     m_d->reset_location();

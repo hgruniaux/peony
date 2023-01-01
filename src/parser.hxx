@@ -24,8 +24,9 @@ private:
   std::vector<PParamDecl*> parse_param_list();
   PVarDecl* parse_var_decl();
   std::vector<PVarDecl*> parse_var_list();
-  PDecl* parse_func_decl();
-  PDecl* parse_struct_decl();
+  PFunctionDecl* parse_func_decl(bool p_is_extern = false);
+  PDecl* parse_extern_decl();
+  PStructDecl* parse_struct_decl();
   PStructFieldDecl* parse_struct_field_decl();
 
   PAst* parse_compound_stmt();

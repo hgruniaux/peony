@@ -15,6 +15,7 @@ void
 PAstPrinter::visit_null_stmt()
 {
   print_stmt_header(nullptr, "{null stmt}");
+  std::fputs("\n", m_output);
 }
 
 void
@@ -257,6 +258,7 @@ void
 PAstPrinter::visit_null_decl()
 {
   print_decl_header(nullptr, "{null decl}");
+  std::fputs("\n", m_output);
 }
 
 void
@@ -432,7 +434,7 @@ PAstPrinter::print_decl_header(const PDecl* p_node, const char* p_name)
 
   print_range(p_node->source_range);
 
-  if (m_show_used && p_node->used) {
+  if (m_show_used && p_node->is_used()) {
     std::fprintf(m_output, " used");
   }
 

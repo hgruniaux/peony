@@ -372,7 +372,7 @@ PSema::act_on_decl_ref_expr(PIdentifierInfo* p_name, PSourceRange p_src_range)
   }
 
   assert(symbol->decl != nullptr);
-  symbol->decl->used = true;
+  symbol->decl->mark_as_used();
 
   auto* node = m_context.new_object<PAstDeclRefExpr>(symbol->decl, p_src_range);
   return node;
@@ -971,6 +971,19 @@ void
 PSema::end_func_decl_analysis()
 {
   pop_scope();
+}
+
+void
+PSema::check_func_abi(std::string_view abi, PSourceRange p_src_range)
+{
+  constexpr const char* SUPPORTED_ABI[] = { "C", "stdcall", "fastcall", "vectorcall" };
+  if (std::find(std::begin(SUPPORTED_ABI), std::end(SUPPORTED_ABI), abi) != std::end(SUPPORTED_ABI))
+    return;
+
+  PDiag* d = diag_at(P_DK_err_abi_unknown, p_src_range.begin);
+  diag_add_source_range(d, p_src_range);
+  diag_add_arg_str(d, abi.data());
+  diag_flush(d);
 }
 
 PFunctionDecl*

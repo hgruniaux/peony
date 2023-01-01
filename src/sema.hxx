@@ -30,7 +30,9 @@ public:
   /// Lookups for a tag type with the given name (e.g. a struct or alias type).
   /// Builtin types that are identified by a keyword are not recognized by this
   /// function!
-  [[nodiscard]] PType* lookup_type(PLocalizedIdentifierInfo p_name, PDiagKind p_diag = P_DK_err_type_unknown, bool p_return_unknown = true) const;
+  [[nodiscard]] PType* lookup_type(PLocalizedIdentifierInfo p_name,
+                                   PDiagKind p_diag = P_DK_err_type_unknown,
+                                   bool p_return_unknown = true) const;
 
   [[nodiscard]] PAstBoolLiteral* act_on_bool_literal(bool p_value, PSourceRange p_src_range = {});
 
@@ -114,7 +116,9 @@ public:
                                                PSourceLocation p_as_loc = {});
 
   [[nodiscard]] PStructDecl* resolve_struct_expr_name(PLocalizedIdentifierInfo p_name);
-  [[nodiscard]] PAstStructFieldExpr* act_on_struct_field_expr(PStructDecl* p_struct_decl, PLocalizedIdentifierInfo p_name, PAstExpr* p_expr);
+  [[nodiscard]] PAstStructFieldExpr* act_on_struct_field_expr(PStructDecl* p_struct_decl,
+                                                              PLocalizedIdentifierInfo p_name,
+                                                              PAstExpr* p_expr);
   [[nodiscard]] PAstStructExpr* act_on_struct_expr(PStructDecl* p_struct_decl,
                                                    PArrayView<PAstStructFieldExpr*> p_fields,
                                                    PSourceRange p_src_range = {});
@@ -131,6 +135,7 @@ public:
 
   void begin_func_decl_analysis(PFunctionDecl* p_decl);
   void end_func_decl_analysis();
+  void check_func_abi(std::string_view abi, PSourceRange p_src_range = {});
   [[nodiscard]] PFunctionDecl* act_on_func_decl(PLocalizedIdentifierInfo p_name,
                                                 PType* p_ret_ty,
                                                 PArrayView<PParamDecl*> p_params,

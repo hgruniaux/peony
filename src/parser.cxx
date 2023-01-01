@@ -879,7 +879,8 @@ get_binop_from_tok_kind(PTokenKind p_op)
     return p_kind;
 #include "operator_kinds.def"
     default:
-      HEDLEY_UNREACHABLE_RETURN(P_BINARY_ADD);
+      assert(false && "unreachable");
+      return P_BINARY_ADD;
   }
 }
 
@@ -928,13 +929,16 @@ PParser::parse_expr()
 }
 
 // func_decl:
-//     "fn" identifier "(" param_decl_list? ")" func_type_specifier? ";"
-//     "fn" identifier "(" param_decl_list? ")" func_type_specifier? compound_stmt
+//     extern_specifier? "fn" identifier "(" param_decl_list? ")" func_type_specifier? ";"
+//     extern_specifier? "fn" identifier "(" param_decl_list? ")" func_type_specifier? compound_stmt
 //
 // func_type_specifier:
 //     "->" type
-PDecl*
-PParser::parse_func_decl()
+//
+// extern_specifier: ; this is parsed by parse_extern_decl()
+//     "extern" STRING_LITERAL?
+PFunctionDecl*
+PParser::parse_func_decl(bool p_is_extern)
 {
   assert(lookahead(P_TOK_KEY_fn));
 
@@ -978,20 +982,60 @@ PParser::parse_func_decl()
   PFunctionDecl* decl = m_sema.act_on_func_decl(ident_parse_info, ret_ty, params, delimiters.get_open_location());
   decl->source_range = range_tracker.get_source_range();
 
-  // Parse body
-  if (!lookahead(P_TOK_LBRACE)) {
-    PDiag* d = diag_at(P_DK_err_expected_func_body_after_func_decl, delimiters.get_close_location() + 1);
-    diag_add_source_caret(d, delimiters.get_close_location() + 1);
-    diag_flush(d);
-    return decl;
+  if (p_is_extern && !lookahead(P_TOK_LBRACE)) {
+    // External function declaration may not have a body.
+    expect_token(P_TOK_SEMI);
+  } else {
+    // Parse body
+    if (!lookahead(P_TOK_LBRACE)) {
+      PDiag* d = diag_at(P_DK_err_expected_func_body_after_func_decl, delimiters.get_close_location() + 1);
+      diag_add_source_caret(d, delimiters.get_close_location() + 1);
+      diag_flush(d);
+      return decl;
+    }
+
+    m_sema.begin_func_decl_analysis(decl);
+    decl->body = parse_compound_stmt();
+    m_sema.end_func_decl_analysis();
+
+    decl->source_range = range_tracker.get_source_range();
   }
 
-  m_sema.begin_func_decl_analysis(decl);
-  decl->body = parse_compound_stmt();
-  m_sema.end_func_decl_analysis();
-
-  decl->source_range = range_tracker.get_source_range();
   return decl;
+}
+
+PDecl*
+PParser::parse_extern_decl()
+{
+  assert(lookahead(P_TOK_KEY_extern));
+
+  consume_token(); // consume 'extern'
+
+  std::string abi;
+  PSourceRange abi_range;
+  bool has_abi = lookahead(P_TOK_STRING_LITERAL);
+  if (has_abi) {
+    abi = parse_string_literal_token(m_token.data.literal.begin, m_token.data.literal.end);
+    abi_range = get_token_range();
+    consume_token();
+  }
+
+  if (lookahead(P_TOK_KEY_fn)) {
+    char* copied_abi = m_context.alloc_object<char>(abi.size() + 1);
+    std::copy(abi.begin(), abi.end(), copied_abi);
+    copied_abi[abi.size()] = '\0';
+
+    PFunctionDecl* func_decl = parse_func_decl(true);
+    func_decl->set_extern(true);
+    if (has_abi) {
+      func_decl->set_abi(std::string_view(copied_abi, abi.size()));
+      m_sema.check_func_abi(func_decl->get_abi(), abi_range);
+    }
+
+    return func_decl;
+  } else {
+    return nullptr;
+  }
 }
 
 // struct_field_decl:
@@ -1021,7 +1065,7 @@ PParser::parse_struct_field_decl()
 //
 // struct_field_decls:
 //     struct_field_decl (',' struct_field_decl)* ','?
-PDecl*
+PStructDecl*
 PParser::parse_struct_decl()
 {
   assert(lookahead(P_TOK_KEY_struct));
@@ -1086,6 +1130,8 @@ PDecl*
 PParser::parse_top_level_decl()
 {
   switch (m_token.kind) {
+    case P_TOK_KEY_extern:
+      return parse_extern_decl();
     case P_TOK_KEY_fn:
       return parse_func_decl();
     case P_TOK_KEY_struct:

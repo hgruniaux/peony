@@ -63,6 +63,7 @@ ERROR(cannot_find_struct, "cannot find struct type <%{0}%> in this scope")
 ERROR(struct_has_not_field, "struct <%{0}%> has no field named <%{1}%>")
 
 ERROR(type_unknown, "unknown type name <%{0}%>")
+ERROR(abi_unknown, "invalid ABI, found <%{0}%>")
 
 ERROR(cannot_add, "cannot add <%{0}%> to <%{1}%>")
 ERROR(cannot_add_assign, "cannot add-assign <%{1}%> to <%{0}%>")

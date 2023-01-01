@@ -118,7 +118,7 @@ TEST_F(lexer_test, comments)
   check_token(P_TOK_EOF, 3, 11, 3, 11);
 }
 
-TEST_F(lexer_test, literals)
+TEST_F(lexer_test, integer_literals)
 {
   // Decimal integer literal
   set_input("0 10i32 5_2_8_ 5___5u64 8___i8");
@@ -144,6 +144,13 @@ TEST_F(lexer_test, literals)
   check_int_literal(1, 14, 1, 20, 16, P_ILS_NO_SUFFIX);
   check_int_literal(1, 21, 1, 31, 16, P_ILS_U16);
   check_token(P_TOK_EOF, 1, 31, 1, 31);
+}
+
+TEST_F(lexer_test, string_literals)
+{
+    set_input("\"ab\"");
+
+    check_token(P_TOK_STRING_LITERAL, 1, 1, 1, 5);
 }
 
 TEST_F(lexer_test, operators)
