@@ -15,11 +15,14 @@ public:
   [[nodiscard]] bool lookahead(PTokenKind p_kind) const { return m_token.kind == p_kind; }
 
   PAstTranslationUnit* parse();
-  PType* parse_type();
-  PAst* parse_stmt();
-  PAstExpr* parse_expr();
+  PAst* parse_standalone_stmt();
+  PAstExpr* parse_standalone_expr();
 
 private:
+  PAst* parse_stmt();
+  PAstExpr* parse_expr();
+  PType* parse_type();
+
   PParamDecl* parse_param_decl();
   std::vector<PParamDecl*> parse_param_list();
   PVarDecl* parse_var_decl();

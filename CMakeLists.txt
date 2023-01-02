@@ -50,7 +50,7 @@ add_library(peony_lib STATIC
     "src/options.cxx"
     "src/literal_parser.hxx"
     "src/literal_parser.cxx"
-        src/context.hxx src/context.cxx src/ast/ast_visitor.hxx src/ast/ast_printer.cxx src/ast/ast_printer.hxx src/codegen_llvm.cxx src/codegen_llvm.hxx src/ast/ast_expr.hxx src/ast/ast_stmt.hxx src/ast/ast_decl.hxx src/ast/ast_expr.cxx src/ast/ast_decl.cxx src/ast/ast_stmt.cxx src/utils/array_view.hxx)
+        src/context.hxx src/context.cxx src/ast/ast_visitor.hxx src/ast/ast_printer.cxx src/ast/ast_printer.hxx src/codegen_llvm.cxx src/codegen_llvm.hxx src/ast/ast_expr.hxx src/ast/ast_stmt.hxx src/ast/ast_decl.hxx src/ast/ast_expr.cxx src/ast/ast_decl.cxx src/ast/ast_stmt.cxx src/utils/array_view.hxx src/interpreter/value.hxx src/interpreter/value.cxx src/interpreter/interpreter.cxx src/interpreter/interpreter.hxx src/utils/source_manager.cxx src/utils/source_manager.hxx)
 
 target_compile_options(peony_lib PUBLIC -fsanitize=address,undefined)
 target_link_options(peony_lib PUBLIC -fsanitize=address,undefined)
@@ -112,7 +112,7 @@ add_executable(peony_test
         "src/identifier_table_test.cxx"
     "src/type_test.cxx"
     "src/lexer_test.cxx"
- "src/literal_parser_test.cxx")
+ "src/literal_parser_test.cxx" src/interpreter/interpreter_test.cxx)
 
 target_link_libraries(peony_test PRIVATE peony_lib)
 target_link_libraries(peony_test PRIVATE gtest gtest_main)

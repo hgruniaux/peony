@@ -1,5 +1,7 @@
 #include "ast_expr.hxx"
 
+#include "../interpreter/interpreter.hxx"
+
 PAstExpr*
 PAstExpr::ignore_parens()
 {
@@ -8,6 +10,35 @@ PAstExpr::ignore_parens()
     node = node->as<PAstParenExpr>()->sub_expr;
   }
   return node;
+}
+
+const PAstExpr*
+PAstExpr::ignore_parens() const
+{
+  return const_cast<PAstExpr*>(this)->ignore_parens();
+}
+
+PAstExpr*
+PAstExpr::ignore_parens_and_casts()
+{
+  PAstExpr* node = this;
+  while (node != nullptr && (node->get_kind() == P_SK_PAREN_EXPR || node->get_kind() == P_SK_CAST_EXPR)) {
+    node = node->as<PAstParenExpr>()->sub_expr;
+  }
+  return node;
+}
+
+const PAstExpr*
+PAstExpr::ignore_parens_and_casts() const
+{
+  return const_cast<PAstExpr*>(this)->ignore_parens_and_casts();
+}
+
+std::optional<bool>
+PAstExpr::eval_as_bool(PContext& p_ctx) const
+{
+  PInterpreter inter(p_ctx);
+  return inter.eval_as_bool(this);
 }
 
 bool

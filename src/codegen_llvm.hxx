@@ -51,7 +51,8 @@ public:
 private:
   /// Emits code to implement the lazy binary operators '&&' and '||' (depending
   /// on the parameter p_is_and).
-  void* emit_log_and(PAst* p_lhs, PAst* p_rhs, bool p_is_and);
+  void* emit_log_and(PAstExpr* p_lhs, PAstExpr* p_rhs, bool p_is_and);
+  void* try_codegen_constant_log_and(PAstExpr* p_lhs, PAstExpr* p_rhs, bool p_is_and);
   void* emit_trivial_bin_op(PType* p_type, void* p_llvm_lhs, void* p_llvm_rhs, PAstBinaryOp p_op);
 
 private:

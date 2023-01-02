@@ -9,6 +9,7 @@
 #include <type_traits>
 
 class PDecl;
+class PContext;
 
 enum PTypeKind
 {
@@ -67,9 +68,17 @@ public:
   /// Returns `true` if this is canonically an unsigned integer type (one of the `u*` types).
   [[nodiscard]] bool is_unsigned_int_ty() const;
   [[nodiscard]] bool is_int_ty() const { return is_signed_int_ty() || is_unsigned_int_ty(); }
-  [[nodiscard]] bool is_float_ty() const { return is_signed_int_ty() || is_unsigned_int_ty(); }
+  [[nodiscard]] bool is_float_ty() const;
   /// Returns `true` if this is canonically an arithmetic type (either integer or float).
   [[nodiscard]] bool is_arithmetic_ty() const { return is_int_ty() || is_float_ty(); }
+
+  /// Returns the equivalent signed integer type (e.g. for `u32` returns `i32`).
+  /// If it is already a signed integer type, it returns itself. However, if it
+  /// is not an integer type (nor signed nor unsigned) then an error occurs.
+  [[nodiscard]] PType* to_signed_int_ty(PContext& p_ctx) const;
+  /// Same as to_signed_int_ty() but returns the equivalent unsigned integer
+  /// type (e.f. for `i32` returns `u32`).
+  [[nodiscard]] PType* to_unsigned_int_ty(PContext& p_ctx) const;
 
 protected:
   friend class PContext;
@@ -211,8 +220,5 @@ private:
 
   PIdentifierInfo* m_name;
 };
-
-int
-p_type_get_bitwidth(PType* p_type);
 
 #endif // PEONY_TYPE_HXX

@@ -4,6 +4,8 @@
 #include "ast_decl.hxx"
 #include "ast_stmt.hxx"
 
+#include <optional>
+
 /* --------------------------------------------------------
  * Expressions
  */
@@ -18,14 +20,20 @@ enum PValueCategory
 class PAstExpr : public PAst
 {
 public:
+  /// Ignore any outer PAstParenExpr.
   [[nodiscard]] PAstExpr* ignore_parens();
-  [[nodiscard]] const PAstExpr* ignore_parens() const { return const_cast<PAstExpr*>(this)->ignore_parens(); }
+  [[nodiscard]] const PAstExpr* ignore_parens() const;
+  /// Ignore any outer PAstParenExpr and PAstCastExpr.
+  [[nodiscard]] PAstExpr* ignore_parens_and_casts();
+  [[nodiscard]] const PAstExpr* ignore_parens_and_casts() const;
 
   [[nodiscard]] virtual PValueCategory get_value_category() const { return P_VC_RVALUE; }
   [[nodiscard]] bool is_lvalue() const { return get_value_category() == P_VC_LVALUE; }
   [[nodiscard]] bool is_rvalue() const { return get_value_category() == P_VC_RVALUE; }
 
   [[nodiscard]] virtual PType* get_type(PContext& p_ctx) const = 0;
+
+  [[nodiscard]] std::optional<bool> eval_as_bool(PContext& p_ctx) const;
 
 protected:
   PAstExpr(PStmtKind p_kind, PSourceRange p_src_range)
@@ -345,9 +353,7 @@ class PAstStructExpr : public PAstExpr
 public:
   static constexpr auto STMT_KIND = P_SK_STRUCT_EXPR;
 
-  PAstStructExpr(PStructDecl* p_struct_decl,
-                 PArrayView<PAstStructFieldExpr*> p_fields,
-                 PSourceRange p_src_range = {});
+  PAstStructExpr(PStructDecl* p_struct_decl, PArrayView<PAstStructFieldExpr*> p_fields, PSourceRange p_src_range = {});
   ~PAstStructExpr() = delete;
 
   [[nodiscard]] PStructDecl* get_struct_decl() const { return m_struct_decl; }

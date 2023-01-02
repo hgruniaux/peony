@@ -130,7 +130,7 @@ public:
         return DISPATCH(PAstL2RValueExpr, visit_l2rvalue_expr);
 
       default:
-        assert(false && "unknown AST statement node kind");
+        assert(false && "unknown AST statement node id");
         return default_ret_value(std::forward<Args>(p_args)...);
     }
   }
@@ -152,7 +152,7 @@ public:
       case P_DK_STRUCT:
         return DISPATCH(PStructDecl, visit_struct_decl);
       default:
-        assert(false && "unknown AST declaration node kind");
+        assert(false && "unknown AST declaration node id");
         return default_ret_value(std::forward<Args>(p_args)...);
     }
   }

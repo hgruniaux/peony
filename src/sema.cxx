@@ -68,7 +68,7 @@ PSema::local_lookup(PIdentifierInfo* p_name) const
 }
 
 PType*
-PSema::lookup_type(PLocalizedIdentifierInfo p_name, PDiagKind p_diag, bool p_return_unknown) const
+PSema::lookup_type(PLocalizedIdentifierInfo p_name, PDiagnosticID p_diag, bool p_return_unknown) const
 {
   PSymbol* symbol = lookup(p_name.ident);
   if (symbol != nullptr && symbol->decl->get_kind() == P_DK_STRUCT)
@@ -394,10 +394,9 @@ PSema::act_on_unary_expr(PAstExpr* p_sub_expr, PAstUnaryOp p_opcode, PSourceRang
         diag_add_arg_type(d, result_type);
         diag_add_source_range(d, p_sub_expr->get_source_range());
         diag_flush(d);
-        return nullptr;
       }
 
-      p_sub_expr = (p_sub_expr);
+      p_sub_expr = convert_to_rvalue(p_sub_expr);
       break;
     case P_UNARY_NOT: // logical and bitwise '!' operator
       if (!result_type->is_bool_ty() && !result_type->is_int_ty()) {
@@ -406,7 +405,6 @@ PSema::act_on_unary_expr(PAstExpr* p_sub_expr, PAstUnaryOp p_opcode, PSourceRang
         diag_add_arg_type(d, result_type);
         diag_add_source_range(d, p_sub_expr->get_source_range());
         diag_flush(d);
-        return nullptr;
       }
 
       p_sub_expr = convert_to_rvalue(p_sub_expr);
@@ -417,7 +415,6 @@ PSema::act_on_unary_expr(PAstExpr* p_sub_expr, PAstUnaryOp p_opcode, PSourceRang
         diag_add_arg_type(d, result_type);
         diag_add_source_range(d, p_sub_expr->get_source_range());
         diag_flush(d);
-        return nullptr;
       }
 
       result_type = m_context.get_pointer_ty(result_type);
@@ -428,10 +425,10 @@ PSema::act_on_unary_expr(PAstExpr* p_sub_expr, PAstUnaryOp p_opcode, PSourceRang
         diag_add_arg_type(d, result_type);
         diag_add_source_range(d, p_sub_expr->get_source_range());
         diag_flush(d);
-        return nullptr;
+      } else {
+        result_type = result_type->as<PPointerType>()->get_element_ty();
       }
 
-      result_type = result_type->as<PPointerType>()->get_element_ty();
       break;
     default:
       assert(false && "unknown unary operator");
@@ -550,7 +547,7 @@ PSema::act_on_binary_expr(PAstExpr* p_lhs,
       result_type = lhs_type;
 
       if (!are_types_compatible(lhs_type, rhs_type) || !lhs_type->is_arithmetic_ty()) {
-        PDiagKind diag_kind = P_DK_err_cannot_apply_bin_op_generic;
+        PDiagnosticID diag_kind = P_DK_err_cannot_apply_bin_op_generic;
         switch (p_opcode) {
           case P_BINARY_ADD:
             diag_kind = P_DK_err_cannot_add;
@@ -717,16 +714,8 @@ classify_int_cast(PType* p_from_type, PType* p_to_type)
   if (p_to_type->is_float_ty())
     return P_CAST_INT2FLOAT;
 
-  if (p_to_type->is_int_ty()) {
-    int from_bitwidth = p_type_get_bitwidth(p_from_type);
-    int to_bitwidth = p_type_get_bitwidth(p_to_type);
-    if (from_bitwidth != to_bitwidth) {
-      return P_CAST_INT2INT;
-    }
-
-    // Signed <-> Unsigned integer conversion.
-    return P_CAST_NOOP;
-  }
+  if (p_to_type->is_int_ty())
+    return P_CAST_INT2INT;
 
   return P_CAST_INVALID;
 }
@@ -776,15 +765,15 @@ PSema::act_on_cast_expr(PAstExpr* p_sub_expr, PType* p_target_ty, PSourceRange p
 
   // TODO: issue a warning when cast is noop
 
+  auto* node = m_context.new_object<PAstCastExpr>(p_sub_expr, p_target_ty, cast_kind, p_src_range);
+
   if (cast_kind == P_CAST_INVALID) {
     PDiag* d = diag_at(P_DK_err_unsupported_conversion, p_as_loc);
     diag_add_arg_type(d, from_type);
     diag_add_arg_type(d, p_target_ty);
     diag_flush(d);
-    return nullptr;
   }
 
-  auto* node = m_context.new_object<PAstCastExpr>(p_sub_expr, p_target_ty, cast_kind, p_src_range);
   return node;
 }
 

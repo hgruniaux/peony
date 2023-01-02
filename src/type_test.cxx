@@ -1,9 +1,9 @@
-#include "type.hxx"
 #include "context.hxx"
+#include "type.hxx"
 
 #include <gtest/gtest.h>
 
-TEST(type, paren_type)
+TEST(Type, paren_type)
 {
   auto& ctx = PContext::get_global();
 
@@ -27,7 +27,7 @@ TEST(type, paren_type)
   EXPECT_EQ(paren_two_ty->get_canonical_ty(), f32_ty);
 }
 
-TEST(type, function_type)
+TEST(Type, function_type)
 {
   auto& ctx = PContext::get_global();
 
@@ -63,7 +63,7 @@ TEST(type, function_type)
   EXPECT_EQ(func_ty, func_bis_ty);
 }
 
-TEST(type, pointer_type)
+TEST(Type, pointer_type)
 {
   auto& ctx = PContext::get_global();
 
@@ -91,7 +91,7 @@ TEST(type, pointer_type)
   EXPECT_EQ(non_canonical_pointer_ty->get_canonical_ty(), pointer_ty);
 }
 
-TEST(type, array_type)
+TEST(Type, array_type)
 {
   auto& ctx = PContext::get_global();
 
@@ -121,4 +121,105 @@ TEST(type, array_type)
   EXPECT_NE(non_canonical_array_ty, array_ty);
   EXPECT_FALSE(non_canonical_array_ty->is_canonical_ty());
   EXPECT_EQ(non_canonical_array_ty->get_canonical_ty(), array_ty);
+}
+
+TEST(Type, is_predicates)
+{
+  auto& ctx = PContext::get_global();
+
+  // i: is_int_ty()
+  // s: is_signed_int_ty()
+  // u: is_unsigned_int_ty()
+  // f: is_float_ty()
+  // a: is_arithmetic_ty()
+
+  std::pair<PType*, const char*> types[] = {
+    { ctx.get_i8_ty(), "isa" }, { ctx.get_i16_ty(), "isa" }, { ctx.get_i32_ty(), "isa" }, { ctx.get_i64_ty(), "isa" },
+    { ctx.get_u8_ty(), "iua" }, { ctx.get_u16_ty(), "iua" }, { ctx.get_u32_ty(), "iua" }, { ctx.get_u64_ty(), "iua" },
+    { ctx.get_f32_ty(), "fa" }, { ctx.get_f64_ty(), "fa" },
+  };
+
+  for (auto item : types) {
+    while (*item.second != '\0') {
+      switch (*item.second++) {
+        case 'i':
+          EXPECT_TRUE(item.first->is_int_ty());
+          EXPECT_TRUE(item.first->is_signed_int_ty() || item.first->is_unsigned_int_ty());
+          break;
+        case 's':
+          EXPECT_TRUE(item.first->is_signed_int_ty());
+          EXPECT_FALSE(item.first->is_unsigned_int_ty());
+          break;
+        case 'u':
+          EXPECT_TRUE(item.first->is_unsigned_int_ty());
+          EXPECT_FALSE(item.first->is_signed_int_ty());
+          break;
+        case 'f':
+          EXPECT_TRUE(item.first->is_float_ty());
+          EXPECT_FALSE(item.first->is_int_ty());
+          EXPECT_FALSE(item.first->is_unsigned_int_ty());
+          EXPECT_FALSE(item.first->is_signed_int_ty());
+          break;
+        case 'a':
+          EXPECT_TRUE(item.first->is_arithmetic_ty());
+          break;
+      }
+    }
+  }
+}
+
+TEST(Type, is_predicates_non_canonical_type)
+{
+  // Type::is_*() predicates must test canonical id.
+  // That is `((int))`.is_int_ty() must returns true (note the parenthesizes).
+
+  auto& ctx = PContext::get_global();
+
+  auto* ty0 = ctx.get_paren_ty(ctx.get_i32_ty());
+  EXPECT_TRUE(ty0->is_int_ty());
+  EXPECT_TRUE(ty0->is_signed_int_ty());
+  EXPECT_FALSE(ty0->is_unsigned_int_ty());
+  EXPECT_TRUE(ty0->is_arithmetic_ty());
+
+  auto* ty1 = ctx.get_paren_ty(ctx.get_u32_ty());
+  EXPECT_TRUE(ty1->is_int_ty());
+  EXPECT_FALSE(ty1->is_signed_int_ty());
+  EXPECT_TRUE(ty1->is_unsigned_int_ty());
+  EXPECT_TRUE(ty1->is_arithmetic_ty());
+
+  auto* ty2 = ctx.get_paren_ty(ctx.get_f32_ty());
+  EXPECT_TRUE(ty2->is_float_ty());
+  EXPECT_FALSE(ty2->is_int_ty());
+  EXPECT_TRUE(ty2->is_arithmetic_ty());
+
+  auto* ty3 = ctx.get_paren_ty(ctx.get_pointer_ty(ctx.get_i32_ty()));
+  EXPECT_TRUE(ty3->is_pointer_ty());
+
+  auto* ty4 = ctx.get_paren_ty(ctx.get_function_ty(ty2, {}));
+  EXPECT_TRUE(ty4->is_function_ty());
+}
+
+TEST(Type, to_signed_unsigned_int_ty)
+{
+  auto& ctx = PContext::get_global();
+
+  // to_signed_int_ty()
+  EXPECT_EQ(ctx.get_i8_ty()->to_signed_int_ty(ctx), ctx.get_i8_ty());
+  EXPECT_EQ(ctx.get_i16_ty()->to_signed_int_ty(ctx), ctx.get_i16_ty());
+  EXPECT_EQ(ctx.get_i32_ty()->to_signed_int_ty(ctx), ctx.get_i32_ty());
+  EXPECT_EQ(ctx.get_i64_ty()->to_signed_int_ty(ctx), ctx.get_i64_ty());
+  EXPECT_EQ(ctx.get_u8_ty()->to_signed_int_ty(ctx), ctx.get_i8_ty());
+  EXPECT_EQ(ctx.get_u16_ty()->to_signed_int_ty(ctx), ctx.get_i16_ty());
+  EXPECT_EQ(ctx.get_u32_ty()->to_signed_int_ty(ctx), ctx.get_i32_ty());
+  EXPECT_EQ(ctx.get_u64_ty()->to_signed_int_ty(ctx), ctx.get_i64_ty());
+
+  // to_unsigned_int_ty()
+  EXPECT_EQ(ctx.get_i8_ty()->to_unsigned_int_ty(ctx), ctx.get_u8_ty());
+  EXPECT_EQ(ctx.get_i16_ty()->to_unsigned_int_ty(ctx), ctx.get_u16_ty());
+  EXPECT_EQ(ctx.get_i32_ty()->to_unsigned_int_ty(ctx), ctx.get_u32_ty());
+  EXPECT_EQ(ctx.get_i64_ty()->to_unsigned_int_ty(ctx), ctx.get_u64_ty());
+  EXPECT_EQ(ctx.get_u8_ty()->to_unsigned_int_ty(ctx), ctx.get_u8_ty());
+  EXPECT_EQ(ctx.get_u16_ty()->to_unsigned_int_ty(ctx), ctx.get_u16_ty());
+  EXPECT_EQ(ctx.get_u32_ty()->to_unsigned_int_ty(ctx), ctx.get_u32_ty());
+  EXPECT_EQ(ctx.get_u64_ty()->to_unsigned_int_ty(ctx), ctx.get_u64_ty());
 }

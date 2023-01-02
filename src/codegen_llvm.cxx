@@ -636,6 +636,19 @@ PCodeGenLLVM::visit_while_stmt(const PAstWhileStmt* p_node)
   return nullptr;
 }
 
+/// Returns the inner logical not expression if there is one, otherwise returns nullptr.
+/// This function do not check if p_expr is really a expression with the bool type.
+static const PAstUnaryExpr*
+get_logical_not_if_any(const PAstExpr* p_expr)
+{
+  p_expr = p_expr->ignore_parens_and_casts();
+  if (p_expr->get_kind() == P_SK_UNARY_EXPR && p_expr->as<PAstUnaryExpr>()->opcode == P_UNARY_NOT) {
+    return p_expr->as<PAstUnaryExpr>();
+  } else {
+    return nullptr;
+  }
+}
+
 void*
 PCodeGenLLVM::visit_if_stmt(const PAstIfStmt* p_node)
 {
@@ -651,6 +664,22 @@ PCodeGenLLVM::visit_if_stmt(const PAstIfStmt* p_node)
   //  9 |     ; ...
 
   m_d->emit_location(p_node->get_source_range().begin);
+
+  // OPTIMIZATION: If the condition expression is a constant expression only
+  // codegen the required branch.
+  std::optional<bool> cond_expr_value = p_node->cond_expr->eval_as_bool(m_d->ctx);
+  if (cond_expr_value.has_value()) {
+    if (cond_expr_value.value()) {
+      // if (true) { then_stmt } else { else_stmt } <=> then_stmt
+      visit(p_node->then_stmt);
+    } else if (p_node->else_stmt != nullptr) { // && !cond_expr_value.value()
+      // if (false) { then_stmt } else { else_stmt } <=> else_stmt
+      visit(p_node->else_stmt);
+    }
+
+    return nullptr;
+  }
+
   auto* func = m_d->get_function();
 
   auto* then_bb = llvm::BasicBlock::Create(*m_d->llvm_ctx, "", func);
@@ -659,8 +688,18 @@ PCodeGenLLVM::visit_if_stmt(const PAstIfStmt* p_node)
   if (p_node->else_stmt != nullptr)
     else_bb = llvm::BasicBlock::Create(*m_d->llvm_ctx, "", func);
 
-  auto* condition = static_cast<llvm::Value*>(visit(p_node->cond_expr));
-  m_d->builder->CreateCondBr(condition, then_bb, (else_bb != nullptr) ? else_bb : continue_bb);
+  // OPTIMIZATION: If the condition expression is a logical not, i.e. of the form `!sub_expr`,
+  // and there is a `else` branch, then just use `sub_expr` as the condition expression and
+  // swap the `then` and `else` branch. That is:
+  // if !sub_expr { then_stmt } else { else_stmt } <=> if sub_expr { else_stmt } else { then_stmt }
+  const PAstUnaryExpr* logical_not;
+  if (else_bb != nullptr && (logical_not = get_logical_not_if_any(p_node->cond_expr)) != nullptr) {
+    auto* condition = static_cast<llvm::Value*>(visit(logical_not->sub_expr));
+    m_d->builder->CreateCondBr(condition, else_bb, then_bb); // then and else branches swapped
+  } else {
+    auto* condition = static_cast<llvm::Value*>(visit(p_node->cond_expr));
+    m_d->builder->CreateCondBr(condition, then_bb, (else_bb != nullptr) ? else_bb : continue_bb);
+  }
 
   // Then block:
   m_d->builder->SetInsertPoint(then_bb);
@@ -756,7 +795,59 @@ PCodeGenLLVM::visit_unary_expr(const PAstUnaryExpr* p_node)
 }
 
 void*
-PCodeGenLLVM::emit_log_and(PAst* p_lhs, PAst* p_rhs, bool p_is_and)
+PCodeGenLLVM::try_codegen_constant_log_and(PAstExpr* p_lhs, PAstExpr* p_rhs, bool p_is_and)
+{
+  // OPTIMIZATION: If one of the expressions is constant then simplify the
+  // binary expression. So we avoid if possible generating branches, PHI
+  // nodes and creating new basic blocks which may improve compile time (maybe).
+
+  std::optional<bool> lhs_constant_value = p_lhs->eval_as_bool(m_d->ctx);
+  if (lhs_constant_value.has_value()) {
+    // true && expr <=> expr
+    // true || expr <=> true
+    // false && expr <=> false
+    // false || expr <=> expr
+
+    if (lhs_constant_value.value()) {
+      if (p_is_and) // 'true && expr'
+        return visit(p_rhs);
+      else                                                                              // 'true || expr'
+        return llvm::ConstantInt::get(llvm::IntegerType::getInt1Ty(*m_d->llvm_ctx), 1); // true
+    } else {
+      if (p_is_and)                                                                     // 'false && expr'
+        return llvm::ConstantInt::get(llvm::IntegerType::getInt1Ty(*m_d->llvm_ctx), 0); // false
+      else                                                                              // 'false || expr'
+        return visit(p_rhs);
+    }
+  }
+
+  std::optional<bool> rhs_constant_value = p_rhs->eval_as_bool(m_d->ctx);
+  if (rhs_constant_value.has_value()) {
+    // expr && true <=> expr
+    // expr || true <=> true
+    // expr && false <=> false
+    // expr || false <=> expr
+
+    if (lhs_constant_value.value()) {
+      if (p_is_and) // 'expr && true'
+        return visit(p_lhs);
+      else                                                                              // 'expr || true'
+        return llvm::ConstantInt::get(llvm::IntegerType::getInt1Ty(*m_d->llvm_ctx), 1); // true
+    } else {
+      if (p_is_and)                                                                     // 'expr && false'
+        return llvm::ConstantInt::get(llvm::IntegerType::getInt1Ty(*m_d->llvm_ctx), 0); // false
+      else                                                                              // 'expr || false'
+        return visit(p_rhs);
+    }
+  }
+
+  // The binary expression has no constant expression, and therefore we can
+  // not optimize it (LLVM will do much more advanced optimizations later).
+  return nullptr;
+}
+
+void*
+PCodeGenLLVM::emit_log_and(PAstExpr* p_lhs, PAstExpr* p_rhs, bool p_is_and)
 {
   // The code 'lhs && rhs' is equivalent to:
   //  1 | if (lhs) {
@@ -771,6 +862,11 @@ PCodeGenLLVM::emit_log_and(PAst* p_lhs, PAst* p_rhs, bool p_is_and)
   //  3 | } else {
   //  4 |     return rhs;
   //  5 | }
+
+  // If either LHS or RHS can be constant evaluated then simplify the expression
+  // to avoid creating branches, basic blocks and PHI nodes.
+  if (void* value = try_codegen_constant_log_and(p_lhs, p_rhs, p_is_and); value != nullptr)
+    return value;
 
   auto* lhs = static_cast<llvm::Value*>(visit(p_lhs));
   auto* func = m_d->get_function();
@@ -966,35 +1062,15 @@ PCodeGenLLVM::visit_cast_expr(const PAstCastExpr* p_node)
   switch (p_node->cast_kind) {
     case P_CAST_NOOP:
       return sub_expr;
-    case P_CAST_INT2INT: {
-      const int from_bitwidth = p_type_get_bitwidth(source_ty);
-      const int target_bitwidth = p_type_get_bitwidth(p_node->target_ty);
-
-      if (from_bitwidth > target_bitwidth) {
-        return m_d->builder->CreateTrunc(sub_expr, llvm_target_ty);
-      } else { /* from_bitwidth < target_bitwidth */
-        if (source_ty->is_unsigned_int_ty()) {
-          return m_d->builder->CreateZExt(sub_expr, llvm_target_ty);
-        } else {
-          return m_d->builder->CreateSExt(sub_expr, llvm_target_ty);
-        }
-      }
-    }
+    case P_CAST_INT2INT:
+      return m_d->builder->CreateIntCast(sub_expr, llvm_target_ty, p_node->target_ty->is_signed_int_ty());
     case P_CAST_INT2FLOAT:
       if (source_ty->is_unsigned_int_ty())
         return m_d->builder->CreateUIToFP(sub_expr, llvm_target_ty);
       else
         return m_d->builder->CreateSIToFP(sub_expr, llvm_target_ty);
-    case P_CAST_FLOAT2FLOAT: {
-      const int from_bitwidth = p_type_get_bitwidth(source_ty);
-      const int target_bitwidth = p_type_get_bitwidth(p_node->target_ty);
-
-      if (from_bitwidth > target_bitwidth) {
-        return m_d->builder->CreateFPTrunc(sub_expr, llvm_target_ty);
-      } else {
-        return m_d->builder->CreateFPExt(sub_expr, llvm_target_ty);
-      }
-    }
+    case P_CAST_FLOAT2FLOAT:
+      return m_d->builder->CreateFPCast(sub_expr, llvm_target_ty);
     case P_CAST_FLOAT2INT:
       if (p_node->target_ty->is_unsigned_int_ty())
         return m_d->builder->CreateFPToUI(sub_expr, llvm_target_ty);

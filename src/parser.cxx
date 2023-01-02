@@ -1174,6 +1174,22 @@ PParser::parse()
   return parse_translation_unit();
 }
 
+PAst*
+PParser::parse_standalone_stmt()
+{
+  consume_token();
+  m_prev_lookahead_end_loc = 0;
+  return parse_stmt();
+}
+
+PAstExpr*
+PParser::parse_standalone_expr()
+{
+  consume_token();
+  m_prev_lookahead_end_loc = 0;
+  return parse_expr();
+}
+
 PType*
 PParser::try_parse_type_specifier()
 {

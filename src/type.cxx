@@ -1,36 +1,7 @@
 #include "type.hxx"
-
 #include "context.hxx"
-#include "utils/bump_allocator.hxx"
 
 #include <cassert>
-
-int
-p_type_get_bitwidth(PType* p_type)
-{
-  p_type = p_type->get_canonical_ty();
-  switch (p_type->get_kind()) {
-    case P_TK_BOOL:
-      return 1; /* not really stored as 1-bit */
-    case P_TK_I8:
-    case P_TK_U8:
-      return 8;
-    case P_TK_I16:
-    case P_TK_U16:
-      return 16;
-    case P_TK_CHAR:
-    case P_TK_I32:
-    case P_TK_U32:
-    case P_TK_F32:
-      return 32;
-    case P_TK_I64:
-    case P_TK_U64:
-    case P_TK_F64:
-      return 64;
-    default:
-      assert(false && "unimplemented for this type");
-  }
-}
 
 bool
 PType::is_signed_int_ty() const
@@ -57,5 +28,63 @@ PType::is_unsigned_int_ty() const
       return true;
     default:
       return false;
+  }
+}
+
+bool
+PType::is_float_ty() const
+{
+  switch (get_canonical_kind()) {
+    case P_TK_F32:
+    case P_TK_F64:
+      return true;
+    default:
+      return false;
+  }
+}
+
+PType*
+PType::to_signed_int_ty(PContext& p_ctx) const
+{
+  switch (get_canonical_kind()) {
+    case P_TK_U8:
+      return p_ctx.get_i8_ty();
+    case P_TK_U16:
+      return p_ctx.get_i16_ty();
+    case P_TK_U32:
+      return p_ctx.get_i32_ty();
+    case P_TK_U64:
+      return p_ctx.get_i64_ty();
+    case P_TK_I8:
+    case P_TK_I16:
+    case P_TK_I32:
+    case P_TK_I64:
+      return const_cast<PType*>(this); // Already signed
+    default:
+      assert(false && "not an integer type");
+      return nullptr;
+  }
+}
+
+PType*
+PType::to_unsigned_int_ty(PContext& p_ctx) const
+{
+  switch (get_canonical_kind()) {
+    case P_TK_I8:
+      return p_ctx.get_u8_ty();
+    case P_TK_I16:
+      return p_ctx.get_u16_ty();
+    case P_TK_I32:
+      return p_ctx.get_u32_ty();
+    case P_TK_I64:
+      return p_ctx.get_u64_ty();
+    case P_TK_U8:
+    case P_TK_U16:
+    case P_TK_U32:
+    case P_TK_U64:
+      return const_cast<PType*>(this); // Already unsigned
+    default:
+      assert(false && "not an integer type");
+      return nullptr;
   }
 }
