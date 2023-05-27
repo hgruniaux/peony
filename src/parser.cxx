@@ -803,7 +803,7 @@ PParser::parse_postfix_expr()
 }
 
 // postfix_expr:
-//     call_expr
+//     postfix_expr
 //     "-" unary_expr
 //     "!" unary_expr
 //     "&" unary_expr
