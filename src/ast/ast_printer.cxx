@@ -521,7 +521,8 @@ PAstPrinter::print_ident_info(PIdentifierInfo* p_name, bool p_formatting)
 
   std::fprintf(m_output, " ");
   if (p_name != nullptr) {
-    std::fwrite(p_name->spelling, sizeof(char), p_name->spelling_len, m_output);
+    const auto spelling = p_name->get_spelling();
+    std::fwrite(spelling.data(), sizeof(char), spelling.size(), m_output);
   } else {
     std::fprintf(m_output, "{unnamed}");
   }

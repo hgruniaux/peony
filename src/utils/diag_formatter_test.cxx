@@ -72,14 +72,11 @@ TEST(diag_formatter, tok_kind_arg)
 TEST(diag_formatter, ident_arg)
 {
   PIdentifierTable table;
-  p_identifier_table_init(&table);
 
   PDiagArgument arg;
   arg.type = P_DAT_IDENT;
-  arg.value_ident = p_identifier_table_get(&table, "foo", nullptr);
+  arg.value_ident = table.get("foo", nullptr);
   check_arg_format(&arg, "foo");
-
-  p_identifier_table_destroy(&table);
 }
 
 TEST(diag_formatter, type_arg)

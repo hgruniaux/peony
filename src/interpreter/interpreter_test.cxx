@@ -15,14 +15,11 @@ public:
 
   void SetUp() override
   {
-    p_identifier_table_init(&identifier_table);
-    p_identifier_table_register_keywords(&identifier_table);
+    identifier_table.register_keywords();
     lexer.identifier_table = &identifier_table;
 
     parser = std::make_unique<PParser>(ctx, lexer);
   }
-
-  void TearDown() override { p_identifier_table_destroy(&identifier_table); }
 
   void check_expr(const char* p_input, const PInterpreterValue& p_expected)
   {

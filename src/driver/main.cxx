@@ -20,8 +20,7 @@ bool
 compile_to(PSourceFile* p_source_file, const char* p_output_filename)
 {
   PIdentifierTable identifier_table;
-  p_identifier_table_init(&identifier_table);
-  p_identifier_table_register_keywords(&identifier_table);
+  identifier_table.register_keywords();
 
   PLexer lexer;
   lexer.identifier_table = &identifier_table;

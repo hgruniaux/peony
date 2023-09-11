@@ -39,9 +39,9 @@ void
 PLexer::fill_identifier_token(PToken& p_token, bool p_is_raw)
 {
   const char* spelling_begin = p_is_raw ? m_marked_cursor + 2 : m_marked_cursor;
-  PIdentifierInfo* ident = p_identifier_table_get(identifier_table, spelling_begin, m_cursor);
+  PIdentifierInfo* ident = identifier_table->get(spelling_begin, m_cursor);
   assert(ident != nullptr);
-  fill_token(p_token, p_is_raw ? P_TOK_IDENTIFIER : ident->token_kind);
+  fill_token(p_token, p_is_raw ? P_TOK_IDENTIFIER : ident->get_token_kind());
   p_token.data.identifier = ident;
 }
 

@@ -11,14 +11,8 @@ protected:
 
   void SetUp() override
   {
-    p_identifier_table_init(&identifier_table);
-    p_identifier_table_register_keywords(&identifier_table);
+    identifier_table.register_keywords();
     lexer.identifier_table = &identifier_table;
-  }
-
-  void TearDown() override
-  {
-    p_identifier_table_destroy(&identifier_table);
   }
 
   void set_input(const char* p_input)
@@ -71,16 +65,16 @@ TEST_F(lexer_test, ident_and_keywords)
   set_input("foo r#foo i32 r#i32");
 
   PToken foo = check_token(P_TOK_IDENTIFIER, 1, 1, 1, 4);
-  EXPECT_STREQ(foo.data.identifier->spelling, "foo");
+  EXPECT_EQ(foo.data.identifier->get_spelling(), "foo");
 
   PToken raw_foo = check_token(P_TOK_IDENTIFIER, 1, 5, 1, 10);
-  EXPECT_STREQ(raw_foo.data.identifier->spelling, "foo");
+  EXPECT_EQ(raw_foo.data.identifier->get_spelling(), "foo");
 
   PToken i32 = check_token(P_TOK_KEY_i32, 1, 11, 1, 14);
-  EXPECT_STREQ(i32.data.identifier->spelling, "i32");
+  EXPECT_EQ(i32.data.identifier->get_spelling(), "i32");
 
   PToken raw_i32 = check_token(P_TOK_IDENTIFIER, 1, 15, 1, 20);
-  EXPECT_STREQ(raw_i32.data.identifier->spelling, "i32");
+  EXPECT_EQ(raw_i32.data.identifier->get_spelling(), "i32");
 
   check_token(P_TOK_EOF, 1, 20, 1, 20);
 }

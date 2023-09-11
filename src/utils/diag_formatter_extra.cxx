@@ -62,7 +62,8 @@ static void
 format_arg_ident(std::string& p_buffer, PIdentifierInfo* p_ident)
 {
   assert(p_ident != nullptr);
-  p_buffer.append(p_ident->spelling, p_ident->spelling + p_ident->spelling_len);
+  const auto spelling = p_ident->get_spelling();
+  p_buffer.append(spelling.data(), spelling.data() + spelling.size());
 }
 
 /* Format function for P_DAT_TYPE and P_DAT_TYPE_WITH_NAME_HINT. */
@@ -74,8 +75,10 @@ format_arg_type(std::string& p_buffer, PType* p_type, PIdentifierInfo* p_name_hi
   if (p_type->get_kind() == P_TK_FUNCTION) {
     auto* func_type = p_type->as<PFunctionType>();
     p_buffer.append("fn ");
-    if (p_name_hint != nullptr)
-      p_buffer.append(p_name_hint->spelling);
+    if (p_name_hint != nullptr) {
+      const auto spelling = p_name_hint->get_spelling();
+      p_buffer.append(spelling.data(), spelling.data() + spelling.size());
+    }
 
     p_buffer.append("(");
     for (size_t i = 0; i < func_type->get_param_count(); ++i) {
@@ -100,7 +103,10 @@ format_arg_type(std::string& p_buffer, PType* p_type, PIdentifierInfo* p_name_hi
   } else {
     switch (p_type->get_kind()) {
 #define TYPE(p_kind)
-#define BUILTIN_TYPE(p_kind, p_spelling) case p_kind: p_buffer.append(p_spelling); break;
+#define BUILTIN_TYPE(p_kind, p_spelling)                                                                               \
+  case p_kind:                                                                                                         \
+    p_buffer.append(p_spelling);                                                                                       \
+    break;
 #include "type.def"
       default:
         assert(false && "not a builtin type");
@@ -151,9 +157,9 @@ struct PartialSourceRange
 };
 
 #define CREATE_PARTIAL_SRC_RANGE(p_lineno, p_colno_begin, p_colno_end)                                                 \
-  PartialSourceRange                                                                                          \
+  PartialSourceRange                                                                                                   \
   {                                                                                                                    \
-    (p_lineno), (p_colno_begin), (p_colno_end)                                   \
+    (p_lineno), (p_colno_begin), (p_colno_end)                                                                         \
   }
 
 static int

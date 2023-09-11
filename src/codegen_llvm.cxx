@@ -19,7 +19,8 @@
 static llvm::StringRef
 to_str_ref(PIdentifierInfo* p_name)
 {
-  return llvm::StringRef(p_name->spelling, p_name->spelling_len);
+  auto spelling = p_name->get_spelling();
+  return { spelling.data(), spelling.size() };
 }
 
 struct PCodeGenLLVM::D
