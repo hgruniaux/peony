@@ -179,7 +179,7 @@ void
 diag_add_source_caret(PDiag* p_diag, PSourceLocation p_loc)
 {
   assert(p_diag->range_count < P_DIAG_MAX_RANGES);
-  p_diag->ranges[p_diag->range_count++] = (PSourceRange){ p_loc, p_loc };
+  p_diag->ranges[p_diag->range_count++] = { p_loc, p_loc };
 }
 
 void

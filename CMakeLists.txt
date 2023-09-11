@@ -50,7 +50,7 @@ add_library(peony_lib STATIC
     "src/options.cxx"
     "src/literal_parser.hxx"
     "src/literal_parser.cxx"
-        src/context.hxx src/context.cxx src/ast/ast_visitor.hxx src/ast/ast_printer.cxx src/ast/ast_printer.hxx src/codegen_llvm.cxx src/codegen_llvm.hxx src/ast/ast_expr.hxx src/ast/ast_stmt.hxx src/ast/ast_decl.hxx src/ast/ast_expr.cxx src/ast/ast_decl.cxx src/ast/ast_stmt.cxx src/utils/array_view.hxx src/interpreter/value.hxx src/interpreter/value.cxx src/interpreter/interpreter.cxx src/interpreter/interpreter.hxx src/utils/source_manager.cxx src/utils/source_manager.hxx)
+        src/context.hxx src/context.cxx src/ast/ast_visitor.hxx src/ast/ast_printer.cxx src/ast/ast_printer.hxx src/codegen_llvm.cxx src/codegen_llvm.hxx src/ast/ast_expr.hxx src/ast/ast_stmt.hxx src/ast/ast_decl.hxx src/ast/ast_expr.cxx src/ast/ast_decl.cxx src/ast/ast_stmt.cxx src/utils/array_view.hxx src/interpreter/value.hxx src/interpreter/value.cxx src/interpreter/interpreter.cxx src/interpreter/interpreter.hxx)
 
 target_compile_options(peony_lib PUBLIC -fsanitize=address,undefined)
 target_link_options(peony_lib PUBLIC -fsanitize=address,undefined)
@@ -77,7 +77,7 @@ if(RE2C_PROGRAM)
         ARGS "${CMAKE_CURRENT_SOURCE_DIR}/src/lexer_re2c.re" -o "${CMAKE_CURRENT_SOURCE_DIR}/src/lexer_re2c.cxx"
         ARGS -W -Werror
         ARGS --no-version --no-generation-date --no-debug-info
-        DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/lexer_re2c.re"  
+        DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/lexer_re2c.re"
     )
 
     add_custom_command(
@@ -86,12 +86,12 @@ if(RE2C_PROGRAM)
         ARGS "${CMAKE_CURRENT_SOURCE_DIR}/src/utils/diag_formatter.re" -o "${CMAKE_CURRENT_SOURCE_DIR}/src/utils/diag_formatter.cxx"
         ARGS -W -Werror
         ARGS --no-version --no-generation-date --no-debug-info
-        DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/utils/diag_formatter.re"  
+        DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/utils/diag_formatter.re"
     )
 endif()
 
 # LLVM:
-find_package(LLVM 14.0 CONFIG REQUIRED)
+find_package(LLVM 15.0 CONFIG REQUIRED)
 target_include_directories(peony_lib PUBLIC ${LLVM_INCLUDE_DIRS})
 
 target_include_directories(peony_lib PRIVATE ${LLVM_INCLUDE_DIRS})

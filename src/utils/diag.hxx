@@ -5,7 +5,10 @@
 
 #include <cstdint>
 
-typedef enum PDiagSeverity
+class PType;
+class PIdentifierInfo;
+
+enum PDiagSeverity
 {
   P_DIAG_UNSPECIFIED,
   P_DIAG_NOTE,
@@ -14,16 +17,16 @@ typedef enum PDiagSeverity
   P_DIAG_FATAL,
 
   P_DIAG_SEVERITY_LAST
-} PDiagSeverity;
+};
 
-typedef enum PDiagKind
+enum PDiagKind
 {
 #define ERROR(p_name, p_msg) P_DK_err_##p_name,
 #define WARNING(p_name, p_msg) P_DK_warn_##p_name,
 #include "diag_kinds.def"
-} PDiagKind;
+};
 
-typedef enum PDiagArgumentType
+enum PDiagArgumentType
 {
   P_DAT_CHAR,                /** @brief `char` */
   P_DAT_INT,                 /** @brief `int` */
@@ -32,9 +35,9 @@ typedef enum PDiagArgumentType
   P_DAT_IDENT,               /** @brief `PIdentifierInfo*` */
   P_DAT_TYPE,                /** @brief `PType*` */
   P_DAT_TYPE_WITH_NAME_HINT, /** @brief `PType*` and 'PIdentifierInfo*' */
-} PDiagArgumentType;
+};
 
-typedef struct PDiagArgument
+struct PDiagArgument
 {
   PDiagArgumentType type;
   union
@@ -43,22 +46,22 @@ typedef struct PDiagArgument
     int value_int;
     const char* value_str;
     PTokenKind value_token_kind;
-    struct PIdentifierInfo* value_ident;
-    struct PType* value_type;
+    PIdentifierInfo* value_ident;
+    PType* value_type;
     struct
     {
-      struct PType* type;
-      struct PIdentifierInfo* name;
+      PType* type;
+      PIdentifierInfo* name;
     } value_type_with_name_hint;
   };
-} PDiagArgument;
+};
 
 // Maximum count of arguments that a diagnostic can have at the same time.
 #define P_DIAG_MAX_ARGUMENTS 8
 // Maximum count of source ranges that can be attached to a diagnostic at the same time.
 #define P_DIAG_MAX_RANGES 4
 
-typedef struct PDiag
+struct PDiag
 {
   PDiagKind kind;
   PDiagSeverity severity;
@@ -76,9 +79,9 @@ typedef struct PDiag
   const char* debug_source_filename;
   int debug_source_line;
 #endif
-} PDiag;
+};
 
-typedef struct PDiagContext
+struct PDiagContext
 {
   int diagnostic_count[P_DIAG_SEVERITY_LAST];
   int max_errors;
@@ -86,7 +89,7 @@ typedef struct PDiagContext
   bool fatal_errors;
   bool ignore_notes;
   bool ignore_warnings;
-} PDiagContext;
+};
 
 extern PDiagContext g_diag_context;
 
@@ -122,13 +125,13 @@ void
 diag_add_arg_tok_kind(PDiag* p_diag, PTokenKind p_token_kind);
 
 void
-diag_add_arg_ident(PDiag* p_diag, struct PIdentifierInfo* p_arg);
+diag_add_arg_ident(PDiag* p_diag, PIdentifierInfo* p_arg);
 
 void
-diag_add_arg_type(PDiag* p_diag, struct PType* p_arg);
+diag_add_arg_type(PDiag* p_diag, PType* p_arg);
 
 void
-diag_add_arg_type_with_name_hint(PDiag* p_diag, struct PType* p_type, struct PIdentifierInfo* p_name);
+diag_add_arg_type_with_name_hint(PDiag* p_diag, PType* p_type, PIdentifierInfo* p_name);
 
 void
 diag_add_source_range(PDiag* p_diag, PSourceRange p_range);

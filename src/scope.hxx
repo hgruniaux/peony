@@ -5,13 +5,16 @@
 
 #include <unordered_map>
 
+class PDecl;
+class PAst;
+
 struct PScope;
 
 struct PSymbol
 {
   PScope* scope;
   PIdentifierInfo* name;
-  struct PDecl* decl;
+  PDecl* decl;
 
   PSymbol(PScope* p_scope, PIdentifierInfo* p_name)
     : scope(p_scope)
@@ -32,7 +35,7 @@ enum PScopeFlags
 struct PScope
 {
   PScope* parent_scope;
-  struct PAst* statement; /* statement at origin of this scope (PAstWhileStmt, PAstCompoundStmt, etc.) */
+  PAst* statement; /* statement at origin of this scope (PAstWhileStmt, PAstCompoundStmt, etc.) */
   std::unordered_map<PIdentifierInfo*, PSymbol*> symbols;
   PScopeFlags flags;
 

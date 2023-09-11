@@ -6,8 +6,9 @@
 
 #include <cstddef>
 
-struct PIdentifierInfo
+class PIdentifierInfo
 {
+public:
   // Internal identifier hash used by the identifier table implementation.
   // TODO: Should we really store the hash value or compute it again on the fly?
   size_t hash;
@@ -27,8 +28,9 @@ struct PLocalizedIdentifierInfo
 };
 
 /// \brief A dynamic hash table optimized for storing identifiers.
-struct PIdentifierTable
+class PIdentifierTable
 {
+public:
   PIdentifierInfo** identifiers;
   size_t bucket_count;
   size_t item_count;

@@ -68,7 +68,7 @@ PSema::local_lookup(PIdentifierInfo* p_name) const
 }
 
 PType*
-PSema::lookup_type(PLocalizedIdentifierInfo p_name, PDiagnosticID p_diag, bool p_return_unknown) const
+PSema::lookup_type(PLocalizedIdentifierInfo p_name, PDiagKind p_diag, bool p_return_unknown) const
 {
   PSymbol* symbol = lookup(p_name.ident);
   if (symbol != nullptr && symbol->decl->get_kind() == P_DK_STRUCT)
@@ -547,7 +547,7 @@ PSema::act_on_binary_expr(PAstExpr* p_lhs,
       result_type = lhs_type;
 
       if (!are_types_compatible(lhs_type, rhs_type) || !lhs_type->is_arithmetic_ty()) {
-        PDiagnosticID diag_kind = P_DK_err_cannot_apply_bin_op_generic;
+        PDiagKind diag_kind = P_DK_err_cannot_apply_bin_op_generic;
         switch (p_opcode) {
           case P_BINARY_ADD:
             diag_kind = P_DK_err_cannot_add;

@@ -151,9 +151,9 @@ struct PartialSourceRange
 };
 
 #define CREATE_PARTIAL_SRC_RANGE(p_lineno, p_colno_begin, p_colno_end)                                                 \
-  (struct PartialSourceRange)                                                                                          \
+  PartialSourceRange                                                                                          \
   {                                                                                                                    \
-    .lineno = (p_lineno), .colno_begin = (p_colno_begin), .colno_end = (p_colno_end)                                   \
+    (p_lineno), (p_colno_begin), (p_colno_end)                                   \
   }
 
 static int

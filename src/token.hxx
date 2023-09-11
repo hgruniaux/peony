@@ -4,7 +4,7 @@
 #include "token_kind.hxx"
 #include "utils/source_location.hxx"
 
-struct PIdentifierInfo;
+class PIdentifierInfo;
 
 /// The different possible integer literal suffixes.
 enum PIntLiteralSuffix

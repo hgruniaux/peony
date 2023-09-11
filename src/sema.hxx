@@ -31,7 +31,7 @@ public:
   /// Builtin types that are identified by a keyword are not recognized by this
   /// function!
   [[nodiscard]] PType* lookup_type(PLocalizedIdentifierInfo p_name,
-                                   PDiagnosticID p_diag = P_DK_err_type_unknown,
+                                   PDiagKind p_diag = P_DK_err_type_unknown,
                                    bool p_return_unknown = true) const;
 
   [[nodiscard]] PAstBoolLiteral* act_on_bool_literal(bool p_value, PSourceRange p_src_range = {});
