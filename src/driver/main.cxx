@@ -42,7 +42,6 @@ compile_to(PSourceFile* p_source_file, const char* p_output_filename)
     codegen.write_object_file("out/" + p_source_file->get_filename() + ".o");
   }
 
-  p_identifier_table_destroy(&identifier_table);
   return g_diag_context.diagnostic_count[P_DIAG_ERROR] != 0;
 }
 
