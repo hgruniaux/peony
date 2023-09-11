@@ -723,13 +723,10 @@ void*
 PCodeGenLLVM::visit_assert_stmt(const PAstAssertStmt* p_node)
 {
   // The generated code:
-  //  1 |     br ..., body_bb, continue_bb
-  //  2 | then_bb:
-  //  3 |     ; body...
+  //  1 |     br ..., continue_bb, abort_bb
+  //  2 | abort_bb:
+  //  3 |     call @abort()...
   //  4 |     br continue_bb
-  //  5 | else_bb:
-  //  6 |     ; else stmt...
-  //  7 |     br continue_bb
   //  8 | continue_bb:
   //  9 |     ; ...
 
@@ -908,13 +905,14 @@ PCodeGenLLVM::emit_log_and(PAstExpr* p_lhs, PAstExpr* p_rhs, bool p_is_and)
   auto* lhs = static_cast<llvm::Value*>(visit(p_lhs));
   auto* func = m_d->get_function();
 
-  llvm::BasicBlock* rhs_bb = llvm::BasicBlock::Create(*m_d->llvm_ctx, "", func);
-  llvm::BasicBlock* continue_bb = llvm::BasicBlock::Create(*m_d->llvm_ctx, "", func);
+  llvm::BasicBlock* rhs_bb = llvm::BasicBlock::Create(*m_d->llvm_ctx, "rhs", func);
+  llvm::BasicBlock* constant_bb = llvm::BasicBlock::Create(*m_d->llvm_ctx, "cste", func);
+  llvm::BasicBlock* continue_bb = llvm::BasicBlock::Create(*m_d->llvm_ctx, "cont", func);
 
   if (p_is_and) { // Implementing the '&&' operator
-    m_d->builder->CreateCondBr(lhs, rhs_bb, continue_bb);
+    m_d->builder->CreateCondBr(lhs, rhs_bb, constant_bb);
   } else { // Implementing the '||' operator
-    m_d->builder->CreateCondBr(lhs, continue_bb, rhs_bb);
+    m_d->builder->CreateCondBr(lhs, constant_bb, rhs_bb);
   }
 
   auto* bool_ty = llvm::IntegerType::getInt1Ty(*m_d->llvm_ctx);
@@ -923,16 +921,17 @@ PCodeGenLLVM::emit_log_and(PAstExpr* p_lhs, PAstExpr* p_rhs, bool p_is_and)
   m_d->builder->SetInsertPoint(continue_bb);
   auto* phi = m_d->builder->CreatePHI(bool_ty, 2);
 
-  // Constant block (either false or true depending on p_is_and):
-  // As a matter of fact, this is not really a block but simply a constant.
+  // Constant block:
+  m_d->builder->SetInsertPoint(constant_bb);
   phi->addIncoming(llvm::ConstantInt::get(bool_ty, !p_is_and), m_d->builder->GetInsertBlock());
+  m_d->builder->CreateBr(continue_bb);
 
   // RHS block (`return rhs`).
   m_d->builder->SetInsertPoint(rhs_bb);
   phi->addIncoming(static_cast<llvm::Value*>(visit(p_rhs)), rhs_bb);
-  rhs_bb = m_d->builder->GetInsertBlock();
   m_d->builder->CreateBr(continue_bb);
 
+  m_d->builder->SetInsertPoint(continue_bb);
   return phi;
 }
 
