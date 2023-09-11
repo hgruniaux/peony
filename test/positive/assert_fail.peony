@@ -1,0 +1,6 @@
+fn main() -> i32 {
+    // We use a variable instead of a constant to avoid constant folding.
+    let v_false = false;
+    assert(v_false);
+    return 0;
+}

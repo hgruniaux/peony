@@ -1,0 +1,24 @@
+fn main() -> i32 {
+    let a = 9i32;
+    let b = 42i32;
+
+    assert(-a == (0i32 - a));
+    assert(-b == (0i32 - b));
+
+    assert((a + b) == 51i32);
+    assert((a + b) == (b + a));
+
+    assert((a - b) == -33i32);
+    assert((b - a) == 33i32);
+
+    assert((a * b) == 378i32);
+    assert((a * b) == (b * a));
+
+    assert((a / b) == 0i32);
+    assert((b / a) == 4i32);
+
+    assert((a % b) == a);
+    assert((b % a) == 6i32);
+
+    return 0;
+}

@@ -1,0 +1,6 @@
+fn main() -> i32 {
+    let x = 5;
+    let _asdfgdfg = true;
+    let My__FOO = 3.14;
+    return 0;
+}

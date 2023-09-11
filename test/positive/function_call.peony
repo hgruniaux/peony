@@ -1,0 +1,29 @@
+fn add(a: i32, b: i32) -> i32 {
+    return a + b;
+}
+
+fn foo(first: bool, factor: f32, n: i32) -> i32 {
+    if first {
+        return 42;
+    }
+
+    if factor < 0.5f32 {
+        return n;
+    } else {
+        return n + 1;
+    }
+}
+
+fn exit_code() -> i32 {
+    return 0;
+}
+
+fn main() -> i32 {
+    assert(add(5, 10) == 15);
+
+    assert(foo(true, 0.42f32, 15) == 42);
+    assert(foo(false, 0.42f32, 15) == 15);
+    assert(foo(false, 0.62f32, 15) == 16);
+
+    return exit_code();
+}

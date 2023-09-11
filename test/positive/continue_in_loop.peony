@@ -1,0 +1,40 @@
+fn raw_loop() {
+    let i = 0;
+
+    loop {
+        i += 1;
+
+        if i < 10 {
+            continue;
+        }
+
+        if i % 2 == 0 {
+            break;
+        }
+    }
+
+    // assert(i == 10);
+}
+
+fn while_loop() {
+    let sum = 0;
+    let i = 0;
+
+    while (i < 10) {
+        i += 1;
+
+        if (i % 2 == 1) {
+            continue;
+        }
+
+        sum += i;
+    }
+
+    assert(sum == 30);
+}
+
+fn main() -> i32 {
+    raw_loop();
+    while_loop();
+    return 0;
+}

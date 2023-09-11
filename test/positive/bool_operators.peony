@@ -1,0 +1,22 @@
+fn main() -> i32 {
+    // We use a variable instead of a constant to avoid constant folding.
+    let v_true = true;
+    let v_false = false;
+
+    // Not operator
+    assert(!v_false);
+
+    // And operator
+    assert(v_true && v_true);
+    assert(!(v_true && v_false));
+    assert(!(v_false && v_true));
+    assert(!(v_false && v_false));
+
+    // Or operator
+    assert(v_true || v_true);
+    assert(v_false || v_true);
+    assert(v_true || v_false);
+    assert(!(v_false || v_false));
+
+    return 0;
+}

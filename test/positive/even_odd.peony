@@ -1,0 +1,21 @@
+fn is_even(n: u64) -> bool {
+    return n % 2u64 == 0u64;
+}
+
+fn is_odd(n: u64) -> bool {
+    return n % 2u64 == 1u64;
+}
+
+fn main() -> i32 {
+    assert(is_even(0u64));
+    assert(!is_even(1u64));
+    assert(is_even(78654654u64));
+    assert(!is_even(89794531u64));
+
+    assert(!is_odd(0u64));
+    assert(is_odd(1u64));
+    assert(!is_odd(78654654u64));
+    assert(is_odd(89794531u64));
+
+    return 0;
+}

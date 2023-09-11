@@ -1,0 +1,11 @@
+fn check_condition() -> bool {
+    return false;
+}
+
+fn main() -> i32 {
+    if check_condition() {
+        return 1;
+    } else {
+        return 0;
+    }
+}

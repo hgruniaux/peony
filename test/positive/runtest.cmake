@@ -1,0 +1,26 @@
+cmake_policy(SET CMP0012 NEW)
+
+execute_process(COMMAND ${PEONY_EXE} ${INPUT_FILE} -o ${OUTPUT_FILE} RESULT_VARIABLE CMD_RESULT)
+message(STATUS "Compiler exited with code ${CMD_RESULT}")
+if (CMD_RESULT)
+    message(FATAL_ERROR "Failed to compile ${INPUT_FILE}")
+endif ()
+
+if (${EXPECT_FAIL})
+    message(STATUS "Compiled file expected to fail")
+else ()
+    message(STATUS "Compiled file expected to pass")
+endif ()
+
+execute_process(COMMAND ${OUTPUT_FILE} RESULT_VARIABLE CMD_RESULT)
+message(STATUS "Compiled file exited with code ${CMD_RESULT}")
+
+if (CMD_RESULT)
+    if (NOT ${EXPECT_FAIL})
+        message(FATAL_ERROR "Test failed ${OUTPUT_FILE}")
+    endif ()
+else ()
+    if (${EXPECT_FAIL})
+        message(FATAL_ERROR "Test failed ${OUTPUT_FILE}")
+    endif ()
+endif ()
