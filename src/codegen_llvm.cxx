@@ -533,7 +533,7 @@ PCodeGenLLVM::visit_continue_stmt(const PAstContinueStmt* p_node)
   assert(!m_d->loop_infos.empty());
 
   m_d->emit_location(p_node->get_source_range().begin);
-  auto* continue_bb = m_d->loop_infos.top().break_bb;
+  auto* continue_bb = m_d->loop_infos.top().continue_bb;
   assert(continue_bb != nullptr);
   m_d->builder->CreateBr(continue_bb);
   m_d->insert_dummy_block();
