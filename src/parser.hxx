@@ -47,7 +47,7 @@ private:
   PAstExpr* parse_int_lit();
   PAstExpr* parse_float_lit();
   PAstExpr* parse_paren_expr();
-  PAstExpr* parse_decl_ref_expr();
+  PAstExpr* parse_decl_ref();
   PAstStructFieldExpr* parse_struct_field_expr(PStructDecl* p_struct_decl);
   PAstExpr* parse_struct_expr(PLocalizedIdentifierInfo p_name);
   PAstExpr* parse_primary_expr();

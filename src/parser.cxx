@@ -436,7 +436,7 @@ PParser::parse_if_stmt()
     consume_token(); // consume 'else'
 
     if (lookahead(P_TOK_KEY_if)) {
-      // This allow `if { ... } else if { ... } ...` syntax.
+      // This allows `if { ... } else if { ... } ...` syntax.
       else_stmt = parse_if_stmt();
     } else {
       else_stmt = parse_compound_stmt();
@@ -705,15 +705,17 @@ PParser::parse_struct_expr(PLocalizedIdentifierInfo p_name)
 // decl_ref_expr:
 //     IDENTIFIER
 PAstExpr*
-PParser::parse_decl_ref_expr()
+PParser::parse_decl_ref()
 {
   assert(lookahead(P_TOK_IDENTIFIER));
 
   PLocalizedIdentifierInfo name = { m_token.data.identifier, get_token_range() };
   consume_token();
 
+#if 0
   if (lookahead(P_TOK_LBRACE))
     return parse_struct_expr(name);
+#endif
 
   return m_sema.act_on_decl_ref_expr(name.ident, name.range);
 }
@@ -724,7 +726,6 @@ PParser::parse_decl_ref_expr()
 //     float_lit
 //     paren_expr
 //     decl_ref_expr
-//     struct_expr
 PAstExpr*
 PParser::parse_primary_expr()
 {
@@ -739,7 +740,7 @@ PParser::parse_primary_expr()
     case P_TOK_LPAREN:
       return parse_paren_expr();
     case P_TOK_IDENTIFIER:
-      return parse_decl_ref_expr();
+      return parse_decl_ref();
     default:
       unexpected_token();
       return nullptr;
