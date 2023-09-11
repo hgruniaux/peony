@@ -52,8 +52,8 @@ add_library(peony_lib STATIC
     "src/literal_parser.cxx"
         src/context.hxx src/context.cxx src/ast/ast_visitor.hxx src/ast/ast_printer.cxx src/ast/ast_printer.hxx src/codegen_llvm.cxx src/codegen_llvm.hxx src/ast/ast_expr.hxx src/ast/ast_stmt.hxx src/ast/ast_decl.hxx src/ast/ast_expr.cxx src/ast/ast_decl.cxx src/ast/ast_stmt.cxx src/utils/array_view.hxx src/interpreter/value.hxx src/interpreter/value.cxx src/interpreter/interpreter.cxx src/interpreter/interpreter.hxx)
 
-target_compile_options(peony_lib PUBLIC -fsanitize=address,undefined)
-target_link_options(peony_lib PUBLIC -fsanitize=address,undefined)
+find_package(fmt CONFIG REQUIRED)
+target_link_libraries(peony_lib PUBLIC fmt::fmt)
 
 target_compile_definitions(peony_lib PUBLIC "-DP_DEBUG")
 target_include_directories(peony_lib PUBLIC "thirdparty/hedley")

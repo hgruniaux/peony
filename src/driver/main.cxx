@@ -1,18 +1,16 @@
 #include "../codegen_llvm.hxx"
 #include "../parser.hxx"
-#include "../utils/diag.hxx"
 
 #include "../options.hxx"
 
 #include <clocale>
 #include <cstdlib>
 
-#include "ast/ast_printer.hxx"
-
-#include <llvm/IR/Module.h>
 #include <llvm/Support/TargetSelect.h>
 
 #include <filesystem>
+
+#include <fmt/format.h>
 
 namespace fs = std::filesystem;
 
@@ -39,7 +37,12 @@ compile_to(PSourceFile* p_source_file, const char* p_output_filename)
     codegen.write_llvm_ir("out/" + p_source_file->get_filename() + ".ir");
     // codegen.optimize();
     codegen.write_llvm_ir("out/" + p_source_file->get_filename() + ".opt.ir");
-    codegen.write_object_file("out/" + p_source_file->get_filename() + ".o");
+
+    const auto object_path = "out/" + p_source_file->get_filename() + ".o";
+    codegen.write_object_file(object_path);
+
+    const auto clang_cmd = fmt::format("clang \"{}\" -o \"{}\"", object_path, p_output_filename);
+    system(clang_cmd.c_str());
   }
 
   return g_diag_context.diagnostic_count[P_DIAG_ERROR] != 0;

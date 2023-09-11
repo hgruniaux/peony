@@ -1,11 +1,11 @@
 #include "../options.hxx"
 #include "../utils/diag.hxx"
 
-#include <hedley.h>
 #include <cassert>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <hedley.h>
 
 HEDLEY_NO_RETURN
 static void
@@ -116,7 +116,7 @@ cmdline_parser(int p_argc, char* p_argv[])
 
     if (memcmp(arg, "-f", 2) == 0) {
 #define FEATURE_OPTION_SWITCH(p_opt, p_var, p_default)                                                                 \
-  if (parse_feature_option_switch(p_opt, &g_options.p_var, arg))                                                  \
+  if (parse_feature_option_switch(p_opt, &g_options.p_var, arg))                                                       \
     continue;
 #define FEATURE_OPTION_INT(p_opt, p_var, p_default)                                                                    \
   if (parse_feature_option_int("-f" p_opt, &g_options.p_var, arg))                                                     \
@@ -159,6 +159,11 @@ cmdline_parser(int p_argc, char* p_argv[])
     return;
   }
 
-  if (g_options.output_file == nullptr)
+  if (g_options.output_file == nullptr) {
+#ifdef _WIN32
+    g_options.output_file = "a.exe";
+#else
     g_options.output_file = "a.out";
+#endif
+  }
 }
