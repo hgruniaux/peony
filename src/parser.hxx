@@ -40,6 +40,7 @@ private:
   PAst* parse_if_stmt();
   PAst* parse_loop_stmt();
   PAst* parse_while_stmt();
+  PAst* parse_assert_stmt();
   PAst* parse_expr_stmt();
 
   PAstExpr* parse_bool_lit();

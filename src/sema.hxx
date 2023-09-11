@@ -83,6 +83,8 @@ public:
                                            PAst* p_else_stmt,
                                            PSourceRange p_src_range = {});
 
+  [[nodiscard]] PAstAssertStmt* act_on_assert_stmt(PAstExpr* p_cond_expr, PSourceRange p_src_range = {});
+
   [[nodiscard]] PAstDeclRefExpr* act_on_decl_ref_expr(PIdentifierInfo* p_name, PSourceRange p_src_range = {});
 
   [[nodiscard]] PAstUnaryExpr* act_on_unary_expr(PAstExpr* p_sub_expr,

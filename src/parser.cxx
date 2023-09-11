@@ -483,6 +483,21 @@ PParser::parse_while_stmt()
   return node;
 }
 
+// assert_stmt:
+//     "assert" expr ";"
+PAst*
+PParser::parse_assert_stmt()
+{
+  assert(lookahead(P_TOK_KEY_assert));
+
+  PSourceRangeTracker range_tracker(*this);
+  consume_token(); // consume 'assert'
+
+  PAstExpr* cond_expr = parse_expr();
+  expect_token(P_TOK_SEMI);
+  return m_sema.act_on_assert_stmt(cond_expr, range_tracker.get_source_range());
+}
+
 // expr_stmt:
 //     expr ";"
 PAst*
@@ -501,6 +516,7 @@ PParser::parse_expr_stmt()
 //     return_stmt
 //     if_stmt
 //     while_stmt
+//     assert_stmt
 //     loop_stmt
 //     expr_stmt
 PAst*
@@ -521,6 +537,8 @@ PParser::parse_stmt()
       return parse_if_stmt();
     case P_TOK_KEY_while:
       return parse_while_stmt();
+    case P_TOK_KEY_assert:
+      return parse_assert_stmt();
     case P_TOK_KEY_loop:
       return parse_loop_stmt();
     default:

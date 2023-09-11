@@ -357,6 +357,18 @@ PSema::act_on_if_stmt(PAstExpr* p_cond_expr, PAst* p_then_stmt, PAst* p_else_stm
   return node;
 }
 
+PAstAssertStmt*
+PSema::act_on_assert_stmt(PAstExpr* p_cond_expr, PSourceRange p_src_range)
+{
+  assert(p_cond_expr != nullptr);
+
+  check_condition_expr(p_cond_expr);
+  p_cond_expr = convert_to_rvalue(p_cond_expr);
+
+  auto* node = m_context.new_object<PAstAssertStmt>(p_cond_expr, p_src_range);
+  return node;
+}
+
 PAstDeclRefExpr*
 PSema::act_on_decl_ref_expr(PIdentifierInfo* p_name, PSourceRange p_src_range)
 {

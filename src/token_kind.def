@@ -65,6 +65,7 @@ PUNCTUATION(AMP_EQUAL, "&=")
 
 // Keywords:
 KEYWORD(as)
+KEYWORD(assert)
 KEYWORD(bool)
 KEYWORD(break)
 KEYWORD(char)

@@ -4,8 +4,8 @@
 #include "context.hxx"
 #include "identifier_table.hxx"
 #include "type.hxx"
-#include "utils/source_location.hxx"
 #include "utils/array_view.hxx"
+#include "utils/source_location.hxx"
 
 #include <cassert>
 
@@ -28,6 +28,7 @@ enum PStmtKind
   P_SK_LOOP_STMT,
   P_SK_WHILE_STMT,
   P_SK_IF_STMT,
+  P_SK_ASSERT_STMT,
   P_SK_BOOL_LITERAL,
   P_SK_INT_LITERAL,
   P_SK_FLOAT_LITERAL,
@@ -212,6 +213,21 @@ public:
 
   PAstWhileStmt(PAstExpr* p_cond_expr, PAst* p_body, PSourceRange p_src_range = {})
     : PAstLoopStmt(STMT_KIND, p_body, p_src_range)
+    , cond_expr(p_cond_expr)
+  {
+  }
+};
+
+/// \brief A `assert expr;` statement.
+class PAstAssertStmt : public PAst
+{
+public:
+  static constexpr auto STMT_KIND = P_SK_ASSERT_STMT;
+
+  PAstExpr* cond_expr;
+
+  PAstAssertStmt(PAstExpr* p_cond_expr, PSourceRange p_src_range = {})
+    : PAst(STMT_KIND, p_src_range)
     , cond_expr(p_cond_expr)
   {
   }

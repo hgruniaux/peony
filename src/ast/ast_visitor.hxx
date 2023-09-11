@@ -33,6 +33,7 @@ public:
   RetTy visit_loop_stmt(Ptr<PAstLoopStmt> p_node, Args&&... p_args) { return DISPATCH(PAst, visit_stmt); }
   RetTy visit_while_stmt(Ptr<PAstWhileStmt> p_node, Args&&... p_args) { return DISPATCH(PAst, visit_stmt); }
   RetTy visit_if_stmt(Ptr<PAstIfStmt> p_node, Args&&... p_args) { return DISPATCH(PAst, visit_stmt); }
+  RetTy visit_assert_stmt(Ptr<PAstAssertStmt> p_node, Args&&... p_args) { return DISPATCH(PAst, visit_stmt); }
 
   // Expressions
   RetTy visit_expr(Ptr<PAstExpr> p_node, Args&&... p_args) { return DISPATCH(PAst, visit_stmt); }
@@ -102,6 +103,8 @@ public:
         return DISPATCH(PAstWhileStmt, visit_while_stmt);
       case P_SK_IF_STMT:
         return DISPATCH(PAstIfStmt, visit_if_stmt);
+      case P_SK_ASSERT_STMT:
+        return DISPATCH(PAstAssertStmt, visit_assert_stmt);
 
       // Expressions
       case P_SK_BOOL_LITERAL:

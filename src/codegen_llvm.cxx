@@ -720,6 +720,42 @@ PCodeGenLLVM::visit_if_stmt(const PAstIfStmt* p_node)
 }
 
 void*
+PCodeGenLLVM::visit_assert_stmt(const PAstAssertStmt* p_node)
+{
+  // The generated code:
+  //  1 |     br ..., body_bb, continue_bb
+  //  2 | then_bb:
+  //  3 |     ; body...
+  //  4 |     br continue_bb
+  //  5 | else_bb:
+  //  6 |     ; else stmt...
+  //  7 |     br continue_bb
+  //  8 | continue_bb:
+  //  9 |     ; ...
+
+  m_d->emit_location(p_node->get_source_range().begin);
+
+  auto* func = m_d->get_function();
+
+  auto* abort_bb = llvm::BasicBlock::Create(*m_d->llvm_ctx, "", func);
+  auto* continue_bb = llvm::BasicBlock::Create(*m_d->llvm_ctx, "", func);
+  auto* condition = static_cast<llvm::Value*>(visit(p_node->cond_expr));
+  m_d->builder->CreateCondBr(condition, continue_bb, abort_bb);
+
+  // Abort block:
+  auto* abort_function_ty = llvm::FunctionType::get(m_d->builder->getVoidTy(), false);
+  auto abort_function = m_d->llvm_module->getOrInsertFunction("abort", abort_function_ty);
+
+  m_d->builder->SetInsertPoint(abort_bb);
+  m_d->builder->CreateCall(abort_function);
+  m_d->builder->CreateBr(continue_bb);
+
+  // Continue block:
+  m_d->builder->SetInsertPoint(continue_bb);
+  return nullptr;
+}
+
+void*
 PCodeGenLLVM::visit_bool_literal(const PAstBoolLiteral* p_node)
 {
   m_d->emit_location(p_node->get_source_range().begin);

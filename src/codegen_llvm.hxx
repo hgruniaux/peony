@@ -29,6 +29,7 @@ public:
   void* visit_loop_stmt(const PAstLoopStmt* p_node);
   void* visit_while_stmt(const PAstWhileStmt* p_node);
   void* visit_if_stmt(const PAstIfStmt* p_node);
+  void* visit_assert_stmt(const PAstAssertStmt* p_node);
 
   // Expressions:
   void* visit_bool_literal(const PAstBoolLiteral* p_node);
