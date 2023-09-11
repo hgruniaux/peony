@@ -1227,7 +1227,7 @@ PCodeGenLLVM::visit_func_decl(const PFunctionDecl* p_node)
 
       // Generate debug info for the parameter
       auto* param_info = m_d->debug_builder->createParameterVariable(
-        debug_subprogram, to_str_ref(param->get_name()), i, nullptr, 0, m_d->to_debug_ty(param->get_type()));
+        debug_subprogram, to_str_ref(param->get_name()), i + 1, nullptr, 0, m_d->to_debug_ty(param->get_type()));
       m_d->debug_builder->insertDeclare(param_addr,
                                         param_info,
                                         m_d->debug_builder->createExpression(),
